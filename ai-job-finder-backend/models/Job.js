@@ -16,10 +16,27 @@ const jobSchema = new mongoose.Schema(
 
     location: multiLangField,
 
+
+    latitude: {
+      type: Number,
+    },
+
+    longitude: {
+      type: Number,
+    },
+
     salary: {
       type: Number,
       required: true,
     },
+
+    //
+    paymentMethod: {
+      type: String,
+      default: "Cash"
+   },
+
+
 
     isUrgent: {
       type: Boolean,

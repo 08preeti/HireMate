@@ -15,40 +15,48 @@ router.post("/", authEmployer, async (req, res) => {
       description,
       skills,
       location,
+      latitude,
+      longitude,
       salary,
+      paymentMethod,
       isUrgent,
     } = req.body;
 
     const job = await Job.create({
-      jobTitle: {
-        en: jobTitle,
-        hi: jobTitle,
-        mr: jobTitle,
-      },
+  jobTitle: {
+    en: jobTitle,
+    hi: jobTitle,
+    mr: jobTitle,
+  },
 
-      description: {
-        en: description,
-        hi: description,
-        mr: description,
-      },
+  description: {
+    en: description,
+    hi: description,
+    mr: description,
+  },
 
-      skills: {
-        en: skills,
-        hi: skills,
-        mr: skills,
-      },
+  skills: {
+    en: skills,
+    hi: skills,
+    mr: skills,
+  },
 
-      location: {
-        en: location,
-        hi: location,
-        mr: location,
-      },
+  location: {
+    en: location,
+    hi: location,
+    mr: location,
+  },
 
-      salary,
-      isUrgent,
-      employer: req.employer._id,
-      status: "active",
-    });
+  latitude,
+  longitude,
+
+  salary,
+  paymentMethod,
+  isUrgent,
+
+  employer: req.employer._id,
+  status: "active",
+});
 
     res.status(201).json(job);
   } catch (error) {
