@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+body {
+  @apply bg-[#F5F7FA] text-gray-900 font-sans;
+}
+
+
+.navbar {
+  background: linear-gradient(90deg, #E31837 0%, #006491 100%);
+  @apply text-white shadow-md;
+}
+
+
+.btn-primary {
+  @apply bg-[#E31837] hover:bg-[#b50f2c] text-white font-semibold py-2 px-5 rounded-lg transition-all duration-300;
+}
+
+.btn-secondary {
+  @apply bg-[#006491] hover:bg-[#004d70] text-white font-semibold py-2 px-5 rounded-lg transition-all duration-300;
+}
+
+
+.card {
+  @apply bg-white rounded-2xl shadow-lg p-6 transition-all duration-300 hover:scale-[1.02];
+}
+
+
+h1, h2, h3 {
+  @apply font-bold text-[#002244];
+}
