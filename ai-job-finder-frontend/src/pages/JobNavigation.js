@@ -240,6 +240,7 @@
 
 
 
+
 import { useEffect, useState, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import {
@@ -249,14 +250,55 @@ import {
   Popup,
   useMap
 } from "react-leaflet";
+
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-routing-machine";
+import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
+import "leaflet-polylinedecorator";
+
+/* =========================
+   CAR ICON
+========================= */
+
+const carIcon = new L.Icon({
+  iconUrl: "https://cdn-icons-png.flaticon.com/512/744/744465.png",
+  iconSize: [40, 40],
+  iconAnchor: [20, 20]
+});
+
+/* =========================
+   FOLLOW WORKER (MAP MOVE)
+========================= */
+
+function FollowWorker({ workerLocation }) {
+
+  const map = useMap();
+
+  useEffect(() => {
+
+    if (workerLocation) {
+      map.setView(
+        [workerLocation.lat, workerLocation.lng],
+        16
+      );
+    }
+
+  }, [workerLocation, map]);
+
+  return null;
+}
+
+/* =========================
+   ROUTING MACHINE
+========================= */
 
 function RoutingMachine({ workerLocation, destination, setRouteInfo }) {
 
   const map = useMap();
   const routingRef = useRef(null);
+
+  console.log("RoutingMachine running", workerLocation, destination);
 
   useEffect(() => {
 
@@ -267,26 +309,54 @@ function RoutingMachine({ workerLocation, destination, setRouteInfo }) {
     }
 
     const routingControl = L.Routing.control({
+
       waypoints: [
         L.latLng(workerLocation.lat, workerLocation.lng),
         L.latLng(destination.lat, destination.lng)
       ],
+
       routeWhileDragging: false,
       addWaypoints: false,
       draggableWaypoints: false,
       fitSelectedRoutes: true,
       show: false,
+
       lineOptions: {
         styles: [{ color: "#0066ff", weight: 6 }]
       },
+
       router: L.Routing.osrmv1({
         serviceUrl: "https://router.project-osrm.org/route/v1"
       })
+
     }).addTo(map);
 
     routingControl.on("routesfound", function (e) {
+      console.log("ROUTE FOUND", e.routes);
 
       const route = e.routes[0];
+
+      /* ROUTE ARROWS */
+
+      //  const latlngs = route.coordinates.map(c => [c.lat, c.lng]);
+
+      // const routeLine = L.polyline(latlngs).addTo(map);
+
+      // L.polylineDecorator(routeLine, {
+      //   patterns: [
+      //     {
+      //       offset: 25,
+      //       repeat: 50,
+      //       symbol: L.Symbol.arrowHead({
+      //         pixelSize: 10,
+      //         polygon: false,
+      //         pathOptions: { stroke: true }
+      //       })
+      //     }
+      //   ]
+      // }).addTo(map); 
+
+      /* DISTANCE + TIME */
 
       const distanceKm = (route.summary.totalDistance / 1000).toFixed(2);
       const timeMin = Math.round(route.summary.totalTime / 60);
@@ -297,7 +367,9 @@ function RoutingMachine({ workerLocation, destination, setRouteInfo }) {
       });
 
       /* VOICE NAVIGATION */
-      const firstInstruction = route.instructions[0]?.text;
+
+      const firstInstruction = route.instructions?.[0]?.text;
+
       if (firstInstruction) {
         const speech = new SpeechSynthesisUtterance(firstInstruction);
         window.speechSynthesis.speak(speech);
@@ -308,15 +380,21 @@ function RoutingMachine({ workerLocation, destination, setRouteInfo }) {
     routingRef.current = routingControl;
 
     return () => {
+
       if (routingRef.current) {
         map.removeControl(routingRef.current);
       }
+
     };
 
   }, [workerLocation, destination, map, setRouteInfo]);
 
   return null;
 }
+
+/* =========================
+   MAIN COMPONENT
+========================= */
 
 export default function JobNavigation() {
 
@@ -330,59 +408,85 @@ export default function JobNavigation() {
   const destination = { lat, lng };
 
   const [workerLocation, setWorkerLocation] = useState(null);
+
   const [routeInfo, setRouteInfo] = useState({
     distance: null,
     time: null
   });
 
+  /* =========================
+     START GPS TRACKING
+  ========================= */
+
   const startTracking = () => {
 
-  if (!navigator.geolocation) {
-    alert("Geolocation not supported");
-    return;
-  }
+    if (!navigator.geolocation) {
+      alert("Geolocation not supported");
+      return;
+    }
 
-  navigator.geolocation.watchPosition(
-    async (pos) => {
+    navigator.geolocation.watchPosition(
+  async (pos) => {
 
-      const newLocation = {
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude
-      };
+    console.log("GPS LOCATION:", pos.coords.latitude, pos.coords.longitude);
 
-      setWorkerLocation(newLocation);
+    const newLocation = {
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude
+    };
 
-      // 🔥 Send live location to backend
-      const worker = JSON.parse(localStorage.getItem("worker"));
+    setWorkerLocation(newLocation);
 
-      if (worker) {
-        await fetch("http://localhost:5000/api/workers/update-location", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            workerId: worker._id,
-            lat: newLocation.lat,
-            lng: newLocation.lng
-          })
-        });
+        /* SEND LOCATION TO BACKEND */
+
+        const worker = JSON.parse(localStorage.getItem("worker"));
+
+        if (worker) {
+
+          await fetch(
+            "http://localhost:5000/api/workers/update-location",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                workerId: worker._id,
+                lat: newLocation.lat,
+                lng: newLocation.lng
+              })
+            }
+          );
+
+        }
+
+      },
+
+      (error) => {
+
+        alert("Please allow location access");
+        console.log(error);
+
+      },
+
+      {
+        enableHighAccuracy: true
       }
 
-    },
-    (error) => {
-      alert("Please allow location access");
-      console.log(error);
-    },
-    {
-      enableHighAccuracy: true
-    }
-  );
-};
+    );
+
+  };
+
+  /* =========================
+     UI
+  ========================= */
 
   return (
+
     <div style={{ height: "100vh" }}>
 
       {!workerLocation && (
+
         <div style={{ padding: "10px" }}>
+
           <button
             onClick={startTracking}
             style={{
@@ -395,59 +499,84 @@ export default function JobNavigation() {
           >
             Start Navigation
           </button>
+
         </div>
+
       )}
 
-      {/* DISTANCE & TIME PANEL */}
+      {/* DISTANCE PANEL */}
+
       {routeInfo.distance && (
-        <div style={{
-          position: "absolute",
-          top: "70px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          background: "white",
-          padding: "10px 20px",
-          borderRadius: "10px",
-          zIndex: 1000,
-          boxShadow: "0 3px 10px rgba(0,0,0,0.2)"
-        }}>
+
+        <div
+          style={{
+            position: "absolute",
+            top: "70px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "white",
+            padding: "10px 20px",
+            borderRadius: "10px",
+            zIndex: 1000,
+            boxShadow: "0 3px 10px rgba(0,0,0,0.2)"
+          }}
+        >
           🚗 {routeInfo.distance} km | ⏱ {routeInfo.time} mins
         </div>
+
       )}
 
       <MapContainer
-        center={[lat, lng]}
+        center={workerLocation ? [workerLocation.lat, workerLocation.lng] : [lat, lng]}
         zoom={13}
         style={{ height: "100%" }}
       >
 
         <TileLayer
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          attribution="&copy; OpenStreetMap contributors"
         />
 
-        {/* Destination */}
+        {/* DESTINATION */}
+
         <Marker position={[lat, lng]}>
           <Popup>{address}</Popup>
         </Marker>
 
-        {/* Worker */}
-        {workerLocation && (
-          <Marker position={[workerLocation.lat, workerLocation.lng]}>
-            <Popup>Your Location</Popup>
-          </Marker>
-        )}
+        {/* WORKER */}
 
         {workerLocation && (
+
+          <Marker
+            position={[workerLocation.lat, workerLocation.lng]}
+            icon={carIcon}
+          >
+            <Popup>Your Location</Popup>
+          </Marker>
+
+        )}
+
+        {/* FOLLOW WORKER */}
+
+        {workerLocation && (
+          <FollowWorker workerLocation={workerLocation} />
+        )}
+
+        {/* ROUTING */}
+
+        {workerLocation && (
+
           <RoutingMachine
             workerLocation={workerLocation}
             destination={destination}
             setRouteInfo={setRouteInfo}
           />
+
         )}
 
       </MapContainer>
 
     </div>
+
   );
+
 }

@@ -3,89 +3,133 @@ import axios from "axios";
 import "./PostJobs.css";
 
 export default function PostJobs() {
+
   const [formData, setFormData] = useState({
-jobTitle: "",
-companyName: "",
-location: "",
-salary: "",
-skills: "",
-description: "",
-contactInfo: "",
-isUrgent: false,
-paymentMethod: ""   // ✅ ADD THIS
-});
+    jobTitle: "",
+    companyName: "",
+    location: "",
+    salary: "",
+    skills: "",
+    description: "",
+    contactInfo: "",
+    isUrgent: false,
+    paymentMethod: ""
+  });
 
+  // ⭐ NEW: Suggestions state
+  const [suggestions, setSuggestions] = useState([]);
 
-  // ✅ THIS WAS MISSING
+  // ✅ Handle input change
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = async (e) => {
-  e.preventDefault();
+  // ⭐ LOCATION INPUT WITH AUTOCOMPLETE
+  const handleLocationChange = async (e) => {
 
-  try {
-    const token = localStorage.getItem("token");
+    const value = e.target.value;
 
-    // 🔥 GET LAT LNG FROM LOCATION
-    const geoRes = await axios.get(
-  "https://nominatim.openstreetmap.org/search",
-  {
-    params: {
-      q: formData.location,
-      format: "json",
-      limit: 1
-    }
-  }
-);
+    setFormData({ ...formData, location: value });
 
-    if (geoRes.data.length === 0) {
-      alert("Location not found");
-      console.log("Geocode result:", geoRes.data);
+    if (value.length < 3) {
+      setSuggestions([]);
       return;
     }
 
-    const latitude = parseFloat(geoRes.data[0].lat);
-    const longitude = parseFloat(geoRes.data[0].lon);
+    try {
+      const res = await axios.get(
+        "https://nominatim.openstreetmap.org/search",
+        {
+          params: {
+            q: value,
+            format: "json",
+            limit: 5
+          }
+        }
+      );
 
-    // 🔥 SEND LAT LNG TO BACKEND
-    await axios.post(
-      "http://localhost:5000/api/jobs",
-      {
-        ...formData,
-        latitude,
-        longitude
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      setSuggestions(res.data);
+
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  // ✅ Submit
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    try {
+      const token = localStorage.getItem("token");
+
+      // 🔥 GET LAT LNG
+      const geoRes = await axios.get(
+        "https://nominatim.openstreetmap.org/search",
+        {
+          params: {
+            q: formData.location,
+            format: "json",
+            limit: 1
+          }
+        }
+      );
+
+      // ❗ FIXED ERROR CHECK
+      if (!geoRes.data || geoRes.data.length === 0) {
+        alert("Please select location from suggestions");
+        return;
       }
-    );
 
-    alert("Job posted successfully ✅");
+      const latitude = parseFloat(geoRes.data[0].lat);
+      const longitude = parseFloat(geoRes.data[0].lon);
 
-  } catch (err) {
-    console.error(err);
-    alert("Failed to post job");
-  }
-};
+      // 🔥 SEND DATA
+      await axios.post(
+        "http://localhost:5000/api/jobs",
+        {
+          ...formData,
+          latitude,
+          longitude
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      alert("Job posted successfully ✅");
+
+    } catch (err) {
+      console.error(err);
+      alert("Failed to post job");
+    }
+  };
 
   return (
     <div className="post-job-page">
       <h2>Post a Job</h2>
 
-       <form className="post-job-card" onSubmit={handleSubmit}>
-       <select
-  className="job-dropdown"
-  onChange={(e) =>
-    setFormData({ ...formData, jobTitle: e.target.value })
-  }
->
+      <form className="post-job-card" onSubmit={handleSubmit}>
 
-<option value="">Select Job Type (Optional)</option>
+        {/* Job Dropdown */}
+        <select
+          className="job-dropdown"
+          onChange={(e) =>
+            setFormData({ ...formData, jobTitle: e.target.value })
+          }
+        >
+          {/* <option value="">Select Job Type (Optional)</option>
+          <option value="Electrician">Electrician</option>
+          <option value="Plumber">Plumber</option>
+          <option value="Carpenter">Carpenter</option>
+          <option value="Cleaner">Cleaner</option>
+          <option value="Cook">Cook</option>
+          <option value="Driver">Driver</option> */}
 
-{/* Home Services */}
+          {/* Home Services */}
+          <option value="">Select Job Type (Optional)</option>
+
 <option value="Electrician">Electrician</option>
 <option value="Plumber">Plumber</option>
 <option value="Carpenter">Carpenter</option>
@@ -138,39 +182,71 @@ paymentMethod: ""   // ✅ ADD THIS
 <option value="Helper">Helper</option>
 <option value="Labour">Labour</option>
 
-</select>
-       
-
-
+        </select>
 
         <input name="jobTitle" placeholder="Job Title" value={formData.jobTitle} onChange={handleChange} required />
         <input name="companyName" placeholder="Company / Name" value={formData.companyName} onChange={handleChange} required />
-        <input name="location" placeholder="Location" value={formData.location} onChange={handleChange} required />
+
+        {/* ⭐ LOCATION INPUT */}
+        <input
+          name="location"
+          placeholder="Enter location"
+          value={formData.location}
+          onChange={handleLocationChange}
+          required
+        />
+
+        {/* ⭐ SUGGESTIONS */}
+        {suggestions.length > 0 && (
+          <ul style={{
+            background: "#fff",
+            border: "1px solid #ccc",
+            maxHeight: "150px",
+            overflowY: "auto",
+            padding: 0,
+            listStyle: "none",
+            marginTop: "5px"
+          }}>
+            {suggestions.map((item, index) => (
+              <li
+                key={index}
+                onClick={() => {
+                  setFormData({
+                    ...formData,
+                    location: item.display_name
+                  });
+                  setSuggestions([]);
+                }}
+                style={{
+                  padding: "8px",
+                  cursor: "pointer",
+                  borderBottom: "1px solid #eee"
+                }}
+              >
+                {item.display_name}
+              </li>
+            ))}
+          </ul>
+        )}
+
         <input name="salary" placeholder="Salary" value={formData.salary} onChange={handleChange} required />
         <input name="skills" placeholder="Skills" value={formData.skills} onChange={handleChange} required />
         <textarea name="description" placeholder="Description" value={formData.description} onChange={handleChange} />
 
-
         <select
-name="paymentMethod"
-className="job-dropdown"
-value={formData.paymentMethod}
-onChange={handleChange}
->
+          name="paymentMethod"
+          className="job-dropdown"
+          value={formData.paymentMethod}
+          onChange={handleChange}
+        >
+          <option value="">Select Payment Method</option>
+          <option value="Cash">💵 Cash</option>
+          <option value="UPI">📱 UPI</option>
+          <option value="After Work">🤝 After Work</option>
+        </select>
 
-<option value="">Select Payment Method</option>
+        <input name="contactInfo" placeholder="Contact Info" value={formData.contactInfo} onChange={handleChange} required />
 
-<option value="Cash">💵 Cash</option>
-
-<option value="UPI">📱 UPI</option>
-
-<option value="After Work">🤝 After Work</option>
-
-</select>
-        <input name="contactInfo" placeholder="Contact Info" value={formData.contactInfo} onChange={handleChange} required /> 
-       
-
-        
         <div style={{ marginTop: "10px" }}>
           <label>
             <input
@@ -180,14 +256,13 @@ onChange={handleChange}
               onChange={(e) =>
                 setFormData({ ...formData, isUrgent: e.target.checked })
               }
-             />
-             🚨 Urgent Hiring
-           </label>
-          </div>
-
-
+            />
+            🚨 Urgent Hiring
+          </label>
+        </div>
 
         <button type="submit" className="post-job-btn">Post Job</button>
+
       </form>
     </div>
   );

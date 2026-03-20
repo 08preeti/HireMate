@@ -10,6 +10,7 @@
     "axios": "^1.13.2",
     "framer-motion": "^12.23.24",
     "leaflet": "^1.9.4",
+    "leaflet-polylinedecorator": "^1.6.0",
     "leaflet-routing-machine": "^3.2.12",
     "qrcode": "^1.5.4",
     "react": "^19.1.1",

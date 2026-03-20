@@ -112,6 +112,39 @@ router.get("/profile/:id", async (req, res) => {
 });
 
 
+/* ==========================
+   UPDATE WORKER PROFILE
+   PUT /api/workers/update/:id
+========================== */
+
+router.put("/update/:id", async (req, res) => {
+
+  try {
+
+    const { location } = req.body;
+
+    const updatedWorker = await Worker.findByIdAndUpdate(
+      req.params.id,
+      { location },
+      { new: true }
+    );
+
+    if (!updatedWorker) {
+      return res.status(404).json({ message: "Worker not found" });
+    }
+
+    res.json(updatedWorker);
+
+  } catch (err) {
+
+    console.log(err);
+    res.status(500).json({ message: "Update failed" });
+
+  }
+
+});
+
+
 
 /* ==========================
    WORKER MY JOBS
