@@ -358,7 +358,7 @@ function speak(text) {
 const STATUS_STEPS = ["accepted", "on_the_way", "arrived", "completed"];
 const STATUS_LABELS = {
   accepted:    { label: "Job Accepted",    icon: "✅", color: "#006491" },
-  on_the_way:  { label: "On the Way",      icon: "🚗", color: "#f59e0b" },
+  on_the_way:  { label: "On the Way",      icon: "👷‍♂️", color: "#f59e0b" },
   arrived:     { label: "Arrived",         icon: "📍", color: "#10b981" },
   completed:   { label: "Job Completed",   icon: "🎉", color: "#8b5cf6" },
 };
@@ -575,7 +575,7 @@ export default function JobNavigation() {
           {/* Worker marker */}
           {workerPos && (
             <Marker position={[workerPos.lat, workerPos.lng]} icon={workerIcon}>
-              <Popup>🚗 You are here</Popup>
+              <Popup>👷‍♂️ You are here</Popup>
             </Marker>
           )}
 
@@ -750,7 +750,7 @@ export default function JobNavigation() {
             borderRadius: 14, textAlign: "center",
             fontSize: 14, color: "#006491", fontWeight: 600,
           }}>
-            🚗 Navigating to job…
+            🛣️ Navigating to job…
           </div>
         )}
 

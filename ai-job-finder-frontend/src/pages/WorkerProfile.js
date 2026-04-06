@@ -260,236 +260,237 @@ width:"350px"
 } */
 
 
+//-----------------------------------------
 import { useEffect, useState } from "react";
-import axios from "axios";
+import { useNavigate } from "react-router-dom";
+import { useLanguage } from "../context/LanguageContext";
+import { translations } from "../translations";
 
 const BASE = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
-function getInitials(name) {
-  if (!name) return "W";
-  return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+const SKILL_OPTIONS = [
+  { value: "Electrician",    emoji: "⚡" }, { value: "Plumber",       emoji: "🔧" },
+  { value: "Cook",           emoji: "🍳" }, { value: "Driver",        emoji: "🚗" },
+  { value: "Carpenter",      emoji: "🪚" }, { value: "Painter",       emoji: "🎨" },
+  { value: "Cleaner",        emoji: "🧹" }, { value: "Security Guard",emoji: "🛡️" },
+  { value: "Gardener",       emoji: "🌿" }, { value: "Delivery Boy",  emoji: "📦" },
+  { value: "Mechanic",       emoji: "⚙️" }, { value: "Mason",         emoji: "🏗️" },
+  { value: "House Maid",     emoji: "🏠" }, { value: "Waiter",        emoji: "🍽️" },
+  { value: "Helper",         emoji: "👷" }, { value: "Welder",        emoji: "🔥" },
+];
+
+function getSkillEmoji(skill) {
+  const found = SKILL_OPTIONS.find(s => s.value.toLowerCase() === (skill || "").toLowerCase());
+  return found ? found.emoji : "💼";
 }
 
-function getSkillIcon(skill) {
-  if (!skill) return "🛠️";
-  const s = skill.toLowerCase();
-  if (s.includes("cook") || s.includes("chef")) return "🍳";
-  if (s.includes("electric")) return "⚡";
-  if (s.includes("plumb")) return "🔧";
-  if (s.includes("carpenter")) return "🪚";
-  if (s.includes("driver")) return "🚗";
-  if (s.includes("paint")) return "🎨";
-  if (s.includes("clean")) return "🧹";
-  if (s.includes("security") || s.includes("guard")) return "🛡️";
-  if (s.includes("garden")) return "🌿";
-  if (s.includes("deliver")) return "📦";
-  if (s.includes("maid") || s.includes("house")) return "🏠";
-  if (s.includes("weld")) return "⚙️";
-  if (s.includes("mason") || s.includes("construct")) return "🏗️";
-  return "🛠️";
-}
-
-function StarRow({ rating }) {
-  const r = parseFloat(rating) || 0;
+function StarRating({ rating }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <span key={n} style={{ fontSize: 20, color: n <= Math.round(r) ? "#f59e0b" : "#e5e7eb" }}>★</span>
+    <div style={{ display: "flex", gap: 3 }}>
+      {[1,2,3,4,5].map(i => (
+        <span key={i} style={{ fontSize: 20, color: i <= Math.round(rating) ? "#f59e0b" : "#e5e7eb" }}>★</span>
       ))}
-      <span style={{ fontSize: 14, color: "#6b7280", marginLeft: 6, fontWeight: 600 }}>
-        {r > 0 ? r : "No ratings yet"}
-      </span>
     </div>
   );
 }
 
 export default function WorkerProfile() {
-  const [worker, setWorker]         = useState(null);
-  const [location, setLocation]     = useState("");
-  const [loading, setLoading]       = useState(true);
-  const [updating, setUpdating]     = useState(false);
-  const [editMode, setEditMode]     = useState(false);
-  const [toast, setToast]           = useState("");
+  const navigate         = useNavigate();
+  const { language }     = useLanguage();
+  const t                = translations[language];
 
-  const [workerId] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("worker"))?._id || null; }
-    catch { return null; }
-  });
+  const [worker, setWorker]       = useState(null);
+  const [editing, setEditing]     = useState(false);
+  const [editSkill, setEditSkill] = useState(false);
+  const [form, setForm]           = useState({ name: "", location: "", skills: "" });
+  const [saving, setSaving]       = useState(false);
+  const [saved, setSaved]         = useState(false);
+
+  const savedWorker = JSON.parse(localStorage.getItem("worker") || "null");
 
   useEffect(() => {
-    if (!workerId) { setLoading(false); return; }
-    axios.get(`${BASE}/api/workers/profile/${workerId}`)
-      .then((res) => { setWorker(res.data); setLocation(res.data.location || ""); })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [workerId]);
+    if (!savedWorker) return;
+    fetch(`${BASE}/api/workers/profile/${savedWorker._id}`)
+      .then(r => r.json())
+      .then(data => {
+        setWorker(data);
+        setForm({ name: data.name || "", location: data.location || "", skills: data.skills || "" });
+      })
+      .catch(() => {
+        setWorker(savedWorker);
+        setForm({ name: savedWorker.name || "", location: savedWorker.location || "", skills: savedWorker.skills || "" });
+      });
+  }, []); // eslint-disable-line
 
-  const updateLocation = async () => {
-    if (!location.trim()) return;
-    setUpdating(true);
+  const saveProfile = async () => {
+    setSaving(true);
     try {
-      const res = await axios.put(`${BASE}/api/workers/update/${workerId}`, { location });
-      setWorker(res.data);
-      localStorage.setItem("worker", JSON.stringify(res.data));
-      setEditMode(false);
-      setToast("Location updated successfully!");
-      setTimeout(() => setToast(""), 3000);
-    } catch { alert("Update failed"); }
-    finally { setUpdating(false); }
+      const res  = await fetch(`${BASE}/api/workers/update/${worker._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const updated = { ...worker, ...form };
+        setWorker(updated);
+        localStorage.setItem("worker", JSON.stringify({ ...savedWorker, ...form }));
+        setEditing(false);
+        setEditSkill(false);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      } else {
+        alert(data.message || t.updateFailed);
+      }
+    } catch { alert(t.updateFailed); }
+    setSaving(false);
   };
 
-  if (loading) return (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"60vh", flexDirection:"column", gap:12 }}>
-      <div style={{ fontSize:40 }}>⏳</div>
-      <div style={{ color:"#6b7280" }}>Loading profile…</div>
+  if (!savedWorker) return (
+    <div style={{ padding: 40, textAlign: "center", fontFamily: "sans-serif" }}>
+      <div style={{ fontSize: 60, marginBottom: 16 }}>👷</div>
+      <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 12 }}>{t.noWorkerFound}</div>
+      <a href="/worker-login" style={{ background: "#006491", color: "#fff", padding: "13px 28px", borderRadius: 12, textDecoration: "none", fontWeight: 700, fontSize: 15 }}>
+        {language === "hi" ? "लॉगिन करें" : language === "mr" ? "लॉगिन करा" : "Login / Register"}
+      </a>
     </div>
   );
 
-  if (!workerId) return (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"60vh" }}>
-      <div style={{ textAlign:"center", padding:40 }}>
-        <div style={{ fontSize:56, marginBottom:16 }}>👤</div>
-        <div style={{ fontWeight:700, fontSize:20, marginBottom:8 }}>No Worker Found</div>
-        <div style={{ color:"#6b7280", marginBottom:20 }}>Please register first.</div>
-        <a href="/worker-register" style={{ background:"#006491", color:"#fff", padding:"12px 24px", borderRadius:10, textDecoration:"none", fontWeight:600 }}>Register Now</a>
-      </div>
-    </div>
-  );
+  if (!worker) return <div style={{ padding: 40, textAlign: "center" }}>{t.loading}</div>;
 
-  const rating  = parseFloat(worker?.rating) || 0;
-  const reviews = worker?.totalReviews || 0;
-  const icon    = getSkillIcon(worker?.skills);
+  const rating       = parseFloat(worker.rating) || 0;
+  const totalReviews = worker.totalReviews || 0;
 
   return (
-    <div style={{ maxWidth:560, margin:"0 auto", padding:"28px 16px", fontFamily:"sans-serif" }}>
+    <div style={{ maxWidth: 500, margin: "0 auto", padding: "24px 16px", fontFamily: "sans-serif" }}>
 
-      {/* Toast */}
-      {toast && (
-        <div style={{ background:"#f0fdf4", border:"1px solid #10b981", borderRadius:12, padding:"12px 16px", marginBottom:16, color:"#065f46", fontWeight:600, display:"flex", alignItems:"center", gap:8, boxShadow:"0 2px 8px rgba(16,185,129,.15)" }}>
-          ✅ {toast}
+      {/* Save toast */}
+      {saved && (
+        <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", background: "#10b981", color: "#fff", borderRadius: 10, padding: "10px 24px", fontWeight: 700, zIndex: 9999, boxShadow: "0 4px 16px rgba(0,0,0,.2)" }}>
+          ✅ {t.locationUpdated}
         </div>
       )}
 
-      {/* ── PROFILE CARD ─────────────────────────────────────── */}
-      <div style={{ background:"#fff", borderRadius:20, overflow:"hidden", boxShadow:"0 4px 24px rgba(0,0,0,.1)", marginBottom:16 }}>
+      {/* Profile card */}
+      <div style={{ background: "#fff", borderRadius: 20, boxShadow: "0 4px 20px rgba(0,0,0,.09)", overflow: "hidden", marginBottom: 14 }}>
 
         {/* Banner */}
-        <div style={{ background:"linear-gradient(135deg,#006491,#004f73)", height:90 }} />
-
-        <div style={{ padding:"0 24px 24px" }}>
-
-          {/* Avatar */}
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginTop:-40, marginBottom:14 }}>
-            <div style={{ width:80, height:80, borderRadius:"50%", background:"linear-gradient(135deg,#E8002A,#c0001f)", border:"4px solid #fff", display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, fontWeight:700, color:"#fff", boxShadow:"0 4px 14px rgba(232,0,42,.35)" }}>
-              {getInitials(worker?.name)}
-            </div>
-            <div style={{ background: rating>=4?"#f0fdf4":rating>=2?"#fffbeb":"#f3f4f6", color: rating>=4?"#065f46":rating>=2?"#92400e":"#6b7280", borderRadius:20, padding:"5px 14px", fontSize:12, fontWeight:700, border:`1px solid ${rating>=4?"#10b981":rating>=2?"#f59e0b":"#e5e7eb"}`, marginBottom:4 }}>
-              {rating>=4?"⭐ Top Rated":rating>=2?"👍 Good Worker":"🆕 New"}
-            </div>
+        <div style={{ background: "linear-gradient(135deg,#006491,#004f73)", padding: "28px 20px", color: "#fff", textAlign: "center" }}>
+          <div style={{ width: 80, height: 80, borderRadius: "50%", background: "rgba(255,255,255,.18)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 42, margin: "0 auto 12px", border: "3px solid rgba(255,255,255,.3)" }}>
+            {getSkillEmoji(worker.skills)}
           </div>
 
-          {/* Name & skill */}
-          <h2 style={{ margin:"0 0 4px", fontSize:22, fontWeight:800, color:"#111" }}>{worker?.name}</h2>
-          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-            <span style={{ fontSize:18 }}>{icon}</span>
-            <span style={{ fontSize:14, color:"#6b7280", fontWeight:500 }}>{worker?.skills || "No skill listed"}</span>
-          </div>
+          {editing ? (
+            <input value={form.name} onChange={e => setForm({...form, name: e.target.value})}
+              style={{ fontSize: 18, fontWeight: 700, textAlign: "center", background: "rgba(255,255,255,.2)", border: "2px solid rgba(255,255,255,.5)", borderRadius: 8, color: "#fff", padding: "6px 12px", width: "100%", boxSizing: "border-box" }} />
+          ) : (
+            <div style={{ fontSize: 22, fontWeight: 800 }}>{worker.name}</div>
+          )}
 
-          {/* Stars */}
-          <div style={{ marginTop:16, paddingTop:16, borderTop:"1px solid #f3f4f6" }}>
-            <StarRow rating={worker?.rating} />
-            <div style={{ fontSize:12, color:"#9ca3af", marginTop:5 }}>
-              {reviews>0 ? `Based on ${reviews} review${reviews>1?"s":""}` : "No reviews yet — complete a job to get rated"}
-            </div>
+          <div style={{ fontSize: 13, opacity: .8, marginTop: 4 }}>📱 {worker.phone}</div>
+
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 10 }}>
+            <StarRating rating={rating} />
+            <span style={{ fontSize: 13, opacity: .9 }}>
+              {rating > 0 ? `${rating}/5 (${totalReviews})` : (language === "hi" ? "अभी कोई रेटिंग नहीं" : language === "mr" ? "अजून रेटिंग नाही" : "No ratings yet")}
+            </span>
           </div>
         </div>
-      </div>
 
-      {/* ── INFO CARD ─────────────────────────────────────────── */}
-      <div style={{ background:"#fff", borderRadius:20, padding:"20px 24px", boxShadow:"0 4px 24px rgba(0,0,0,.08)", marginBottom:16 }}>
-        <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 }}>Contact Info</div>
+        <div style={{ padding: 20 }}>
 
-        {/* Phone row */}
-        <div style={{ display:"flex", alignItems:"center", gap:12, paddingBottom:14, borderBottom:"1px solid #f3f4f6", marginBottom:14 }}>
-          <div style={{ width:42, height:42, borderRadius:12, background:"#e8f4f8", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>📞</div>
-          <div>
-            <div style={{ fontSize:11, color:"#9ca3af", fontWeight:600, textTransform:"uppercase" }}>Phone</div>
-            <div style={{ fontSize:16, fontWeight:700, color:"#111", marginTop:2 }}>{worker?.phone || "—"}</div>
-          </div>
-          <a href={`tel:${worker?.phone}`} style={{ marginLeft:"auto", background:"#e8f4f8", color:"#006491", borderRadius:8, padding:"6px 14px", textDecoration:"none", fontSize:13, fontWeight:600 }}>Call</a>
-        </div>
-
-        {/* Location row */}
-        <div style={{ display:"flex", alignItems:"flex-start", gap:12 }}>
-          <div style={{ width:42, height:42, borderRadius:12, background:"#fef3c7", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0, marginTop:2 }}>📍</div>
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:11, color:"#9ca3af", fontWeight:600, textTransform:"uppercase" }}>Location</div>
-            {editMode ? (
-              <div style={{ marginTop:8 }}>
-                <input
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  placeholder="Enter your area / city"
-                  autoFocus
-                  style={{ width:"100%", padding:"10px 14px", border:"2px solid #006491", borderRadius:10, fontSize:14, outline:"none", boxSizing:"border-box" }}
-                />
-                <div style={{ display:"flex", gap:8, marginTop:8 }}>
-                  <button onClick={updateLocation} disabled={updating} style={{ flex:1, padding:"10px 0", background:"#006491", color:"#fff", border:"none", borderRadius:8, fontWeight:600, cursor:"pointer", fontSize:14 }}>
-                    {updating ? "Saving…" : "✓ Save"}
-                  </button>
-                  <button onClick={() => { setEditMode(false); setLocation(worker?.location||""); }} style={{ flex:1, padding:"10px 0", background:"#f3f4f6", color:"#374151", border:"none", borderRadius:8, fontWeight:600, cursor:"pointer", fontSize:14 }}>
-                    Cancel
-                  </button>
+          {/* Skill section */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: .5, marginBottom: 8 }}>{t.skills}</div>
+            {editSkill ? (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 10 }}>
+                  {SKILL_OPTIONS.map(s => (
+                    <button key={s.value} onClick={() => setForm({...form, skills: s.value})}
+                      style={{ padding: "8px 4px", borderRadius: 10, border: `2px solid ${form.skills === s.value ? "#006491" : "#e5e7eb"}`, background: form.skills === s.value ? "#e8f4f8" : "#f9fafb", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                      <span style={{ fontSize: 20 }}>{s.emoji}</span>
+                      <span style={{ fontSize: 9, fontWeight: 600, color: form.skills === s.value ? "#006491" : "#6b7280", textAlign: "center" }}>{s.value}</span>
+                    </button>
+                  ))}
                 </div>
-              </div>
+              </>
             ) : (
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:2 }}>
-                <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>{worker?.location || "Not set"}</div>
-                <button onClick={() => setEditMode(true)} style={{ background:"none", border:"1px solid #e5e7eb", borderRadius:8, padding:"5px 12px", cursor:"pointer", fontSize:12, color:"#006491", fontWeight:600 }}>
-                  ✏️ Edit
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 26 }}>{getSkillEmoji(worker.skills)}</span>
+                <span style={{ fontSize: 15, fontWeight: 600 }}>{worker.skills || "—"}</span>
+                <button onClick={() => setEditSkill(true)} style={{ marginLeft: "auto", background: "none", border: "1px solid #e5e7eb", borderRadius: 8, padding: "4px 10px", fontSize: 12, cursor: "pointer", color: "#006491", fontWeight: 600 }}>
+                  ✏️ {t.edit}
                 </button>
               </div>
             )}
           </div>
-        </div>
-      </div>
 
-      {/* ── STATS CARD ────────────────────────────────────────── */}
-      <div style={{ background:"#fff", borderRadius:20, padding:"20px 24px", boxShadow:"0 4px 24px rgba(0,0,0,.08)", marginBottom:16 }}>
-        <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 }}>Performance</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
-          {[
-            { label:"Rating",  value: rating>0 ? `${rating}/5` : "—", icon:"⭐", color:"#f59e0b", bg:"#fffbeb" },
-            { label:"Reviews", value: reviews||"0",                    icon:"📝", color:"#006491", bg:"#e8f4f8" },
-            { label:"Status",  value:"Active",                         icon:"✅", color:"#10b981", bg:"#f0fdf4" },
-          ].map((s) => (
-            <div key={s.label} style={{ textAlign:"center", background:s.bg, borderRadius:14, padding:"14px 8px" }}>
-              <div style={{ fontSize:24 }}>{s.icon}</div>
-              <div style={{ fontSize:17, fontWeight:800, color:s.color, marginTop:4 }}>{s.value}</div>
-              <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>{s.label}</div>
+          <hr style={{ border: "none", borderTop: "1px solid #f0f0f0", margin: "12px 0" }} />
+
+          {/* Location section */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: .5, marginBottom: 8 }}>{t.location}</div>
+            {editing ? (
+              <input value={form.location} onChange={e => setForm({...form, location: e.target.value})}
+                placeholder={t.enterNewLocation}
+                style={{ width: "100%", padding: "10px 14px", border: "1.5px solid #006491", borderRadius: 10, fontSize: 14, boxSizing: "border-box", outline: "none" }} />
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 14 }}>📍 {worker.location || "—"}</span>
+                <button onClick={() => setEditing(true)} style={{ marginLeft: "auto", background: "none", border: "1px solid #e5e7eb", borderRadius: 8, padding: "4px 10px", fontSize: 12, cursor: "pointer", color: "#006491", fontWeight: 600 }}>
+                  ✏️ {t.edit}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <hr style={{ border: "none", borderTop: "1px solid #f0f0f0", margin: "12px 0" }} />
+
+          {/* Stats */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+            <div style={{ background: "#fffbeb", borderRadius: 12, padding: "12px", textAlign: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#f59e0b" }}>{rating > 0 ? rating : "—"}</div>
+              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>⭐ {t.rating}</div>
             </div>
-          ))}
+            <div style={{ background: "#f0fdf4", borderRadius: 12, padding: "12px", textAlign: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#10b981" }}>{totalReviews}</div>
+              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>📋 {t.reviews}</div>
+            </div>
+          </div>
+
+          {/* Save / Cancel */}
+          {(editing || editSkill) && (
+            <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+              <button onClick={() => { setEditing(false); setEditSkill(false); setForm({ name: worker.name||"", location: worker.location||"", skills: worker.skills||"" }); }}
+                style={{ flex: 1, padding: "11px 0", background: "#f3f4f6", border: "none", borderRadius: 10, fontWeight: 600, cursor: "pointer" }}>{t.cancel}</button>
+              <button onClick={saveProfile} disabled={saving}
+                style={{ flex: 2, padding: "11px 0", background: "#006491", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, cursor: "pointer" }}>
+                {saving ? t.saving : `💾 ${t.save}`}
+              </button>
+            </div>
+          )}
+
+          {/* Quick links */}
+          {!editing && !editSkill && (
+            <div style={{ display: "flex", gap: 10 }}>
+              <a href="/jobs" style={{ flex: 1, padding: "11px 0", background: "#006491", color: "#fff", borderRadius: 10, fontWeight: 700, fontSize: 14, textDecoration: "none", textAlign: "center" }}>
+                🔍 {t.browseJobs}
+              </a>
+              <a href="/my-jobs" style={{ flex: 1, padding: "11px 0", background: "#f3f4f6", color: "#374151", borderRadius: 10, fontWeight: 700, fontSize: 14, textDecoration: "none", textAlign: "center" }}>
+                📋 {t.myJobs}
+              </a>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ── QUICK ACTIONS ─────────────────────────────────────── */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-        <a href="/worker-dashboard" style={{ background:"#006491", color:"#fff", borderRadius:14, padding:"16px", textDecoration:"none", display:"flex", alignItems:"center", gap:10, boxShadow:"0 4px 14px rgba(0,100,145,.3)" }}>
-          <span style={{ fontSize:24 }}>🚀</span>
-          <div>
-            <div style={{ fontWeight:700, fontSize:14 }}>Dashboard</div>
-            <div style={{ fontSize:11, opacity:.8 }}>Find nearby jobs</div>
-          </div>
-        </a>
-        <a href="/jobs" style={{ background:"#E8002A", color:"#fff", borderRadius:14, padding:"16px", textDecoration:"none", display:"flex", alignItems:"center", gap:10, boxShadow:"0 4px 14px rgba(232,0,42,.3)" }}>
-          <span style={{ fontSize:24 }}>💼</span>
-          <div>
-            <div style={{ fontWeight:700, fontSize:14 }}>Browse Jobs</div>
-            <div style={{ fontSize:11, opacity:.8 }}>All listings</div>
-          </div>
-        </a>
-      </div>
-
+      {/* Logout */}
+      <button
+        onClick={() => { localStorage.removeItem("worker"); navigate("/worker-login"); }}
+        style={{ width: "100%", padding: "13px 0", background: "none", border: "2px solid #E8002A", borderRadius: 12, color: "#E8002A", fontWeight: 700, fontSize: 15, cursor: "pointer" }}
+      >
+        🚪 {language === "hi" ? "लॉगआउट करें" : language === "mr" ? "लॉगआउट करा" : "Logout"}
+      </button>
     </div>
   );
 }
