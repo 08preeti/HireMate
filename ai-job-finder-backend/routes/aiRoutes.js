@@ -187,7 +187,7 @@ router.post("/career-tips", async (req, res) => {
  
 export default router;  */
 
-
+//-----------------------------------------
 
 import express from "express";
 import Job from "../models/Job.js";
@@ -377,5 +377,3 @@ router.post("/career-tips", async (req, res) => {
 });
 
 export default router;
-
-
