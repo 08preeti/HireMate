@@ -1,6 +1,8 @@
-/*import { useState } from "react";
+/*
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext";
+import VoiceSearch from "../components/VoiceSearch";
 import { translations } from "../translations";
 
 const BASE = process.env.REACT_APP_API_URL || "http://localhost:5000";
@@ -232,7 +234,19 @@ export default function WorkerLogin() {
                 style={{ width: "100%", padding: "12px 14px", border: "1.5px solid #e5e7eb", borderRadius: 10, fontSize: 15, marginBottom: 16, boxSizing: "border-box", outline: "none" }}
               />
 
-              
+           
+              <div style={{ textAlign: "center", marginBottom: 16, padding: "14px", background: "#f0f9ff", borderRadius: 14, border: "1px solid #bae6fd" }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#0c4a6e", marginBottom: 10 }}>
+                  {language === "hi" ? "🎤 बोलकर अपना काम बताएं" : language === "mr" ? "🎤 बोलून तुमचे काम सांगा" : "🎤 Or speak your skill"}
+                </div>
+                <VoiceSearch
+                  onResult={(skill, transcript) => {
+                    if (skill) setSelectedSkill(skill);
+                  }}
+                />
+              </div>
+
+            
               <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 10 }}>
                 {language === "hi" ? "आपका काम चुनें 👇" : language === "mr" ? "तुमचे काम निवडा 👇" : "Select Your Skill 👇"}
               </div>
@@ -286,11 +300,11 @@ export default function WorkerLogin() {
       </div>
     </div>
   );
-}  */
+}   */
 
 
 
-//------------------
+//-------------------new
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext";
@@ -324,8 +338,7 @@ const STEPS = { PHONE: "phone", OTP: "otp", PROFILE: "profile" };
 export default function WorkerLogin() {
   const navigate             = useNavigate();
   const { language }         = useLanguage();
-  const t                    = translations[language];
-
+  // t removed - translations used inline for flexibility
   const [step, setStep]         = useState(STEPS.PHONE);
   const [phone, setPhone]       = useState("");
   const [otp, setOtp]           = useState("");
@@ -334,7 +347,6 @@ export default function WorkerLogin() {
   const [location, setLocation] = useState("");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
-  const [isNewWorker, setIsNewWorker] = useState(false);
   const [devOtp, setDevOtp]     = useState(""); // shown in dev mode
 
   const labels = {
@@ -374,7 +386,6 @@ export default function WorkerLogin() {
       if (!res.ok) {
         // New worker — need profile setup
         if (data.message === "Name required for new registration") {
-          setIsNewWorker(true);
           setStep(STEPS.PROFILE);
           setLoading(false);
           return;
