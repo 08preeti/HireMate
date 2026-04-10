@@ -1,35 +1,4 @@
-/*import mongoose from "mongoose";
-
-const workerSchema = new mongoose.Schema(
-{
-  name: String,
-  phone: String,
-  skills: String,
-  location: String,
-
-  rating: {
-    type: Number,
-    default: 0
-  },
-
-  totalReviews: {
-    type: Number,
-    default: 0
-  },
-
-  currentLocation: {
-    let: Number,
-    lan: Number
-  }
-},
-{ timestamps: true }
-);
-
-
-export default mongoose.model("Worker", workerSchema);  */
-
-
-//----------------------------
+/*
 import mongoose from "mongoose";
 
 const workerSchema = new mongoose.Schema(
@@ -54,6 +23,30 @@ const workerSchema = new mongoose.Schema(
       lat: Number,
       lng: Number,
     },
+  },
+  { timestamps: true }
+);
+
+export default mongoose.model("Worker", workerSchema);  */
+
+
+//----------
+import mongoose from "mongoose";
+
+const workerSchema = new mongoose.Schema(
+  {
+    name: String,
+    phone: String,
+    skills: String,
+    location: String,
+
+    rating: { type: Number, default: 0 },
+    totalReviews: { type: Number, default: 0 },
+    currentLocation: { lat: Number, lng: Number },
+
+    // OTP stored in DB — survives server restarts/spin-downs
+    otp: String,
+    otpExpires: Date,
   },
   { timestamps: true }
 );
