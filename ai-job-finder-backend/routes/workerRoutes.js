@@ -13,7 +13,6 @@ function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-
 router.post("/send-otp", async (req, res) => {
   try {
     const { phone } = req.body;
@@ -28,8 +27,7 @@ router.post("/send-otp", async (req, res) => {
     res.json({
       success: true,
       message: "OTP sent",
-      // Only expose OTP in dev — remove in production
-      otp: process.env.NODE_ENV !== "production" ? otp : undefined,
+      otp: otp, // Always return for demo — in real production use SMS service
     });
   } catch (err) {
     console.error(err);
@@ -128,7 +126,6 @@ router.get("/my-jobs/:phone", async (req, res) => {
   }
 });
 
-
 router.get("/job-alerts", async (req, res) => {
   try {
     const { lat, lng } = req.query;
@@ -194,12 +191,12 @@ router.post("/update-location", async (req, res) => {
   }
 });
 
-export default router;   */
+export default router;  */
 
 
 
-//-----------------------
 
+//---------------------------
 /* import express from "express";
 import Worker from "../models/Worker.js";
 import Application from "../models/Application.js";
@@ -435,7 +432,7 @@ router.post("/send-otp", async (req, res) => {
       return res.status(400).json({ message: "Valid phone number required" });
 
     const otp = generateOTP();
-    otpStore.set(phone, { otp, expires: Date.now() + 5 * 60 * 1000 });
+    otpStore.set(phone, { otp, expires: Date.now() + 15 * 60 * 1000 }); // 15 minutes
 
     console.log(`OTP for ${phone}: ${otp}`);
 
