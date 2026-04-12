@@ -111,6 +111,32 @@ export default function Jobs() {
         />
       </div>
 
+      {/* Filter buttons */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+        <button onClick={() => setFilterUrgent(v => !v)}
+          style={{ padding: "7px 14px", borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: "pointer", border: `1.5px solid ${filterUrgent ? "#E8002A" : "#e5e7eb"}`, background: filterUrgent ? "#fee2e2" : "#f9fafb", color: filterUrgent ? "#E8002A" : "#6b7280" }}>
+          🚨 {language === "hi" ? "तत्काल" : language === "mr" ? "तातडीचे" : "Urgent"}
+        </button>
+        <button onClick={() => setFilterPayment(v => v === "Cash" ? "" : "Cash")}
+          style={{ padding: "7px 14px", borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: "pointer", border: `1.5px solid ${filterPayment === "Cash" ? "#10b981" : "#e5e7eb"}`, background: filterPayment === "Cash" ? "#d1fae5" : "#f9fafb", color: filterPayment === "Cash" ? "#065f46" : "#6b7280" }}>
+          💵 {language === "hi" ? "नकद" : language === "mr" ? "रोख" : "Cash"}
+        </button>
+        <button onClick={() => setFilterMinSalary(v => v === 500 ? 0 : 500)}
+          style={{ padding: "7px 14px", borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: "pointer", border: `1.5px solid ${filterMinSalary === 500 ? "#006491" : "#e5e7eb"}`, background: filterMinSalary === 500 ? "#e8f4f8" : "#f9fafb", color: filterMinSalary === 500 ? "#006491" : "#6b7280" }}>
+          ₹500+
+        </button>
+        <button onClick={() => setFilterMinSalary(v => v === 1000 ? 0 : 1000)}
+          style={{ padding: "7px 14px", borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: "pointer", border: `1.5px solid ${filterMinSalary === 1000 ? "#006491" : "#e5e7eb"}`, background: filterMinSalary === 1000 ? "#e8f4f8" : "#f9fafb", color: filterMinSalary === 1000 ? "#006491" : "#6b7280" }}>
+          ₹1000+
+        </button>
+        {(filterUrgent || filterPayment || filterMinSalary > 0) && (
+          <button onClick={() => { setFilterUrgent(false); setFilterPayment(""); setFilterMinSalary(0); }}
+            style={{ padding: "7px 14px", borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1.5px solid #e5e7eb", background: "#f9fafb", color: "#E8002A" }}>
+            ✕ {language === "hi" ? "हटाएं" : language === "mr" ? "काढा" : "Clear"}
+          </button>
+        )}
+      </div>
+
       {filtered.length === 0 && (
         <div style={{ textAlign: "center", padding: 40, color: "#6b7280" }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>🔍</div>
