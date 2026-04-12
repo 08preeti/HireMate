@@ -1,4 +1,5 @@
-/*import { useEffect, useState } from "react";
+/*
+import { useEffect, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext";
@@ -52,7 +53,7 @@ function shareOnWhatsApp(job, language) {
   const title    = job.jobTitle?.[language] || job.jobTitle?.en || "Job";
   const location = job.location?.[language] || job.location?.en || "";
   const salary   = job.salary ? `₹${job.salary}` : "";
-  const text     = `🔔 *${title}* नोकरी उपलब्ध!\n📍 ${location}\n💰 ${salary}\n\nHireMate वर पहा: http://localhost:3000/jobs`;
+  const text     = `🔔 *${title}* नोकरी उपलब्ध!\n📍 ${location}\n💰 ${salary}\n\nHireMate वर पहा: https://hiremate-brown.vercel.app/jobs`;
   window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
 }
 
@@ -199,11 +200,7 @@ export default function Jobs() {
 }  */
 
 
-
-
-//----------------------
-
-
+//------------------------------
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
@@ -266,6 +263,9 @@ export default function Jobs() {
   const [jobs, setJobs]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch]   = useState("");
+  const [filterUrgent, setFilterUrgent] = useState(false);
+  const [filterPayment, setFilterPayment] = useState("");
+  const [filterMinSalary, setFilterMinSalary] = useState(0);
   const navigate              = useNavigate();
   const { language }          = useLanguage();
   const t                     = translations[language];
@@ -277,13 +277,19 @@ export default function Jobs() {
   }, []);
 
   const filtered = jobs.filter((job) => {
-    if (!search) return true;
-    const s = search.toLowerCase();
-    return (
-      (job.jobTitle?.[language] || "").toLowerCase().includes(s) ||
-      (job.location?.[language] || "").toLowerCase().includes(s) ||
-      (job.skills?.[language]   || "").toLowerCase().includes(s)
-    );
+    if (search) {
+      const s = search.toLowerCase();
+      const matches = (
+        (job.jobTitle?.[language] || "").toLowerCase().includes(s) ||
+        (job.location?.[language] || "").toLowerCase().includes(s) ||
+        (job.skills?.[language]   || "").toLowerCase().includes(s)
+      );
+      if (!matches) return false;
+    }
+    if (filterUrgent && !job.isUrgent) return false;
+    if (filterPayment && job.paymentMethod !== filterPayment) return false;
+    if (filterMinSalary > 0 && Number(job.salary) < filterMinSalary) return false;
+    return true;
   });
 
   if (loading) return (
