@@ -85,3 +85,18 @@ npm start
 - Automated tests around the matching/scoring logic
 - Employer-side worker search (currently one-directional: workers find jobs, not employers finding workers)
 - Push notifications for new matching jobs instead of polling
+
+
+## Screenshots
+
+### Home
+![Home page](screenshots/home.png)
+
+### Worker Login (OTP)
+![Worker login](screenshots/worker-login.png)
+
+### Job Matching Feed
+![Job feed](screenshots/job-feed.png)
+
+### Employer Dashboard
+![Employer dashboard](screenshots/employer-dashboard.png)
