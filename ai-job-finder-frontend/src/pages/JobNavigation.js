@@ -203,7 +203,10 @@ export default function JobNavigation() {
           if (worker) {
             await fetch(`${BASE}/api/workers/update-location`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${localStorage.getItem("workerToken") || ""}`,
+              },
               body: JSON.stringify({ workerId: worker._id, lat: newPos.lat, lng: newPos.lng }),
             });
           }

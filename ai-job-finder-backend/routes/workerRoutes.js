@@ -1,7 +1,10 @@
 import express from "express";
+import jwt from "jsonwebtoken";
 import Worker from "../models/Worker.js";
 import Application from "../models/Application.js";
 import Job from "../models/Job.js";
+import authWorker from "../middleware/authWorker.js";
+import { otpLimiter } from "../middleware/rateLimiter.js";
 
 const router = express.Router();
 
@@ -9,8 +12,18 @@ function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+// Issues a session token for a worker after successful OTP verification /
+// registration, so subsequent requests can prove which worker is calling.
+function generateWorkerToken(worker) {
+  return jwt.sign(
+    { id: worker._id.toString(), phone: worker.phone },
+    process.env.JWT_SECRET,
+    { expiresIn: "30d" }
+  );
+}
+
 /* SEND OTP — POST /api/workers/send-otp */
-router.post("/send-otp", async (req, res) => {
+router.post("/send-otp", otpLimiter, async (req, res) => {
   try {
     const { phone } = req.body;
     if (!phone || phone.length < 10)
@@ -25,8 +38,6 @@ router.post("/send-otp", async (req, res) => {
       { otp, otpExpires: expires },
       { upsert: true, new: true }
     );
-
-    console.log(`OTP for ${phone}: ${otp}`);
 
     // Try Twilio if credentials are set
     const twilioSid   = process.env.TWILIO_ACCOUNT_SID;
@@ -56,7 +67,6 @@ router.post("/send-otp", async (req, res) => {
         });
 
         const smsData = await smsRes.json();
-        console.log("Twilio response:", JSON.stringify(smsData));
 
         if (smsData.sid) {
           smsSent = true;
@@ -69,11 +79,17 @@ router.post("/send-otp", async (req, res) => {
       }
     }
 
+    // ✅ FIXED: OTP used to be returned in every response body, which let
+    // anyone read it straight off the network tab and defeated the point
+    // of OTP auth. Now it's only echoed back outside production, and only
+    // when we don't have a real SMS provider configured (so local/dev/demo
+    // flows still work without needing Twilio).
+    const includeOtpInResponse = process.env.NODE_ENV !== "production" && !smsSent;
+
     res.json({
       success: true,
       message: smsSent ? "OTP sent to your phone" : "OTP sent",
-      // Always return OTP for demo — remove in production
-      otp: otp,
+      ...(includeOtpInResponse ? { otp } : {}),
     });
   } catch (err) {
     console.error(err);
@@ -82,7 +98,7 @@ router.post("/send-otp", async (req, res) => {
 });
 
 /* VERIFY OTP — POST /api/workers/verify-otp */
-router.post("/verify-otp", async (req, res) => {
+router.post("/verify-otp", otpLimiter, async (req, res) => {
   try {
     const { phone, otp, name, skills, location } = req.body;
     if (!phone || !otp)
@@ -116,11 +132,11 @@ router.post("/verify-otp", async (req, res) => {
         { name, skills: skills || "", location: location || "" },
         { new: true }
       );
-      return res.json({ success: true, worker: updated });
+      return res.json({ success: true, worker: updated, token: generateWorkerToken(updated) });
     }
 
     // Existing worker
-    res.json({ success: true, worker });
+    res.json({ success: true, worker, token: generateWorkerToken(worker) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Verification failed" });
@@ -144,7 +160,7 @@ router.post("/register", async (req, res) => {
     } else {
       worker = await Worker.create({ name, skills, location, phone: contact });
     }
-    res.json(worker);
+    res.json({ ...worker._doc, token: generateWorkerToken(worker) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Worker registration failed" });
@@ -152,8 +168,14 @@ router.post("/register", async (req, res) => {
 });
 
 /* GET PROFILE — GET /api/workers/profile/:id */
-router.get("/profile/:id", async (req, res) => {
+router.get("/profile/:id", authWorker, async (req, res) => {
   try {
+    // ✅ FIXED: was unauthenticated — anyone with a worker's Mongo _id could
+    // read their full profile. Now only the worker themselves can fetch it.
+    if (req.workerAuth.id !== req.params.id) {
+      return res.status(403).json({ message: "Not authorized to view this profile" });
+    }
+
     const worker = await Worker.findById(req.params.id);
     if (!worker) return res.status(404).json({ message: "Worker not found" });
     const reviews = await Application.find({ worker: worker._id, isCompleted: true });
@@ -169,8 +191,14 @@ router.get("/profile/:id", async (req, res) => {
 });
 
 /* UPDATE PROFILE — PUT /api/workers/update/:id */
-router.put("/update/:id", async (req, res) => {
+router.put("/update/:id", authWorker, async (req, res) => {
   try {
+    // ✅ FIXED: was unauthenticated — anyone could overwrite another
+    // worker's name/skills/location just by knowing their _id.
+    if (req.workerAuth.id !== req.params.id) {
+      return res.status(403).json({ message: "Not authorized to update this profile" });
+    }
+
     const { location, name, skills } = req.body;
     const updated = await Worker.findByIdAndUpdate(
       req.params.id,
@@ -186,8 +214,14 @@ router.put("/update/:id", async (req, res) => {
 });
 
 /* MY JOBS — GET /api/workers/my-jobs/:phone */
-router.get("/my-jobs/:phone", async (req, res) => {
+router.get("/my-jobs/:phone", authWorker, async (req, res) => {
   try {
+    // ✅ FIXED: was unauthenticated — anyone who knew (or guessed) a phone
+    // number could pull that worker's full application history.
+    if (req.workerAuth.phone !== req.params.phone) {
+      return res.status(403).json({ message: "Not authorized to view these applications" });
+    }
+
     const applications = await Application.find({
       applicantContact: req.params.phone,
     }).populate("job");
@@ -223,9 +257,12 @@ router.get("/job-alerts", async (req, res) => {
 });
 
 /* ACCEPT JOB — POST /api/workers/accept-job */
-router.post("/accept-job", async (req, res) => {
+router.post("/accept-job", authWorker, async (req, res) => {
   try {
     const { workerId, jobId } = req.body;
+    if (req.workerAuth.id !== workerId) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
     const job = await Job.findById(jobId);
     if (!job) return res.status(404).json({ message: "Job not found" });
     const existing = await Application.findOne({ job: jobId, worker: workerId });
@@ -242,8 +279,11 @@ router.post("/accept-job", async (req, res) => {
 });
 
 /* JOB HISTORY — GET /api/workers/job-history/:workerId */
-router.get("/job-history/:workerId", async (req, res) => {
+router.get("/job-history/:workerId", authWorker, async (req, res) => {
   try {
+    if (req.workerAuth.id !== req.params.workerId) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
     const apps = await Application.find({ worker: req.params.workerId }).populate("job");
     res.json(apps);
   } catch (err) {
@@ -253,9 +293,12 @@ router.get("/job-history/:workerId", async (req, res) => {
 });
 
 /* UPDATE LOCATION — POST /api/workers/update-location */
-router.post("/update-location", async (req, res) => {
+router.post("/update-location", authWorker, async (req, res) => {
   try {
     const { workerId, lat, lng } = req.body;
+    if (req.workerAuth.id !== workerId) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
     await Worker.findByIdAndUpdate(workerId, { currentLocation: { lat, lng } });
     res.json({ message: "Location updated" });
   } catch (err) {

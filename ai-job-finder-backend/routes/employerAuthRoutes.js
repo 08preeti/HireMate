@@ -2,11 +2,12 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import Employer from "../models/employerModel.js";
+import { authLimiter } from "../middleware/rateLimiter.js";
 
 const router = express.Router();
 
 // POST /api/employer/register
-router.post("/register", async (req, res) => {
+router.post("/register", authLimiter, async (req, res) => {
   try {
     const { companyName, email, password } = req.body;
 
@@ -33,7 +34,7 @@ router.post("/register", async (req, res) => {
 });
 
 // POST /api/employer/login
-router.post("/login", async (req, res) => {
+router.post("/login", authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 

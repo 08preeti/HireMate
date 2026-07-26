@@ -306,7 +306,9 @@ export default function WorkerDashboard() {
     if (!worker || !workerPos) return;
     fetch(`${BASE}/api/workers/job-alerts?lat=${workerPos.lat}&lng=${workerPos.lng}`)
       .then(r => r.json()).then(d => setAlerts(Array.isArray(d) ? d : [])).catch(() => {});
-    fetch(`${BASE}/api/workers/job-history/${worker._id}`)
+    fetch(`${BASE}/api/workers/job-history/${worker._id}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("workerToken") || ""}` },
+    })
       .then(r => r.json()).then(d => setJobs(Array.isArray(d) ? d : [])).catch(() => {});
   }, [worker, workerPos]);
 
@@ -315,7 +317,11 @@ export default function WorkerDashboard() {
     setAcceptingId(job._id);
     try {
       const res  = await fetch(`${BASE}/api/workers/accept-job`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("workerToken") || ""}`,
+        },
         body: JSON.stringify({ workerId: worker._id, jobId: job._id }),
       });
       const data = await res.json();

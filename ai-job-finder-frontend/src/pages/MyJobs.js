@@ -12,7 +12,9 @@ export default function MyJobs() {
   useEffect(() => {
     const worker = JSON.parse(localStorage.getItem("worker"));
     if (!worker) return;
-    fetch(`${BASE}/api/workers/my-jobs/${worker.phone}`)
+    fetch(`${BASE}/api/workers/my-jobs/${worker.phone}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("workerToken") || ""}` },
+    })
       .then((r) => r.json())
       .then((data) => setJobs(data))
       .catch(() => {});

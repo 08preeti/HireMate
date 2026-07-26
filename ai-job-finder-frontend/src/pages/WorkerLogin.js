@@ -88,6 +88,8 @@ export default function WorkerLogin() {
       }
       // Existing worker — logged in
       localStorage.setItem("worker", JSON.stringify(data.worker));
+      localStorage.setItem("workerId", data.worker._id || data.worker.id);
+      if (data.token) localStorage.setItem("workerToken", data.token);
       // If worker has no skill set, show profile setup
       if (!data.worker.skills) {
         setStep(STEPS.PROFILE);
@@ -115,6 +117,8 @@ export default function WorkerLogin() {
 
       if (res.ok && data.worker) {
         localStorage.setItem("worker", JSON.stringify(data.worker));
+        localStorage.setItem("workerId", data.worker._id || data.worker.id);
+        if (data.token) localStorage.setItem("workerToken", data.token);
         navigate("/worker-dashboard");
         return;
       }
@@ -128,6 +132,8 @@ export default function WorkerLogin() {
       const regData = await regRes.json();
       if (!regRes.ok) { setError(regData.message || "Registration failed"); setLoading(false); return; }
       localStorage.setItem("worker", JSON.stringify(regData));
+      localStorage.setItem("workerId", regData._id || regData.id);
+      if (regData.token) localStorage.setItem("workerToken", regData.token);
       navigate("/worker-dashboard");
     } catch { setError("Registration failed. Please try again."); }
     setLoading(false);

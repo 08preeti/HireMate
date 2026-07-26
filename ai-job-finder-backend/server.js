@@ -1,42 +1,3 @@
-/*import express from "express";
-import mongoose from "mongoose";
-import cors from "cors";
-import dotenv from "dotenv";
-
-import employerAuthRoutes from "./routes/employerAuthRoutes.js";
-import employerDashboardRoutes from "./routes/employerDashboardRoutes.js";
-import jobRoutes from "./routes/jobRoutes.js";
-import applicationRoutes from "./routes/applicationRoutes.js";
-import workerRoutes from "./routes/workerRoutes.js";
-
-dotenv.config();
-const app = express();
-
-app.use(cors());
-app.use(express.json());
-
-mongoose
-  .connect(process.env.MONGODB_URI)
-  .then(() => console.log("✅ MongoDB connected successfully"))
-  .catch((err) => console.error("❌ MongoDB error:", err));
-
-app.use("/api/employer", employerAuthRoutes);
-app.use("/api/employer/dashboard", employerDashboardRoutes);
-app.use("/api/jobs", jobRoutes);
-app.use("/api/applications", applicationRoutes);
-app.use("/api/workers", workerRoutes);
-
-app.get("/", (req, res) => {
-  res.send("HireMate Backend Running 🚀");
-});
-
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () =>
-  console.log(`🚀 Server running on http://localhost:${PORT}`)
-); */
-
-
-//-----------------------
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
@@ -52,7 +13,14 @@ import aiRoutes from "./routes/aiRoutes.js";
 dotenv.config();
 const app = express();
 
-app.use(cors());
+// ✅ FIXED: CORS was wide open to any origin. Set FRONTEND_URL in .env
+// (comma-separated for multiple origins) to lock it down in production.
+// Falls back to "*" only when FRONTEND_URL isn't set, so local dev still works.
+const allowedOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(",").map((o) => o.trim())
+  : "*";
+
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
 mongoose

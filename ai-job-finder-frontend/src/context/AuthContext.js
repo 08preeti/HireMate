@@ -10,13 +10,14 @@ export const AuthProvider = ({ children }) => {
     const employerToken = localStorage.getItem("employerToken");
     const employerId = localStorage.getItem("employerId");
     const workerId = localStorage.getItem("workerId");
+    const workerToken = localStorage.getItem("workerToken");
 
     if (employerToken && employerId) {
       setEmployer({ employerId });
     }
 
     if (workerId) {
-      setWorker({ workerId });
+      setWorker({ workerId, workerToken });
     }
   }, []);
 
@@ -28,6 +29,8 @@ export const AuthProvider = ({ children }) => {
 
   const logoutWorker = () => {
     localStorage.removeItem("workerId");
+    localStorage.removeItem("workerToken");
+    localStorage.removeItem("worker");
     setWorker(null);
   };
 

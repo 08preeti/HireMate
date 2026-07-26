@@ -51,7 +51,9 @@ export default function WorkerProfile() {
     // Try to load full profile from backend
     const id = savedWorker._id || savedWorker.id;
     if (id) {
-      fetch(`${BASE}/api/workers/profile/${id}`)
+      fetch(`${BASE}/api/workers/profile/${id}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("workerToken") || ""}` },
+      })
         .then(r => r.json())
         .then(data => {
           if (data && data._id) {
@@ -101,7 +103,10 @@ export default function WorkerProfile() {
       const id = worker._id || worker.id;
       const res = await fetch(`${BASE}/api/workers/update/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("workerToken") || ""}`,
+        },
         body: JSON.stringify(form),
       });
       const data = await res.json();
