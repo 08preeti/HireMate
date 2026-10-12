@@ -82,7 +82,11 @@ async function fetchRoute(from: LatLng, to: LatLng): Promise<RouteResult | null>
     const coords = route.geometry.coordinates.map(([lng, lat]): [number, number] => [lat, lng]);
     const distKm = (route.distance / 1000).toFixed(2);
     const timeMin = Math.round(route.duration / 60);
-    const steps = route.legs[0].steps.map((s) => s.maneuver.instruction || s.name).filter((x): x is string => Boolean(x));
+
+    const steps = route.legs[0].steps
+      .map((s) => s.maneuver.instruction || s.name)
+      .filter((x): x is string => Boolean(x));
+
     return { coords, distKm, timeMin, steps };
   } catch {
     return null;
@@ -102,37 +106,37 @@ interface StatusStyle {
 
 const STATUS_LABELS: Record<ApplicationStatus, StatusStyle> = {
   // Full Tailwind class names (not built dynamically) so Tailwind can see them.
-  accepted:    { label: "Job Accepted",    icon: "✅", solid: "bg-brand",       text: "text-brand",       ring: "shadow-[0_0_0_4px_rgba(0,100,145,.19)]" },
-  on_the_way:  { label: "On the Way",      icon: "👷‍♂️", solid: "bg-amber-500",   text: "text-amber-500",   ring: "shadow-[0_0_0_4px_rgba(245,158,11,.19)]" },
-  arrived:     { label: "Arrived",         icon: "📍", solid: "bg-emerald-500", text: "text-emerald-500", ring: "shadow-[0_0_0_4px_rgba(16,185,129,.19)]" },
-  completed:   { label: "Job Completed",   icon: "🎉", solid: "bg-violet-500",  text: "text-violet-500",  ring: "shadow-[0_0_0_4px_rgba(139,92,246,.19)]" },
+  accepted: { label: "Job Accepted", icon: "✅", solid: "bg-brand", text: "text-brand", ring: "shadow-[0_0_0_4px_rgba(0,100,145,.19)]" },
+  on_the_way: { label: "On the Way", icon: "👷‍♂️", solid: "bg-amber-500", text: "text-amber-500", ring: "shadow-[0_0_0_4px_rgba(245,158,11,.19)]" },
+  arrived: { label: "Arrived", icon: "📍", solid: "bg-emerald-500", text: "text-emerald-500", ring: "shadow-[0_0_0_4px_rgba(16,185,129,.19)]" },
+  completed: { label: "Job Completed", icon: "🎉", solid: "bg-violet-500", text: "text-violet-500", ring: "shadow-[0_0_0_4px_rgba(139,92,246,.19)]" },
 };
 
 // ══════════════════════════════════════════════════════════════════════════
 export default function JobNavigation() {
   const { worker } = useAuth();
-  const params    = useSearchParams();
-  const destLat    = parseFloat(params.get("lat") ?? "");
-  const destLng    = parseFloat(params.get("lng") ?? "");
-  const address    = params.get("address") || "Job Location";
-  const appId      = params.get("appId");     // application _id for status update
+  const params = useSearchParams();
+  const destLat = parseFloat(params.get("lat") ?? "");
+  const destLng = parseFloat(params.get("lng") ?? "");
+  const address = params.get("address") || "Job Location";
+  const appId = params.get("appId");     // application _id for status update
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const dest = useMemo<LatLng>(() => ({ lat: destLat, lng: destLng }), [destLat, destLng]);
 
-  const [workerPos, setWorkerPos]         = useState<LatLng | null>(null);
-  const [routeCoords, setRouteCoords]     = useState<[number, number][]>([]);
-  const [routeInfo, setRouteInfo]         = useState<{ distKm: string; timeMin: number } | null>(null);   // { distKm, timeMin }
-  const [nextStep, setNextStep]           = useState("");
-  const [tracking, setTracking]           = useState(false);
-  const [status, setStatus]               = useState<ApplicationStatus>("accepted");
-  const [arrived, setArrived]             = useState(false);
-  const [eta, setEta]                     = useState<string | null>(null);   // HH:MM string
-  const [routeLoading, setRouteLoading]   = useState(false);
-  const [mapReady, setMapReady]           = useState(false); // eslint-disable-line no-unused-vars
-  const watchIdRef                        = useRef<number | null>(null);
-  const lastRouteFetch                    = useRef(0);
-  const prevStepRef                       = useRef("");
+  const [workerPos, setWorkerPos] = useState<LatLng | null>(null);
+  const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
+  const [routeInfo, setRouteInfo] = useState<{ distKm: string; timeMin: number } | null>(null);   // { distKm, timeMin }
+  const [nextStep, setNextStep] = useState("");
+  const [tracking, setTracking] = useState(false);
+  const [status, setStatus] = useState<ApplicationStatus>("accepted");
+  const [arrived, setArrived] = useState(false);
+  const [eta, setEta] = useState<string | null>(null);   // HH:MM string
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [mapReady, setMapReady] = useState(false); // eslint-disable-line no-unused-vars
+  const watchIdRef = useRef<number | null>(null);
+  const lastRouteFetch = useRef(0);
+  const prevStepRef = useRef("");
 
   // ─── FETCH ROUTE whenever worker moves significantly ─────────────────
   const refreshRoute = useCallback(async (pos: LatLng) => {
@@ -188,7 +192,7 @@ export default function JobNavigation() {
         // Send location to backend
         try {
           if (worker) await updateWorkerLocation(worker._id, newPos.lat, newPos.lng);
-        } catch {}
+        } catch { }
 
         await refreshRoute(newPos);
       },
@@ -210,7 +214,7 @@ export default function JobNavigation() {
     if (appId) {
       try {
         await updateApplicationStatus(appId, newStatus);
-      } catch {}
+      } catch { }
     }
   };
 
@@ -311,7 +315,8 @@ export default function JobNavigation() {
                 color="#006491"
                 weight={5}
                 opacity={0.9}
-                dashArray={status === "arrived" ? "8 4" : null}
+                dashArray={status === "arrived" ? "8 4" : undefined}
+
               />
             </>
           )}
@@ -358,10 +363,10 @@ export default function JobNavigation() {
         {/* Progress steps */}
         <div className="flex items-center justify-between mb-5 py-3 px-0">
           {STATUS_STEPS.map((step, i) => {
-            const stepIndex    = STATUS_STEPS.indexOf(status);
-            const isDone       = i <= stepIndex;
-            const isCurrent    = i === stepIndex;
-            const info         = STATUS_LABELS[step];
+            const stepIndex = STATUS_STEPS.indexOf(status);
+            const isDone = i <= stepIndex;
+            const isCurrent = i === stepIndex;
+            const info = STATUS_LABELS[step];
             return (
               <div key={step} className="flex items-center flex-1">
                 <div className="flex flex-col items-center">
