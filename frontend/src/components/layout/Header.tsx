@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
-import { ROLE_LOGIN } from "@/config/routes";
+import { ROLE_SELECT, isStandalonePath } from "@/config/routes";
 import { translations } from "@/i18n/translations";
 import type { Language } from "@/types";
 
@@ -24,10 +24,12 @@ export default function Header() {
 
   const handleLogout = () => {
     if (!role) return;
-    const loginPath = ROLE_LOGIN[role];
     logout();
-    router.push(loginPath);
+    router.push(ROLE_SELECT);
   };
+
+  // Role selection and sign-in/sign-up screens are standalone: no header there.
+  if (isStandalonePath(pathname)) return null;
 
   const L = (en: string, hi: string, mr: string): string => (language === "hi" ? hi : language === "mr" ? mr : en);
 

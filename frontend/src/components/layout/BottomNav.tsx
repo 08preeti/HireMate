@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
+import { isStandalonePath } from "@/config/routes";
 
 interface NavTab {
   path: string;
@@ -38,6 +39,7 @@ export default function BottomNav() {
   const { role } = useAuth();
 
   // Hide on certain pages
+  if (isStandalonePath(pathname)) return null;
   if (HIDE_ON.some((p) => pathname.startsWith(p))) return null;
   // Hide if nobody is logged in (or the session has not been read yet)
   if (!role) return null;

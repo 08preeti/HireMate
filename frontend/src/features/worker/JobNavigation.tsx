@@ -19,7 +19,6 @@ import { updateApplicationStatus } from "@/services/applications";
 import { updateWorkerLocation } from "@/services/workers";
 import type { ApplicationStatus, LatLng, RouteResult } from "@/types";
 
-
 // ─── ICONS ─────────────────────────────────────────────────────────────────
 fixLeafletIcons();
 
@@ -49,7 +48,7 @@ function FollowWorker({ pos }: { pos: LatLng | null }) {
     } else {
       const dist = map.distance(
         [prevPos.current.lat, prevPos.current.lng],
-        [pos.lat, pos.lng]
+        [pos.lat, pos.lng],
       );
       if (dist > 50) {
         map.setView([pos.lat, pos.lng], 16, { animate: true, duration: 1 });
@@ -59,7 +58,6 @@ function FollowWorker({ pos }: { pos: LatLng | null }) {
   }, [pos, map]);
   return null;
 }
-
 
 // ─── OSRM ROUTE FETCH ─────────────────────────────────────────────────────
 interface OsrmResponse {
@@ -72,30 +70,37 @@ interface OsrmResponse {
   }[];
 }
 
-async function fetchRoute(from: LatLng, to: LatLng): Promise<RouteResult | null> {
+async function fetchRoute(
+  from: LatLng,
+  to: LatLng,
+): Promise<RouteResult | null> {
   try {
     const url = `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson&steps=true`;
     const res = await fetch(url);
     const data = (await res.json()) as OsrmResponse;
     if (data.code !== "Ok" || !data.routes.length) return null;
     const route = data.routes[0];
-    const coords = route.geometry.coordinates.map(([lng, lat]): [number, number] => [lat, lng]);
+    const coords = route.geometry.coordinates.map(
+      ([lng, lat]): [number, number] => [lat, lng],
+    );
     const distKm = (route.distance / 1000).toFixed(2);
     const timeMin = Math.round(route.duration / 60);
-
     const steps = route.legs[0].steps
       .map((s) => s.maneuver.instruction || s.name)
       .filter((x): x is string => Boolean(x));
-
     return { coords, distKm, timeMin, steps };
   } catch {
     return null;
   }
 }
 
-
 // ─── STATUS STEPS ─────────────────────────────────────────────────────────
-const STATUS_STEPS: ApplicationStatus[] = ["accepted", "on_the_way", "arrived", "completed"];
+const STATUS_STEPS: ApplicationStatus[] = [
+  "accepted",
+  "on_the_way",
+  "arrived",
+  "completed",
+];
 interface StatusStyle {
   label: string;
   icon: string;
@@ -106,10 +111,34 @@ interface StatusStyle {
 
 const STATUS_LABELS: Record<ApplicationStatus, StatusStyle> = {
   // Full Tailwind class names (not built dynamically) so Tailwind can see them.
-  accepted: { label: "Job Accepted", icon: "✅", solid: "bg-brand", text: "text-brand", ring: "shadow-[0_0_0_4px_rgba(0,100,145,.19)]" },
-  on_the_way: { label: "On the Way", icon: "👷‍♂️", solid: "bg-amber-500", text: "text-amber-500", ring: "shadow-[0_0_0_4px_rgba(245,158,11,.19)]" },
-  arrived: { label: "Arrived", icon: "📍", solid: "bg-emerald-500", text: "text-emerald-500", ring: "shadow-[0_0_0_4px_rgba(16,185,129,.19)]" },
-  completed: { label: "Job Completed", icon: "🎉", solid: "bg-violet-500", text: "text-violet-500", ring: "shadow-[0_0_0_4px_rgba(139,92,246,.19)]" },
+  accepted: {
+    label: "Job Accepted",
+    icon: "✅",
+    solid: "bg-brand",
+    text: "text-brand",
+    ring: "shadow-[0_0_0_4px_rgba(0,100,145,.19)]",
+  },
+  on_the_way: {
+    label: "On the Way",
+    icon: "👷‍♂️",
+    solid: "bg-amber-500",
+    text: "text-amber-500",
+    ring: "shadow-[0_0_0_4px_rgba(245,158,11,.19)]",
+  },
+  arrived: {
+    label: "Arrived",
+    icon: "📍",
+    solid: "bg-emerald-500",
+    text: "text-emerald-500",
+    ring: "shadow-[0_0_0_4px_rgba(16,185,129,.19)]",
+  },
+  completed: {
+    label: "Job Completed",
+    icon: "🎉",
+    solid: "bg-violet-500",
+    text: "text-violet-500",
+    ring: "shadow-[0_0_0_4px_rgba(139,92,246,.19)]",
+  },
 };
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -119,19 +148,25 @@ export default function JobNavigation() {
   const destLat = parseFloat(params.get("lat") ?? "");
   const destLng = parseFloat(params.get("lng") ?? "");
   const address = params.get("address") || "Job Location";
-  const appId = params.get("appId");     // application _id for status update
+  const appId = params.get("appId"); // application _id for status update
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const dest = useMemo<LatLng>(() => ({ lat: destLat, lng: destLng }), [destLat, destLng]);
+  const dest = useMemo<LatLng>(
+    () => ({ lat: destLat, lng: destLng }),
+    [destLat, destLng],
+  );
 
   const [workerPos, setWorkerPos] = useState<LatLng | null>(null);
   const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
-  const [routeInfo, setRouteInfo] = useState<{ distKm: string; timeMin: number } | null>(null);   // { distKm, timeMin }
+  const [routeInfo, setRouteInfo] = useState<{
+    distKm: string;
+    timeMin: number;
+  } | null>(null); // { distKm, timeMin }
   const [nextStep, setNextStep] = useState("");
   const [tracking, setTracking] = useState(false);
   const [status, setStatus] = useState<ApplicationStatus>("accepted");
   const [arrived, setArrived] = useState(false);
-  const [eta, setEta] = useState<string | null>(null);   // HH:MM string
+  const [eta, setEta] = useState<string | null>(null); // HH:MM string
   const [routeLoading, setRouteLoading] = useState(false);
   const [mapReady, setMapReady] = useState(false); // eslint-disable-line no-unused-vars
   const watchIdRef = useRef<number | null>(null);
@@ -139,40 +174,45 @@ export default function JobNavigation() {
   const prevStepRef = useRef("");
 
   // ─── FETCH ROUTE whenever worker moves significantly ─────────────────
-  const refreshRoute = useCallback(async (pos: LatLng) => {
-    const now = Date.now();
-    if (now - lastRouteFetch.current < 8000) return; // throttle 8s
-    lastRouteFetch.current = now;
+  const refreshRoute = useCallback(
+    async (pos: LatLng) => {
+      const now = Date.now();
+      if (now - lastRouteFetch.current < 8000) return; // throttle 8s
+      lastRouteFetch.current = now;
 
-    setRouteLoading(true);
-    const result = await fetchRoute(pos, dest);
-    setRouteLoading(false);
+      setRouteLoading(true);
+      const result = await fetchRoute(pos, dest);
+      setRouteLoading(false);
 
-    if (!result) return;
-    setRouteCoords(result.coords);
-    setRouteInfo({ distKm: result.distKm, timeMin: result.timeMin });
+      if (!result) return;
+      setRouteCoords(result.coords);
+      setRouteInfo({ distKm: result.distKm, timeMin: result.timeMin });
 
-    // ETA
-    const now2 = new Date();
-    now2.setMinutes(now2.getMinutes() + result.timeMin);
-    setEta(now2.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+      // ETA
+      const now2 = new Date();
+      now2.setMinutes(now2.getMinutes() + result.timeMin);
+      setEta(
+        now2.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      );
 
-    // Voice next step
-    const step = result.steps[0];
-    if (step && step !== prevStepRef.current) {
-      speak(step);
-      prevStepRef.current = step;
-      setNextStep(step);
-    }
+      // Voice next step
+      const step = result.steps[0];
+      if (step && step !== prevStepRef.current) {
+        speak(step);
+        prevStepRef.current = step;
+        setNextStep(step);
+      }
 
-    // Arrived check — within 80m
-    const dist = haversine(pos.lat, pos.lng, dest.lat, dest.lng);
-    if (dist < 0.08 && !arrived) {
-      setArrived(true);
-      setStatus("arrived");
-      speak("You have arrived at the job location.");
-    }
-  }, [dest, arrived]);
+      // Arrived check — within 80m
+      const dist = haversine(pos.lat, pos.lng, dest.lat, dest.lng);
+      if (dist < 0.08 && !arrived) {
+        setArrived(true);
+        setStatus("arrived");
+        speak("You have arrived at the job location.");
+      }
+    },
+    [dest, arrived],
+  );
 
   // ─── START GPS TRACKING ──────────────────────────────────────────────
   const startTracking = () => {
@@ -191,13 +231,17 @@ export default function JobNavigation() {
 
         // Send location to backend
         try {
-          if (worker) await updateWorkerLocation(worker._id, newPos.lat, newPos.lng);
-        } catch { }
+          if (worker)
+            await updateWorkerLocation(worker._id, newPos.lat, newPos.lng);
+        } catch {}
 
         await refreshRoute(newPos);
       },
-      (err) => { console.error(err); alert("Please allow location access."); },
-      { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+      (err) => {
+        console.error(err);
+        alert("Please allow location access.");
+      },
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 },
     );
   };
 
@@ -214,14 +258,15 @@ export default function JobNavigation() {
     if (appId) {
       try {
         await updateApplicationStatus(appId, newStatus);
-      } catch { }
+      } catch {}
     }
   };
 
   // ─── CLEANUP ─────────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
-      if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
+      if (watchIdRef.current)
+        navigator.geolocation.clearWatch(watchIdRef.current);
       window.speechSynthesis?.cancel();
     };
   }, []);
@@ -244,16 +289,18 @@ export default function JobNavigation() {
   // ══════════════════════════════════════════════════════════════════════
   return (
     <div className="h-screen flex flex-col bg-[#f8f9fa]">
-
       {/* ── TOP STATUS BAR ── */}
-      <div className={`text-white py-3 px-5 flex items-center justify-between shadow-[0_2px_8px_rgba(0,0,0,0.15)] z-[500] shrink-0 ${currentStatus.solid}`}>
+      <div
+        className={`text-white py-3 px-5 flex items-center justify-between shadow-[0_2px_8px_rgba(0,0,0,0.15)] z-[500] shrink-0 ${currentStatus.solid}`}
+      >
         <div className="flex items-center gap-2.5">
           <span className="text-[24px]">{currentStatus.icon}</span>
           <div>
             <div className="font-bold text-[16px]">{currentStatus.label}</div>
             {routeInfo && (
               <div className="text-[12px] opacity-90">
-                {routeInfo.distKm} km away · ETA {eta || `~${routeInfo.timeMin} min`}
+                {routeInfo.distKm} km away · ETA{" "}
+                {eta || `~${routeInfo.timeMin} min`}
               </div>
             )}
           </div>
@@ -274,7 +321,9 @@ export default function JobNavigation() {
       {/* ── MAP ── */}
       <div className="flex-1 relative min-h-[0px]">
         <MapContainer
-          center={workerPos ? [workerPos.lat, workerPos.lng] : [destLat, destLng]}
+          center={
+            workerPos ? [workerPos.lat, workerPos.lng] : [destLat, destLng]
+          }
           zoom={14}
           className="h-full w-full"
           whenReady={() => setMapReady(true)}
@@ -282,13 +331,15 @@ export default function JobNavigation() {
         >
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-            attribution='&copy; OpenStreetMap &amp; CARTO'
+            attribution="&copy; OpenStreetMap &amp; CARTO"
           />
 
           {/* Destination marker */}
           <Marker position={[destLat, destLng]} icon={destIcon}>
             <Popup>
-              <b>📍 Job Location</b><br />{address}
+              <b>📍 Job Location</b>
+              <br />
+              {address}
             </Popup>
           </Marker>
 
@@ -316,7 +367,6 @@ export default function JobNavigation() {
                 weight={5}
                 opacity={0.9}
                 dashArray={status === "arrived" ? "8 4" : undefined}
-
               />
             </>
           )}
@@ -340,13 +390,14 @@ export default function JobNavigation() {
 
       {/* ── BOTTOM UBER-STYLE CARD ── */}
       <div className="bg-white rounded-tl-3xl rounded-tr-3xl shadow-[0_-4px_24px_rgba(0,0,0,0.12)] pt-5 px-5 pb-8 shrink-0 z-[500]">
-
         {/* Handle bar */}
         <div className="w-10 h-1 bg-[#e0e0e0] rounded-sm mt-0 mx-auto mb-4" />
 
         {/* Destination info */}
         <div className="flex items-start gap-3 mb-4">
-          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-[20px] shrink-0">📍</div>
+          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-[20px] shrink-0">
+            📍
+          </div>
           <div className="flex-1">
             <div className="font-bold text-[15px] text-[#1a1a1a]">
               {address}
@@ -370,15 +421,23 @@ export default function JobNavigation() {
             return (
               <div key={step} className="flex items-center flex-1">
                 <div className="flex flex-col items-center">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[14px] transition-all duration-300 ${isDone ? info.solid : "bg-gray-200"} ${isCurrent ? info.ring : ""}`}>
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-[14px] transition-all duration-300 ${isDone ? info.solid : "bg-gray-200"} ${isCurrent ? info.ring : ""}`}
+                  >
                     {isDone ? info.icon : "○"}
                   </div>
-                  <div className={`text-[10px] mt-1 text-center leading-[1.2] ${isCurrent ? "font-bold" : "font-normal"} ${isDone ? info.text : "text-gray-400"}`}>
-                    {info.label.split(" ").map((w, j) => <div key={j}>{w}</div>)}
+                  <div
+                    className={`text-[10px] mt-1 text-center leading-[1.2] ${isCurrent ? "font-bold" : "font-normal"} ${isDone ? info.text : "text-gray-400"}`}
+                  >
+                    {info.label.split(" ").map((w, j) => (
+                      <div key={j}>{w}</div>
+                    ))}
                   </div>
                 </div>
                 {i < STATUS_STEPS.length - 1 && (
-                  <div className={`flex-1 h-0.5 mb-5 transition-[background] duration-300 ${i < STATUS_STEPS.indexOf(status) ? "bg-brand" : "bg-gray-200"}`} />
+                  <div
+                    className={`flex-1 h-0.5 mb-5 transition-[background] duration-300 ${i < STATUS_STEPS.indexOf(status) ? "bg-brand" : "bg-gray-200"}`}
+                  />
                 )}
               </div>
             );
