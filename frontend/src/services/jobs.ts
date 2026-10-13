@@ -18,6 +18,8 @@ export interface NewJobPayload {
   salary: number | string;
   paymentMethod: string;
   isUrgent: boolean;
+  companyName?: string;
+  contactInfo?: string;
 }
 
 /** Employer-only. */

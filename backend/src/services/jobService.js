@@ -5,7 +5,7 @@ import { HttpError } from "../utils/httpError.js";
 const everyLanguage = (value) => ({ en: value, hi: value, mr: value });
 
 export function createJob(employerId, body) {
-  const { jobTitle, description, skills, location, latitude, longitude, salary, paymentMethod, isUrgent } = body;
+  const { jobTitle, description, skills, location, latitude, longitude, salary, paymentMethod, isUrgent, companyName, contactInfo } = body;
   return Job.create({
     jobTitle: everyLanguage(jobTitle),
     description: everyLanguage(description),
@@ -16,6 +16,8 @@ export function createJob(employerId, body) {
     salary,
     paymentMethod,
     isUrgent,
+    companyName,
+    contactInfo,
     employer: employerId, // always the authenticated employer, never a client-supplied id
     status: "active",
   });

@@ -43,6 +43,17 @@ const jobSchema = new mongoose.Schema(
       default: false,
     },
 
+    // Shown to workers on job cards/details (the "Call" button uses contactInfo).
+    companyName: {
+      type: String,
+      default: "",
+    },
+
+    contactInfo: {
+      type: String,
+      default: "",
+    },
+
     employer: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Employer",

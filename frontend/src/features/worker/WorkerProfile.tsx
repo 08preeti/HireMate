@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useLanguage } from "@/context/LanguageContext";
 import { translations } from "@/i18n/translations";
 import { useAuth } from "@/context/AuthContext";
-import { ROLE_LOGIN } from "@/config/routes";
+import { ROLE_SELECT } from "@/config/routes";
 import { ApiError } from "@/services/api";
 import { getWorkerProfile, updateWorkerProfile } from "@/services/workers";
 import type { Worker } from "@/types";
@@ -256,7 +256,7 @@ export default function WorkerProfile() {
 
       {/* Logout */}
       <button
-        onClick={() => { logout(); router.push(ROLE_LOGIN.worker); }}
+        onClick={() => { logout(); router.push(ROLE_SELECT); }}
         className="w-full py-[13px] px-0 bg-transparent border-2 border-danger rounded-xl text-danger font-bold text-[15px] cursor-pointer"
       >
         🚪 {language === "hi" ? "लॉगआउट करें" : language === "mr" ? "लॉगआउट करा" : "Logout"}

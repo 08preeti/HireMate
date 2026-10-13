@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
+import { isStandalonePath } from "@/config/routes";
 import { useLanguage } from "@/context/LanguageContext";
 
 // Not in the standard DOM typings yet (Chromium-only "install app" event).
@@ -10,6 +12,7 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 export default function InstallPrompt() {
+  const pathname = usePathname();
   const { language }           = useLanguage();
   const [prompt, setPrompt]    = useState<BeforeInstallPromptEvent | null>(null);
   const [visible, setVisible]  = useState(false);
@@ -54,7 +57,7 @@ export default function InstallPrompt() {
 
   const L = (en: string, hi: string, mr: string): string => language === "hi" ? hi : language === "mr" ? mr : en;
 
-  if (!visible || installed) return null;
+  if (!visible || installed || isStandalonePath(pathname)) return null;
 
   return (
     <div className="fixed bottom-20 left-4 right-4 bg-white rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,.18)] py-4 px-[18px] flex items-center gap-3.5 z-[9999] border-[1.5px] border-brand animate-slide-up">

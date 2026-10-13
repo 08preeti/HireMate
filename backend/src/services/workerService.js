@@ -27,8 +27,8 @@ export async function updateProfile(workerId, { location, name, skills }) {
   return updated;
 }
 
-export function listMyApplications(phone) {
-  return Application.find({ applicantContact: phone }).populate("job");
+export function listMyApplications(workerId, phone) {
+  return Application.find({ $or: [{ worker: workerId }, { applicantContact: phone }] }).populate("job");
 }
 
 export function listJobHistory(workerId) {
@@ -46,6 +46,9 @@ export async function findNearbyJobs(lat, lng) {
 }
 
 export async function acceptJob(workerId, jobId) {
+  const worker = await Worker.findById(workerId);
+  if (!worker) throw new HttpError(401, "Account not found");
+
   const job = await Job.findById(jobId);
   if (!job) throw new HttpError(404, "Job not found");
 
@@ -56,8 +59,8 @@ export async function acceptJob(workerId, jobId) {
     job: jobId,
     employer: job.employer,
     worker: workerId,
-    applicantName: "",
-    applicantContact: "",
+    applicantName: worker.name || "",
+    applicantContact: worker.phone || "",
     message: "",
     isCompleted: false,
   });

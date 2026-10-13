@@ -38,7 +38,7 @@ export async function myJobs(req, res) {
     if (req.auth.phone !== req.params.phone) {
       throw new HttpError(403, "Not authorized to view these applications");
     }
-    res.json(await listMyApplications(req.params.phone));
+    res.json(await listMyApplications(req.auth.id, req.params.phone));
   } catch (err) {
     sendError(res, err, "Failed to fetch jobs");
   }
