@@ -13,7 +13,7 @@ if (missing.length) {
 // FRONTEND_URL may be a comma-separated list. Unset => "*" (local dev only).
 const frontendUrls = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(",").map((o) => o.trim()).filter(Boolean)
-  : null;
+  : [];
 
 export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
@@ -21,7 +21,7 @@ export const env = {
   port: Number(process.env.PORT) || 5000,
   mongoUri: process.env.MONGODB_URI,
   jwtSecret: process.env.JWT_SECRET,
-  corsOrigins: frontendUrls || "*",
+  corsOrigins: frontendUrls ,
   twilio: {
     accountSid: process.env.TWILIO_ACCOUNT_SID,
     authToken: process.env.TWILIO_AUTH_TOKEN,
