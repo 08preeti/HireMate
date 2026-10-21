@@ -6,8 +6,7 @@ import "./globals.css";
 import "leaflet/dist/leaflet.css";
 
 import Providers from "./providers";
-import Header from "@/components/layout/Header";
-import BottomNav from "@/components/layout/BottomNav";
+import AppShell from "@/components/layout/AppShell";
 import InstallPrompt from "@/components/ui/InstallPrompt";
 
 export const metadata: Metadata = {
@@ -27,12 +26,10 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body>
+    <html lang="en" suppressHydrationWarning>
+      <body suppressHydrationWarning>
         <Providers>
-          <Header />
-          {children}
-          <BottomNav />
+          <AppShell>{children}</AppShell>
           <InstallPrompt />
         </Providers>
       </body>
