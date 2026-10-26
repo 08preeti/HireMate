@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, type ReactNode } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import Link from "next/link";
-import type { IconType } from "react-icons";
-import { FiArrowRight, FiBriefcase, FiCalendar, FiCheckCircle, FiCpu, FiCreditCard, FiFileText, FiFolder, FiHeadphones, FiMapPin, FiPhoneCall, FiStar, FiTool, FiZap } from "react-icons/fi";
+import { FiCalendar, FiCheckCircle, FiChevronRight, FiBriefcase, FiFileText, FiHeadphones, FiMapPin, FiPhoneCall, FiPlus, FiSearch, FiShield, FiStar, FiUser, FiZap } from "react-icons/fi";
 import { HERO_PEOPLE } from "@/features/home/homeAssets";
 import { useLanguage } from "@/context/LanguageContext";
 import { translations } from "@/i18n/translations";
@@ -288,12 +287,35 @@ function NavModal({ job, appId, workerPos, onClose, t, language }: NavModalProps
 // ══ MAIN DASHBOARD ════════════════════════════════════════════════════════
 const RADII = [5, 10, 25] as const;
 type Radius = (typeof RADII)[number];
-type HistoryTab = "all" | "active" | "completed" | "cancelled";
 type SortKey = "distance" | "pay";
 
-const DAILY_TARGET = 1500;
-const CARD = "rounded-2xl border border-[#e6ecf5] bg-white shadow-[0_6px_24px_rgba(20,50,110,0.05)]";
-const ACTIVE_STATUSES: ApplicationStatus[] = ["accepted", "on_the_way", "arrived"];
+const CARD = "rounded-2xl border border-[#e3eaf5] bg-white shadow-[0_4px_18px_rgba(20,50,110,0.05)]";
+
+const tradeEmoji = (title = "") => {
+  const t = title.toLowerCase();
+  if (/driv|चालक|ड्रायव्हर/.test(t)) return "🚚";
+  if (/chef|cook|कुक|रसोई|स्वयंपाक|स्वयंपाकी/.test(t)) return "🍳";
+  if (/mechanic|मैकेनिक|मेकॅनिक/.test(t)) return "🔧";
+  if (/plumb|नल/.test(t)) return "🚰";
+  if (/electric|बिजली|वीज/.test(t)) return "⚡";
+  if (/clean|सफाई|स्वच्छ/.test(t)) return "🧹";
+  if (/paint|पेंट|रंग/.test(t)) return "🎨";
+  if (/guard|security|सुरक्षा/.test(t)) return "💂";
+  return "💼";
+};
+
+function StatTile({ icon, iconBg, label, value, sub, subClass = "text-[#6b7a95]" }: {
+  icon: ReactNode; iconBg: string; label: string; value: ReactNode; sub?: string; subClass?: string;
+}) {
+  return (
+    <div className={`${CARD} p-4 sm:p-5`}>
+      <span className={`flex h-11 w-11 items-center justify-center rounded-xl ${iconBg}`}>{icon}</span>
+      <div className="mt-3 text-[14px] text-[#33415f]">{label}</div>
+      <div className="mt-0.5 text-[26px] font-extrabold leading-tight text-[#0d2250]">{value}</div>
+      {sub && <div className={`mt-1 text-[13px] ${subClass}`}>{sub}</div>}
+    </div>
+  );
+}
 
 export default function WorkerDashboard() {
   const { language }              = useLanguage();
@@ -306,7 +328,6 @@ export default function WorkerDashboard() {
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [radius, setRadius]       = useState<Radius>(10);
   const [sort, setSort]           = useState<SortKey>("distance");
-  const [tab, setTab]             = useState<HistoryTab>("all");
   const [available, setAvailable] = useState(true);
   const watchRef                  = useRef<number | null>(null);
 
@@ -328,20 +349,21 @@ export default function WorkerDashboard() {
       return next;
     });
 
-  // Earnings calculation
+  // ── Numbers for the stat cards ──
   const completed = jobs.filter((j) => j.isCompleted || j.status === "completed");
-  const todayDone = completed.filter((j) => new Date(j.updatedAt ?? 0).toDateString() === new Date().toDateString());
-  const weekDone  = completed.filter((j) => Date.now() - new Date(j.updatedAt ?? 0).getTime() < 7 * 24 * 60 * 60 * 1000);
-  const sumPay = (list: Application[]) => list.reduce((sum, j) => sum + Number(j.job?.salary || 0), 0);
-  const todayEarnings = sumPay(todayDone);
-  const weekEarnings  = sumPay(weekDone);
-  const totalJobs     = completed.length;
-  const avgPerGig     = weekDone.length ? Math.round(weekEarnings / weekDone.length) : 0;
+  const salaryOf = (a: Application) => Number(String(a.job?.salary ?? "").replace(/[^\d.]/g, "")) || 0;
+  const totalEarned = completed.reduce((s, a) => s + salaryOf(a), 0);
+  const weekEarned = completed
+    .filter((j) => Date.now() - new Date(j.updatedAt ?? 0).getTime() < 7 * 24 * 60 * 60 * 1000)
+    .reduce((s, a) => s + salaryOf(a), 0);
 
   const ratings = completed.map((j) => Number(j.rating)).filter((r) => r > 0);
   const avgRating = ratings.length
     ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1)
     : worker?.rating && Number(worker.rating) > 0 ? Number(worker.rating).toFixed(1) : null;
+  const reviewCount = ratings.length || worker?.totalReviews || 0;
+
+  const reviews = completed.filter((j) => j.review).sort((a, b) => new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime());
 
   const profileFields = [worker?.name, worker?.skills, worker?.location, worker?.phone || worker?.contact];
   const profilePct = Math.round((profileFields.filter(Boolean).length / profileFields.length) * 100);
@@ -358,7 +380,7 @@ export default function WorkerDashboard() {
 
   useEffect(() => () => { if (watchRef.current) navigator.geolocation.clearWatch(watchRef.current); }, []);
 
-  // Job history (earnings) doesn't need GPS
+  // Job history (earnings, reviews) doesn't need GPS
   useEffect(() => {
     if (!worker) return;
     getJobHistory(worker._id)
@@ -410,20 +432,19 @@ export default function WorkerDashboard() {
   );
   const nextRadius = RADII.find((r) => r > radius);
 
-  // ── History tabs ──
-  const isActiveJob = (j: Application) => !j.isCompleted && j.status !== undefined && ACTIVE_STATUSES.includes(j.status);
-  const counts = { all: jobs.length, active: jobs.filter(isActiveJob).length, completed: completed.length, cancelled: 0 };
-  const shownJobs = tab === "all" ? jobs : tab === "active" ? jobs.filter(isActiveJob) : tab === "completed" ? completed : [];
-  const tabLabels: Record<HistoryTab, string> = {
-    all: L("All Jobs", "सभी काम", "सर्व कामे"),
-    active: L("Active", "चालू", "सुरू"),
-    completed: L("Completed", "पूर्ण", "पूर्ण"),
-    cancelled: L("Cancelled", "रद्द", "रद्द"),
-  };
+  const skillList = (worker.skills || "").split(/[,،;、]/).map((s) => s.trim()).filter(Boolean);
+  const city = (worker.location || "").split(",")[0].trim();
+  const areas = [worker.location, ...(worker.serviceAreas || [])].filter((a): a is string => Boolean(a));
+  const docs = worker.documents || [];
+  const allDocsVerified = docs.length > 0 && docs.every((d) => d.verified);
 
-  const SectionIcon = ({ icon: Icon, tone }: { icon: IconType; tone: string }) => (
-    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${tone}`}><Icon size={18} aria-hidden="true" /></span>
-  );
+  const greeting = L("Namaste", "नमस्ते", "नमस्कार");
+  const ago = (iso?: string) => {
+    if (!iso) return "";
+    const days = Math.round((Date.now() - new Date(iso).getTime()) / 86400000);
+    const rtf = new Intl.RelativeTimeFormat(language, { numeric: "auto" });
+    return days < 1 ? rtf.format(0, "day") : days < 14 ? rtf.format(-days, "day") : rtf.format(-Math.round(days / 7), "week");
+  };
 
   return (
     <>
@@ -434,393 +455,429 @@ export default function WorkerDashboard() {
         />
       )}
 
-      <div className="mx-auto max-w-[1080px] space-y-5 px-4 py-5 sm:px-6">
+      <div className="mx-auto max-w-[1180px] space-y-5 px-4 py-5 sm:px-6">
 
         {/* ── WELCOME BANNER ─────────────────────────── */}
-        <section className="relative overflow-hidden rounded-2xl border border-[#dbe6f7] bg-[linear-gradient(110deg,#eaf2ff_0%,#dce9fb_100%)] p-5 sm:p-6">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={HERO_PEOPLE}
-            alt=""
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 right-0 hidden h-full w-[58%] select-none object-cover object-[center_25%] opacity-90 [mask-image:linear-gradient(to_right,transparent_0%,#000_55%)] md:block"
-            draggable={false}
-          />
-          <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2 text-[12px]">
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-semibold ${gpsOn && workerPos ? "bg-[#dff6e8] text-[#13783d]" : "bg-white/80 text-[#5b6a85]"}`}>
-                  <span className={`h-2 w-2 rounded-full ${gpsOn && workerPos ? "bg-[#1fb25a]" : "bg-[#a9b3c5]"}`} />
-                  {gpsOn && workerPos ? L("Live Dispatch Active", "लाइव डिस्पैच चालू", "लाइव्ह डिस्पॅच सुरू") : L("Location Off", "लोकेशन बंद", "लोकेशन बंद")}
-                </span>
-                <span className="rounded-full border border-[#cfdcf2] bg-white/70 px-3 py-1 text-[#5b6a85]">
-                  {L("Worker ID", "वर्कर आईडी", "वर्कर आयडी")}: #HM-{worker._id.slice(-4).toUpperCase()}
-                </span>
-              </div>
-
-              <p className="mt-4 text-[16px] text-[#16295a]">{L("Welcome back,", "वापसी पर स्वागत है,", "पुन्हा स्वागत आहे,")}</p>
-              <h1 className="text-[clamp(26px,3vw,34px)] font-extrabold leading-tight text-[#0d2250]">
-                {worker.name} <span aria-hidden="true">👋</span>
+        <section className={`${CARD} overflow-hidden`}>
+          <div className="relative bg-[linear-gradient(100deg,#eef5ff_0%,#dcebff_60%,#c8dcf6_100%)] px-5 py-6 sm:px-7 sm:py-7">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={HERO_PEOPLE}
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 right-0 hidden h-full w-[50%] select-none object-cover object-[center_25%] [mask-image:linear-gradient(to_right,transparent_0%,#000_45%)] md:block"
+              draggable={false}
+            />
+            <div className="relative z-10 max-w-[620px]">
+              <h1 className="m-0 text-[clamp(26px,3.2vw,36px)] font-extrabold leading-tight text-[#0d2250]">
+                {greeting} <span className="text-[#1a6cf0]">{worker.name}!</span>
               </h1>
-              <p className="mt-1 text-[14px] text-[#5b6a85]">
-                {L("Your hard work keeps our city moving!", "आपकी मेहनत हमारे शहर को चलाती है!", "तुमची मेहनत आपले शहर चालवते!")}
+              <h2 className="m-0 mt-1.5 text-[clamp(17px,2vw,22px)] font-bold text-[#0d2250]">
+                {L("Welcome to your Worker Portal", "आपका Worker Portal में स्वागत है", "तुमच्या Worker Portal मध्ये स्वागत आहे")}
+              </h2>
+              <p className="m-0 mt-2 text-[14.5px] text-[#33415f]">
+                {L("Find new jobs, get the right information, and receive payments on time.", "यहाँ आपको नए काम, सही जानकारी और समय पर पेमेंट की सुविधा मिलती है।", "येथे तुम्हाला नवीन कामे, योग्य माहिती आणि वेळेवर पेमेंटची सुविधा मिळते.")}
               </p>
-
-              <div className="mt-4 flex flex-wrap items-center gap-2.5 text-[12px] font-semibold">
-                {avgRating && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff3cf] px-3 py-1.5 text-[#8a5a00]">
-                    <FiStar size={14} aria-hidden="true" /> {avgRating} {L("Star Rating", "स्टार रेटिंग", "स्टार रेटिंग")}
+              <div className="mt-4">
+                {profilePct === 100 ? (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-[#a7e8c8] bg-[#dff6e8] px-4 py-1.5 text-[13.5px] font-semibold text-[#0b6b3a]">
+                    <FiCheckCircle size={17} aria-hidden="true" /> {L("Your profile is complete", "आपकी प्रोफ़ाइल पूरी है", "तुमची प्रोफाइल पूर्ण आहे")}
                   </span>
+                ) : (
+                  <Link href="/worker-profile" className="inline-flex items-center gap-2 rounded-full border border-[#fcd9a1] bg-[#fff3d6] px-4 py-1.5 text-[13.5px] font-semibold text-[#8a5a00] no-underline">
+                    {L(`Profile ${profilePct}% complete — finish it`, `प्रोफ़ाइल ${profilePct}% पूरी — पूरा करें`, `प्रोफाइल ${profilePct}% पूर्ण — पूर्ण करा`)}
+                  </Link>
                 )}
-                {worker.skills && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1.5 text-[#1a4fb0]">
-                    <FiTool size={14} aria-hidden="true" /> {worker.skills}
-                  </span>
-                )}
-                <span className="flex items-center gap-2 text-[#16295a]">
-                  {L("Profile", "प्रोफ़ाइल", "प्रोफाइल")} {profilePct}% {L("Completed", "पूर्ण", "पूर्ण")}
-                  <span className="h-1.5 w-28 overflow-hidden rounded-full bg-white/80">
-                    <span className="block h-full rounded-full bg-[#1a6cf0]" style={{ width: `${profilePct}%` }} />
-                  </span>
-                </span>
               </div>
             </div>
+          </div>
 
-            {/* Availability card */}
-            <div className="w-full rounded-2xl bg-white/90 p-4 shadow-[0_10px_30px_rgba(20,50,110,0.12)] backdrop-blur lg:w-[290px] lg:shrink-0">
-              <div className="text-[12px] text-[#5b6a85]">{L("Availability Status", "उपलब्धता स्थिति", "उपलब्धता स्थिती")}</div>
-              <div className="mt-1.5 flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 border-t border-[#e3eaf5] bg-white px-4 py-3.5 sm:px-5">
+            <div className="flex items-center gap-3 rounded-xl border border-[#fde6b0] bg-[#fff8e6] px-4 py-2">
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#fff0c2] text-[#f5a000]"><FiStar size={20} className="fill-current" aria-hidden="true" /></span>
+              <div className="leading-tight">
+                <div className="text-[15px] font-bold text-[#0d2250]">{avgRating ?? "—"}</div>
+                <div className="text-[12px] text-[#6b7a95]">({reviewCount} {L("Reviews", "रिव्यू", "रिव्ह्यू")})</div>
+              </div>
+            </div>
+            <div className={`flex items-center gap-3 rounded-xl border px-4 py-2 ${gpsOn && workerPos ? "border-[#bfe9d1] bg-[#effaf4]" : "border-[#e3eaf5] bg-[#f7f9fd]"}`}>
+              <span className={`flex h-10 w-10 items-center justify-center rounded-lg ${gpsOn && workerPos ? "bg-[#d3f3e1] text-[#13783d]" : "bg-[#e9eef8] text-[#6b7a95]"}`}><FiMapPin size={20} aria-hidden="true" /></span>
+              <div className="leading-tight">
+                <div className="text-[14px] font-bold text-[#0d2250]">{gpsOn && workerPos ? L("Live location on", "लाइव लोकेशन चालू", "लाइव्ह लोकेशन सुरू") : L("Location off", "लोकेशन बंद", "लोकेशन बंद")}</div>
+                <div className="text-[12px] text-[#6b7a95]">{city || L("Set your area in profile", "प्रोफ़ाइल में इलाका जोड़ें", "प्रोफाइलमध्ये परिसर जोडा")}</div>
+              </div>
+            </div>
+            <Link href="/worker-profile" className="ml-auto inline-flex items-center gap-2 rounded-xl bg-[#1a6cf0] px-5 py-3 text-[14px] font-semibold text-white no-underline shadow-[0_6px_16px_rgba(26,108,240,0.3)] hover:brightness-95">
+              <FiUser size={17} aria-hidden="true" /> {L("View my profile", "अपना प्रोफ़ाइल देखें", "माझी प्रोफाइल पहा")} <FiChevronRight size={16} aria-hidden="true" />
+            </Link>
+          </div>
+        </section>
+
+        {/* ── STAT TILES ─────────────────────────── */}
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <StatTile
+            icon={<FiBriefcase size={22} className="text-[#1a6cf0]" aria-hidden="true" />} iconBg="bg-[#e6efff]"
+            label={L("Total jobs done", "कुल काम पूरे किए", "एकूण कामे पूर्ण")}
+            value={completed.length}
+            sub={completed.length ? L("Payments received", "पेमेंट मिल चुका", "पेमेंट मिळाले") : L("Accept your first job", "पहला काम स्वीकारें", "पहिले काम स्वीकारा")}
+            subClass="text-[#0b8a4c]"
+          />
+          <StatTile
+            icon={<span className="text-[22px] font-bold text-[#1a6cf0]">₹</span>} iconBg="bg-[#e6efff]"
+            label={L("Total earnings", "कुल कमाई", "एकूण कमाई")}
+            value={`₹${totalEarned.toLocaleString("en-IN")}`}
+            sub={L("Added to your account", "आपके खाते में जोड़ा गया", "तुमच्या खात्यात जमा")}
+            subClass="text-[#0b8a4c]"
+          />
+          {worker.experienceYears ? (
+            <StatTile
+              icon={<FiCalendar size={22} className="text-[#1a6cf0]" aria-hidden="true" />} iconBg="bg-[#e6efff]"
+              label={L("Experience", "अनुभव", "अनुभव")}
+              value={`${worker.experienceYears}+ ${L("years", "साल", "वर्षे")}`}
+              sub={worker.skills}
+            />
+          ) : (
+            <StatTile
+              icon={<FiStar size={22} className="fill-[#f5a000] text-[#f5a000]" aria-hidden="true" />} iconBg="bg-[#fff0c2]"
+              label={L("Average rating", "औसत रेटिंग", "सरासरी रेटिंग")}
+              value={avgRating ?? "—"}
+              sub={`${reviewCount} ${L("employer reviews", "नियोक्ता रिव्यू", "मालक रिव्ह्यू")}`}
+            />
+          )}
+          {worker.backgroundVerified ? (
+            <StatTile
+              icon={<FiShield size={22} className="text-[#13a05a]" aria-hidden="true" />} iconBg="bg-[#dff6e8]"
+              label={L("Background check", "पृष्ठभूमि जाँच", "पार्श्वभूमी तपासणी")}
+              value={<span className="text-[#0b8a4c]">{L("Verified", "सत्यापित", "सत्यापित")} ✓</span>}
+              sub={L("Verification passed", "वेरिफिकेशन पास", "पडताळणी पूर्ण")}
+              subClass="text-[#0b8a4c]"
+            />
+          ) : (
+            <StatTile
+              icon={<FiCalendar size={22} className="text-[#13a05a]" aria-hidden="true" />} iconBg="bg-[#dff6e8]"
+              label={L("This week", "इस हफ्ते", "या आठवड्यात")}
+              value={`₹${weekEarned.toLocaleString("en-IN")}`}
+              sub={L("Last 7 days", "पिछले 7 दिन", "मागील 7 दिवस")}
+            />
+          )}
+        </div>
+
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+          {/* ═════════ LEFT COLUMN ═════════ */}
+          <div className="min-w-0 space-y-5">
+
+            {/* ── WORK AVAILABLE TODAY ── */}
+            <section className={`${CARD} p-4 sm:p-5`}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#e6efff] text-[#1a6cf0]"><FiBriefcase size={24} aria-hidden="true" /></span>
+                  <div>
+                    <h2 className="m-0 text-[19px] font-bold text-[#0d2250]">{L("Work available today", "आज के लिए उपलब्ध काम", "आजसाठी उपलब्ध काम")}</h2>
+                    <p className="m-0 text-[13px] text-[#6b7a95]">{L("Best matches for your skills", "आपके कौशल के अनुसार सबसे बेहतर काम", "तुमच्या कौशल्यानुसार सर्वोत्तम कामे")}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  {gpsOn && (
+                    <select
+                      value={sort}
+                      onChange={(e) => setSort(e.target.value as SortKey)}
+                      aria-label={L("Sort by", "क्रम", "क्रम")}
+                      className="cursor-pointer rounded-lg border border-[#dbe4f0] bg-white px-2.5 py-1.5 text-[12.5px] text-[#0d2250] outline-none focus:border-[#1a6cf0]"
+                    >
+                      <option value="distance">{L("Closest", "सबसे पास", "जवळचे")}</option>
+                      <option value="pay">{L("Highest pay", "सबसे ज़्यादा वेतन", "सर्वाधिक वेतन")}</option>
+                    </select>
+                  )}
+                  <Link href="/jobs" className="inline-flex items-center gap-1.5 rounded-full border border-[#bcd3ff] bg-[#eaf1ff] px-4 py-2 text-[13px] font-semibold text-[#1a4fb0] no-underline hover:bg-[#dbe8ff]">
+                    <FiPlus size={14} aria-hidden="true" /> {L("See more work", "और काम देखें", "आणखी कामे पहा")}
+                  </Link>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {!gpsOn ? (
+                  <div className="rounded-xl border border-dashed border-[#c5d5ee] bg-[#f7faff] p-7 text-center">
+                    <FiMapPin size={30} className="mx-auto mb-2 text-[#1a6cf0]" aria-hidden="true" />
+                    <div className="font-semibold text-[#0d2250]">{t.enableToSee}</div>
+                    <button onClick={enableGPS} className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-[#1a6cf0] px-5 py-2.5 text-[14px] font-semibold text-white shadow-[0_6px_16px_rgba(26,108,240,0.3)] hover:brightness-95">
+                      <FiMapPin size={16} aria-hidden="true" /> {L("Enable Location Now", "अभी लोकेशन चालू करें", "आता लोकेशन सुरू करा")}
+                    </button>
+                  </div>
+                ) : !available ? (
+                  <div className="rounded-xl border border-dashed border-[#c5d5ee] bg-[#f7faff] p-7 text-center">
+                    <div className="font-semibold text-[#0d2250]">{L("You are set to Not Available", "आप उपलब्ध नहीं हैं", "तुम्ही उपलब्ध नाही")}</div>
+                    <button onClick={toggleAvailable} className="mt-3 cursor-pointer rounded-xl bg-[#1a6cf0] px-5 py-2 text-[13px] font-semibold text-white">
+                      {L("Go Available", "उपलब्ध हों", "उपलब्ध व्हा")}
+                    </button>
+                  </div>
+                ) : sortedFeed.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-[#c5d5ee] bg-[#f7faff] p-7 text-center text-[#6b7a95]">
+                    <div className="font-semibold text-[#0d2250]">{hiddenCount > 0 ? L("More Jobs Hidden", "और नौकरियां छिपी हैं", "आणखी नोकऱ्या लपलेल्या आहेत") : t.noJobsNearby}</div>
+                    <p className="m-0 mt-1 text-[12.5px]">
+                      {hiddenCount > 0
+                        ? L(`${hiddenCount} more employers are hiring beyond ${radius} km.`, `${hiddenCount} और नियोक्ता ${radius} किमी के बाहर भर्ती कर रहे हैं।`, `${hiddenCount} आणखी नियोक्ते ${radius} किमीच्या बाहेर भरती करत आहेत.`)
+                        : L("Check back soon or browse all open jobs.", "जल्द फिर देखें या सभी खुली नौकरियां देखें।", "लवकरच पुन्हा पहा किंवा सर्व खुल्या नोकऱ्या पहा.")}
+                    </p>
+                    {hiddenCount > 0 && nextRadius && (
+                      <button onClick={() => setRadius(nextRadius)} className="mt-3 cursor-pointer rounded-xl bg-[#1a6cf0] px-4 py-2 text-[12.5px] font-semibold text-white">
+                        {L(`Expand to ${nextRadius} km`, `${nextRadius} किमी तक बढ़ाएं`, `${nextRadius} किमी पर्यंत वाढवा`)}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {sortedFeed.map(({ job, dist }) => {
+                      const title = job.jobTitle?.[language] || job.jobTitle?.en || "";
+                      const skills = job.skills?.[language] || job.skills?.en || "";
+                      return (
+                        <article key={job._id} className="rounded-xl border border-[#d4e2f8] bg-[#f6faff] p-4">
+                          <div className="flex flex-wrap items-start gap-3.5">
+                            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#1a6cf0] text-[24px]" aria-hidden="true">{tradeEmoji(job.jobTitle?.en || title)}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="m-0 text-[16px] font-bold text-[#0d2250]">{title}</h3>
+                                {job.isUrgent && <span className="rounded-md bg-[#1a6cf0] px-2 py-0.5 text-[11px] font-bold text-white">{t.urgent}</span>}
+                              </div>
+                              {skills && <p className="m-0 mt-1 text-[12.5px] text-[#6b7a95]">{skills}</p>}
+                              <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[12.5px] font-semibold">
+                                <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#bcd3ff] bg-white px-2.5 py-1 text-[#0d2250]">
+                                  <span className="flex h-5 w-5 items-center justify-center rounded bg-[#e6efff] text-[11px] text-[#1a6cf0]">₹</span>
+                                  {Number(job.salary).toLocaleString("en-IN")} <span className="font-normal text-[#6b7a95]">{job.paymentMethod}</span>
+                                </span>
+                                {dist !== null && (
+                                  <span className="rounded-lg border border-[#bfe9d1] bg-[#effaf4] px-2.5 py-1 text-[#0b8a4c]">{dist.toFixed(1)} {t.kmAway}</span>
+                                )}
+                                <span className="inline-flex items-center gap-1 truncate text-[12px] font-normal text-[#6b7a95]">
+                                  <FiMapPin size={12} aria-hidden="true" /> {job.location?.[language] || job.location?.en}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex w-full items-center justify-end gap-2 sm:w-auto sm:flex-col sm:items-stretch">
+                              <Link href={`/jobs/${job._id}`} className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#1a6cf0] px-5 py-2.5 text-[13.5px] font-semibold text-white no-underline shadow-[0_6px_16px_rgba(26,108,240,0.3)] hover:brightness-95">
+                                {L("View details", "विवरण देखें", "तपशील पहा")} <FiChevronRight size={15} aria-hidden="true" />
+                              </Link>
+                              <button
+                                onClick={() => acceptJob(job)}
+                                disabled={!!acceptingId}
+                                className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-4 py-2 text-[13px] font-semibold transition ${acceptingId === job._id ? "border-[#cdd8ec] bg-[#eef2f9] text-[#8a96ae]" : "border-[#1a6cf0] bg-white text-[#1a4fb0] hover:bg-[#eaf1ff]"} ${acceptingId ? "cursor-not-allowed" : "cursor-pointer"}`}
+                              >
+                                {acceptingId === job._id ? t.accepting : L("Accept Gig", "काम लें", "काम घ्या")}
+                              </button>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                    {hiddenCount > 0 && nextRadius && (
+                      <button onClick={() => setRadius(nextRadius)} className="w-full cursor-pointer rounded-xl border border-dashed border-[#c5d5ee] bg-[#f7faff] px-4 py-2.5 text-[13px] font-semibold text-[#1a4fb0] hover:bg-[#eaf1ff]">
+                        {L(`${hiddenCount} more jobs beyond ${radius} km — expand to ${nextRadius} km`, `${radius} किमी के बाहर ${hiddenCount} और काम — ${nextRadius} किमी तक बढ़ाएं`, `${radius} किमीच्या बाहेर ${hiddenCount} आणखी कामे — ${nextRadius} किमी पर्यंत वाढवा`)}
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Skills */}
+              {skillList.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="m-0 mb-3 text-[17px] font-bold text-[#0d2250]">{L("Your skills", "आपके कौशल", "तुमची कौशल्ये")}</h3>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {skillList.map((s) => (
+                      <Link key={s} href="/worker-profile" className="flex items-center gap-3 rounded-xl border border-[#e3eaf5] bg-[#fbfcff] p-3.5 no-underline hover:bg-[#f2f7ff]">
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#fff3d6] text-[22px]" aria-hidden="true">{tradeEmoji(s)}</span>
+                        <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-[#0d2250]">{s}</span>
+                        <FiChevronRight size={16} className="shrink-0 text-[#8a96ae]" aria-hidden="true" />
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* ── DOCUMENTS (only when an admin has reviewed some) ── */}
+            {docs.length > 0 && (
+              <section className={`${CARD} p-4 sm:p-5`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#dff6e8] text-[#13a05a]"><FiShield size={24} aria-hidden="true" /></span>
+                    <div>
+                      <h2 className="m-0 text-[18px] font-bold text-[#0d2250]">{L("ID & document verification", "सरकारी पहचान और दस्तावेज़ सत्यापन", "ओळख आणि कागदपत्र पडताळणी")}</h2>
+                      <p className="m-0 text-[13px] text-[#6b7a95]">{allDocsVerified ? L("All your documents are verified. You are ready to work.", "सभी दस्तावेज़ों की पुष्टि हो चुकी है। अब आप काम के लिए तैयार हैं।", "सर्व कागदपत्रांची पुष्टी झाली आहे. आता तुम्ही कामासाठी तयार आहात.") : L("Some documents are pending review.", "कुछ दस्तावेज़ों की जाँच बाकी है।", "काही कागदपत्रांची तपासणी बाकी आहे.")}</p>
+                    </div>
+                  </div>
+                  {allDocsVerified && <span className="rounded-full bg-[#dff6e8] px-4 py-1.5 text-[13px] font-bold text-[#0b8a4c]">{L("All approved", "सभी स्वीकृत", "सर्व मंजूर")}</span>}
+                </div>
+                <div className="mt-4 space-y-3">
+                  {docs.map((d) => (
+                    <div key={d.title} className={`flex items-center gap-3.5 rounded-xl border-2 p-3.5 ${d.verified ? "border-[#bfe9d1] bg-[#f3fbf7]" : "border-[#fde6b0] bg-[#fffaf0]"}`}>
+                      <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${d.verified ? "bg-[#d3f3e1] text-[#13a05a]" : "bg-[#fff0c2] text-[#d97706]"}`}><FiFileText size={22} aria-hidden="true" /></span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[14.5px] font-bold text-[#0d2250]">{d.title}</div>
+                        {d.detail && <div className="truncate text-[12px] text-[#6b7a95]">{d.detail}</div>}
+                      </div>
+                      <span className={`shrink-0 text-[14px] font-bold ${d.verified ? "text-[#0b8a4c]" : "text-[#b45309]"}`}>
+                        {d.verified ? <>{L("Verified", "सत्यापित", "सत्यापित")} ✓</> : L("Pending", "बाकी", "प्रलंबित")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* ── EMPLOYER FEEDBACK ── */}
+            <section className={`${CARD} p-4 sm:p-5`}>
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <h2 className="m-0 text-[18px] font-bold text-[#0d2250]">{L("Recent employer feedback", "हाल के नियोक्ता की प्रतिक्रिया", "अलीकडील मालकांचा अभिप्राय")}</h2>
+                  <p className="m-0 text-[13px] text-[#6b7a95]">{L("What employers said about your completed jobs", "आपके द्वारा पूरे किए गए कामों पर नियोक्ताओं की राय", "तुम्ही पूर्ण केलेल्या कामांवर मालकांचे मत")}</p>
+                </div>
+                {reviews.length > 0 && (
+                  <Link href="/my-jobs" className="text-[13px] font-semibold text-[#1a4fb0] no-underline hover:underline">
+                    {L(`See all ${reviews.length} reviews`, `सभी ${reviews.length} समीक्षाएँ देखें`, `सर्व ${reviews.length} पुनरावलोकने पहा`)} →
+                  </Link>
+                )}
+              </div>
+              {reviews.length === 0 ? (
+                <div className="mt-4 rounded-xl border border-dashed border-[#c5d5ee] bg-[#f7faff] p-6 text-center text-[13px] text-[#6b7a95]">
+                  {L("Reviews from employers will appear here after you complete jobs.", "काम पूरे करने के बाद नियोक्ताओं के रिव्यू यहाँ दिखेंगे।", "काम पूर्ण केल्यानंतर मालकांचे रिव्ह्यू येथे दिसतील.")}
+                </div>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  {reviews.slice(0, 2).map((r) => {
+                    const company = r.job?.companyName || L("Employer", "नियोक्ता", "मालक");
+                    return (
+                      <div key={r._id} className="rounded-xl border border-[#e3eaf5] bg-[#fbfcff] p-4">
+                        <div className="flex items-start gap-3">
+                          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#e6efff] text-[17px] font-bold text-[#1a4fb0]">{company.charAt(0).toUpperCase()}</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="truncate text-[14.5px] font-bold text-[#0d2250]">{company}</div>
+                                <div className="text-[12px] text-[#8a96ae]">{r.job?.location?.[language] || r.job?.location?.en} {r.updatedAt ? `• ${ago(r.updatedAt)}` : ""}</div>
+                              </div>
+                              {Number(r.rating) > 0 && (
+                                <span className="inline-flex gap-0.5" aria-label={`${r.rating} / 5`}>
+                                  {[1, 2, 3, 4, 5].map((n) => <FiStar key={n} size={15} className={n <= Math.round(Number(r.rating)) ? "fill-[#f5b301] text-[#f5b301]" : "text-[#d5dbe8]"} aria-hidden="true" />)}
+                                </span>
+                              )}
+                            </div>
+                            <p className="m-0 mt-2 text-[13.5px] italic leading-relaxed text-[#33415f]">&ldquo;{r.review}&rdquo;</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          </div>
+
+          {/* ═════════ RIGHT COLUMN ═════════ */}
+          <aside className="min-w-0 space-y-5">
+            {/* Quick start */}
+            <section className={`${CARD} p-4 sm:p-5`}>
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#fff0c2] text-[#f5a000]"><FiZap size={22} className="fill-current" aria-hidden="true" /></span>
+                <h2 className="m-0 text-[18px] font-bold text-[#0d2250]">{L("Start work quickly", "जल्दी से काम के लिए", "लवकर कामासाठी")}</h2>
+              </div>
+
+              <div className="mt-4 border-t border-[#eef2f8] pt-4">
+                <div className="mb-2 text-[13.5px] font-semibold text-[#0d2250]">{L("Availability", "उपलब्धता", "उपलब्धता")}</div>
                 <button
                   role="switch"
                   aria-checked={available}
                   onClick={toggleAvailable}
-                  className={`relative h-7 w-12 shrink-0 cursor-pointer rounded-full transition ${available ? "bg-[#1fb25a]" : "bg-[#c3cddd]"}`}
+                  className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-[#e3eaf5] bg-[#fbfcff] p-3 text-left"
                 >
-                  <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${available ? "left-[22px]" : "left-0.5"}`} />
-                  <span className="sr-only">{L("Available for Work", "काम के लिए उपलब्ध", "कामासाठी उपलब्ध")}</span>
+                  <span className={`relative h-6 w-11 shrink-0 rounded-full transition ${available ? "bg-[#1fb25a]" : "bg-[#c3cddd]"}`}>
+                    <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${available ? "left-[22px]" : "left-0.5"}`} />
+                  </span>
+                  <span className="text-[13.5px] font-semibold text-[#0d2250]">{available ? L("Available for Work", "काम के लिए उपलब्ध", "कामासाठी उपलब्ध") : L("Not Available", "उपलब्ध नहीं", "उपलब्ध नाही")}</span>
                 </button>
-                <span className="text-[16px] font-bold text-[#0d2250]">
-                  {available ? L("Available for Work", "काम के लिए उपलब्ध", "कामासाठी उपलब्ध") : L("Not Available", "उपलब्ध नहीं", "उपलब्ध नाही")}
-                </span>
               </div>
-              <div className="mt-3 flex items-start gap-2.5 border-t border-[#eef2f8] pt-3 text-[12px] text-[#5b6a85]">
-                <FiMapPin size={16} className="mt-0.5 shrink-0 text-[#1a4fb0]" aria-hidden="true" />
-                {available
-                  ? L(`Showing jobs within ${radius} km of you`, `आपके ${radius} किमी के अंदर की नौकरियां दिख रही हैं`, `तुमच्या ${radius} किमी आतील नोकऱ्या दिसत आहेत`)
-                  : L("Job alerts are paused on this device", "इस डिवाइस पर जॉब अलर्ट बंद हैं", "या डिव्हाइसवर जॉब अलर्ट बंद आहेत")}
-              </div>
-            </div>
-          </div>
-        </section>
 
-        {/* ── EARNINGS ─────────────────────────── */}
-        <section className={`${CARD} p-4 sm:p-5`}>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <SectionIcon icon={FiCreditCard} tone="bg-[#fff1dc] text-[#d97706]" />
-              <div>
-                <h2 className="text-[16px] font-bold text-[#0d2250]">{L("My Earnings & Performance", "मेरी कमाई और प्रदर्शन", "माझी कमाई आणि कामगिरी")}</h2>
-                <p className="text-[12.5px] text-[#6b7a95]">{L("Track what you earn from completed jobs", "पूरे किए गए कामों से अपनी कमाई देखें", "पूर्ण केलेल्या कामांची कमाई पहा")}</p>
-              </div>
-            </div>
-            <a href="#job-history" className="rounded-xl border border-[#dbe4f0] bg-white px-4 py-2 text-[13px] font-semibold text-[#1a4fb0] no-underline hover:bg-[#f2f7ff]">
-              {L("View Ledger", "लेजर देखें", "लेजर पहा")}
-            </a>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-3">
-            {/* Today */}
-            <div className="rounded-xl border border-[#cfeedd] bg-[#f1fbf5] p-4">
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-2.5 text-[12px] font-bold uppercase tracking-wide text-[#0d2250]">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1fb25a] text-[16px] font-bold text-white">₹</span>
-                  {L("Today's Earnings", "आज की कमाई", "आजची कमाई")}
-                </span>
-                <span className="rounded-full bg-[#dff6e8] px-2.5 py-0.5 text-[11px] font-semibold text-[#13783d]">
-                  {todayDone.length} {L("jobs", "काम", "कामे")}
-                </span>
-              </div>
-              <div className="mt-3 flex items-end justify-between">
-                <div><span className="text-[28px] font-extrabold text-[#0d2250]">₹{todayEarnings}</span> <span className="text-[12px] text-[#6b7a95]">INR</span></div>
-                <span className="text-[12px] text-[#6b7a95]">{L("Daily Target", "दैनिक लक्ष्य", "दैनिक उद्दिष्ट")}: ₹{DAILY_TARGET}</span>
-              </div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#cfeedd]">
-                <div className="h-full rounded-full bg-[#1fb25a]" style={{ width: `${Math.min(100, (todayEarnings / DAILY_TARGET) * 100)}%` }} />
-              </div>
-            </div>
-
-            {/* Week */}
-            <div className="rounded-xl border border-[#d3e4fb] bg-[#f1f7ff] p-4">
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-2.5 text-[12px] font-bold uppercase tracking-wide text-[#0d2250]">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#1a6cf0] text-white"><FiCalendar size={17} aria-hidden="true" /></span>
-                  {L("This Week", "इस हफ्ते", "या आठवड्यात")}
-                </span>
-                <span className="rounded-full bg-[#dbe8fd] px-2.5 py-0.5 text-[11px] font-semibold text-[#1a4fb0]">
-                  {weekDone.length} {L("jobs", "काम", "कामे")}
-                </span>
-              </div>
-              <div className="mt-3 flex items-end justify-between">
-                <div><span className="text-[28px] font-extrabold text-[#0d2250]">₹{weekEarnings}</span> <span className="text-[12px] text-[#6b7a95]">INR</span></div>
-                <span className="text-[12px] text-[#6b7a95]">{L("Avg", "औसत", "सरासरी")} ₹{avgPerGig} / {L("gig", "गिग", "गिग")}</span>
-              </div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#d3e4fb]">
-                <div className="h-full rounded-full bg-[#1a6cf0]" style={{ width: `${Math.min(100, (weekEarnings / (DAILY_TARGET * 7)) * 100)}%` }} />
-              </div>
-            </div>
-
-            {/* Total */}
-            <div className="rounded-xl border border-[#e3dcfa] bg-[#f6f3ff] p-4">
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-2.5 text-[12px] font-bold uppercase tracking-wide text-[#0d2250]">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#7c5ce6] text-white"><FiBriefcase size={17} aria-hidden="true" /></span>
-                  {L("Total Completed Jobs", "कुल पूरे काम", "एकूण पूर्ण कामे")}
-                </span>
-              </div>
-              <div className="mt-3 flex items-end justify-between">
-                <div><span className="text-[28px] font-extrabold text-[#0d2250]">{totalJobs}</span> <span className="text-[13px] font-semibold text-[#6b7a95]">{L("jobs", "काम", "कामे")}</span></div>
-                {avgRating && <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#7c5ce6]"><FiStar size={13} aria-hidden="true" /> {avgRating}</span>}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ── LOCATION ─────────────────────────── */}
-        <section className="flex flex-col gap-4 rounded-2xl bg-[linear-gradient(110deg,#0f3a73_0%,#0b2a5c_100%)] p-5 text-white shadow-[0_10px_30px_rgba(11,42,92,0.25)] lg:flex-row lg:items-center">
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/20">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#e8334f]"><FiMapPin size={20} aria-hidden="true" /></span>
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-[16px] font-bold">
-              {gpsOn ? L("Live Location is On", "लाइव लोकेशन चालू है", "लाइव्ह लोकेशन सुरू आहे") : L("Enable Live Location to See Nearby Jobs", "पास की नौकरियां देखने के लिए लोकेशन चालू करें", "जवळच्या नोकऱ्या पाहण्यासाठी लोकेशन सुरू करा")}
-            </h2>
-            <p className="mt-1 text-[13px] leading-snug text-[#c9d9f3]">
-              {gpsOn
-                ? L("You will see instant job invites from clients in your area.", "आपको अपने इलाके के ग्राहकों से तुरंत जॉब आमंत्रण दिखेंगे।", "तुम्हाला तुमच्या परिसरातील ग्राहकांची तातडीची कामे दिसतील.")
-                : L("Turn on precise GPS to receive priority instant job invites from clients in your local neighborhood.", "अपने इलाके के ग्राहकों से तुरंत जॉब आमंत्रण पाने के लिए GPS चालू करें।", "तुमच्या परिसरातील ग्राहकांकडून तातडीची कामे मिळवण्यासाठी GPS सुरू करा.")}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-1 rounded-xl border border-white/25 p-1 text-[13px]">
-            <span className="px-2.5 text-[#c9d9f3]">{L("Radius", "दायरा", "त्रिज्या")}:</span>
-            {RADII.map((r) => (
-              <button
-                key={r}
-                onClick={() => setRadius(r)}
-                className={`cursor-pointer rounded-lg px-3 py-1.5 font-semibold transition ${radius === r ? "bg-white text-[#0b2a5c]" : "text-white hover:bg-white/10"}`}
-              >
-                {r} km
-              </button>
-            ))}
-          </div>
-
-          {gpsOn ? (
-            <span className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1fb25a] px-5 py-3 text-[14px] font-bold text-white">
-              <FiCheckCircle size={17} aria-hidden="true" /> {L("Location On", "लोकेशन चालू", "लोकेशन सुरू")}
-            </span>
-          ) : (
-            <button onClick={enableGPS} className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#fbbf24] px-5 py-3 text-[14px] font-bold text-[#3b2a00] shadow-[0_8px_20px_rgba(251,191,36,0.35)] transition hover:brightness-95">
-              <FiMapPin size={17} aria-hidden="true" /> {L("Enable Location Now", "अभी लोकेशन चालू करें", "आता लोकेशन सुरू करा")}
-            </button>
-          )}
-        </section>
-
-        {/* ── NEW JOBS NEAR YOU ─────────────────────────── */}
-        <section className={`${CARD} p-4 sm:p-5`}>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <SectionIcon icon={FiBriefcase} tone="bg-[#fff1dc] text-[#d97706]" />
-              <h2 className="text-[16px] font-bold text-[#0d2250]">{t.newJobsNear}</h2>
-              {gpsOn && <span className="rounded-full bg-[#ffe4e8] px-2.5 py-0.5 text-[11px] font-bold text-[#d6203a]">{L("Live Feed", "लाइव फ़ीड", "लाइव्ह फीड")}</span>}
-            </div>
-            <label className="flex items-center gap-2 text-[13px] text-[#6b7a95]">
-              {L("Sort by", "क्रम", "क्रम")}:
-              <select
-                value={sort}
-                onChange={(e) => setSort(e.target.value as SortKey)}
-                className="cursor-pointer rounded-lg border border-[#dbe4f0] bg-white px-3 py-1.5 text-[13px] text-[#0d2250] outline-none focus:border-[#1a6cf0]"
-              >
-                <option value="distance">{L("Distance (Closest)", "दूरी (सबसे पास)", "अंतर (जवळचे)")}</option>
-                <option value="pay">{L("Pay (Highest)", "वेतन (सबसे ज़्यादा)", "वेतन (सर्वाधिक)")}</option>
-              </select>
-            </label>
-          </div>
-
-          {!gpsOn ? (
-            <div className="rounded-xl border border-dashed border-[#cfdcf2] bg-[#f7faff] p-8 text-center text-[#6b7a95]">
-              <FiMapPin size={30} className="mx-auto mb-2 text-[#1a6cf0]" aria-hidden="true" />
-              <div className="font-semibold text-[#0d2250]">{t.enableToSee}</div>
-            </div>
-          ) : !available ? (
-            <div className="rounded-xl border border-dashed border-[#cfdcf2] bg-[#f7faff] p-8 text-center text-[#6b7a95]">
-              <div className="font-semibold text-[#0d2250]">{L("You are set to Not Available", "आप उपलब्ध नहीं हैं", "तुम्ही उपलब्ध नाही")}</div>
-              <button onClick={toggleAvailable} className="mt-3 cursor-pointer rounded-xl bg-[#1a6cf0] px-5 py-2 text-[13px] font-semibold text-white">
-                {L("Go Available", "उपलब्ध हों", "उपलब्ध व्हा")}
-              </button>
-            </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {sortedFeed.map(({ job, dist }) => {
-                const tags = (job.skills?.[language] || job.skills?.en || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 3);
-                const desc = job.description?.[language] || job.description?.en;
-                return (
-                  <article key={job._id} className="flex flex-col rounded-2xl border border-[#e6ecf5] bg-white p-4 shadow-[0_2px_10px_rgba(20,50,110,0.04)]">
-                    <div className="flex items-start gap-3">
-                      <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${job.isUrgent ? "bg-[#fff1dc] text-[#d97706]" : "bg-[#eaf2ff] text-[#1a4fb0]"}`}>
-                        {job.isUrgent ? <FiZap size={20} aria-hidden="true" /> : <FiTool size={20} aria-hidden="true" />}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <h3 className="text-[14.5px] font-bold leading-snug text-[#0d2250]">{job.jobTitle?.[language] || job.jobTitle?.en}</h3>
-                          {job.isUrgent && <span className="shrink-0 rounded-full bg-[#fff1dc] px-2 py-0.5 text-[11px] font-bold text-[#c2620a]">{t.urgent}</span>}
-                        </div>
-                        <div className="mt-1 flex items-center gap-1.5 text-[12px] text-[#6b7a95]">
-                          <FiMapPin size={13} className="shrink-0 text-[#1a4fb0]" aria-hidden="true" />
-                          <span className="truncate">{job.location?.[language] || job.location?.en}</span>
-                          {dist !== null && <span className="shrink-0">• {dist.toFixed(1)} {t.kmAway}</span>}
-                        </div>
-                      </div>
-                    </div>
-
-                    {tags.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {tags.map((tag) => <span key={tag} className="rounded-lg bg-[#eef4ff] px-2.5 py-1 text-[11.5px] font-medium text-[#1a4fb0]">{tag}</span>)}
-                      </div>
-                    )}
-
-                    {desc && <p className="mt-3 line-clamp-3 text-[12.5px] leading-snug text-[#5b6a85]">{desc}</p>}
-
-                    <div className="mt-auto flex items-end justify-between gap-3 pt-4">
-                      <div>
-                        <div className="text-[11.5px] text-[#6b7a95]">{L("Estimate", "अनुमान", "अंदाज")}</div>
-                        <div className="text-[18px] font-extrabold text-[#0d2250]">₹{job.salary} <span className="text-[12px] font-normal text-[#6b7a95]">{job.paymentMethod}</span></div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {job.contactInfo && (
-                          <a href={`tel:${job.contactInfo}`} aria-label={t.call} className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#dbe4f0] text-[#1a4fb0] no-underline hover:bg-[#f2f7ff]">
-                            <FiPhoneCall size={16} />
-                          </a>
-                        )}
-                        <button
-                          onClick={() => acceptJob(job)}
-                          disabled={!!acceptingId}
-                          className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-[13px] font-semibold text-white transition ${acceptingId === job._id ? "bg-[#9db3d8]" : "bg-[#1a6cf0]"} ${acceptingId ? "cursor-not-allowed" : "cursor-pointer shadow-[0_6px_16px_rgba(26,108,240,0.3)] hover:brightness-95"}`}
-                        >
-                          {acceptingId === job._id ? t.accepting : <>{L("Accept Gig", "काम लें", "काम घ्या")} <FiArrowRight size={14} aria-hidden="true" /></>}
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
-
-              {/* Hidden jobs / expand card */}
-              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[#c5d5ee] bg-[#f7faff] bg-[linear-gradient(#e9eff9_1px,transparent_1px),linear-gradient(90deg,#e9eff9_1px,transparent_1px)] bg-[size:28px_28px] p-5 text-center">
-                <FiMapPin size={26} className="text-[#e8334f]" aria-hidden="true" />
-                <h3 className="mt-2 text-[14.5px] font-bold text-[#0d2250]">
-                  {hiddenCount > 0 ? L("More Jobs Hidden", "और नौकरियां छिपी हैं", "आणखी नोकऱ्या लपलेल्या आहेत") : sortedFeed.length === 0 ? t.noJobsNearby : L("You're all caught up", "आप अप-टू-डेट हैं", "तुम्ही अपडेट आहात")}
-                </h3>
-                <p className="mt-1 max-w-[230px] text-[12px] leading-snug text-[#6b7a95]">
-                  {hiddenCount > 0
-                    ? L(`${hiddenCount} more employers are hiring beyond ${radius} km. Expand radius to see more.`, `${hiddenCount} और नियोक्ता ${radius} किमी के बाहर भर्ती कर रहे हैं। दायरा बढ़ाएं।`, `${hiddenCount} आणखी नियोक्ते ${radius} किमीच्या बाहेर भरती करत आहेत. त्रिज्या वाढवा.`)
-                    : L("Check back soon or browse all open jobs.", "जल्द फिर देखें या सभी खुली नौकरियां देखें।", "लवकरच पुन्हा पहा किंवा सर्व खुल्या नोकऱ्या पहा.")}
-                </p>
-                <div className="mt-3 flex flex-wrap justify-center gap-2">
-                  {hiddenCount > 0 && nextRadius && (
-                    <button onClick={() => setRadius(nextRadius)} className="cursor-pointer rounded-xl bg-[#1a6cf0] px-4 py-2 text-[12.5px] font-semibold text-white">
-                      {L(`Expand to ${nextRadius} km`, `${nextRadius} किमी तक बढ़ाएं`, `${nextRadius} किमी पर्यंत वाढवा`)}
+              <div className="mt-4">
+                <div className="mb-2 text-[13.5px] font-semibold text-[#0d2250]">{L("Job search distance", "काम खोजने की दूरी", "काम शोधण्याचे अंतर")}</div>
+                <div className="flex flex-wrap gap-2">
+                  {RADII.map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => setRadius(r)}
+                      className={`cursor-pointer rounded-full border px-4 py-1.5 text-[13px] font-semibold transition ${radius === r ? "border-[#1a6cf0] bg-[#1a6cf0] text-white" : "border-[#bcd3ff] bg-[#f2f7ff] text-[#1a4fb0] hover:bg-[#e3eeff]"}`}
+                    >
+                      {r} km
                     </button>
-                  )}
-                  <Link href="/ai-suggestions" className="inline-flex items-center gap-2 rounded-xl border border-[#1a6cf0] bg-white px-4 py-2 text-[12.5px] font-semibold text-[#1a4fb0] no-underline">
-                    <FiCpu size={15} aria-hidden="true" /> {L("HireMate Assistant", "हायरमेट असिस्टेंट", "हायरमेट असिस्टंट")}
-                  </Link>
+                  ))}
                 </div>
               </div>
-            </div>
-          )}
-        </section>
 
-        {/* ── JOB HISTORY ─────────────────────────── */}
-        <section id="job-history" className={`${CARD} p-4 sm:p-5`}>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <SectionIcon icon={FiFolder} tone="bg-[#fff1dc] text-[#d97706]" />
-              <h2 className="text-[16px] font-bold text-[#0d2250]">{t.jobHistory}</h2>
-            </div>
-            <div className="flex flex-wrap gap-1 rounded-xl bg-[#f2f6fc] p-1 text-[12.5px]">
-              {(Object.keys(tabLabels) as HistoryTab[]).map((k) => (
-                <button
-                  key={k}
-                  onClick={() => setTab(k)}
-                  className={`cursor-pointer rounded-lg px-3.5 py-1.5 transition ${tab === k ? "bg-white font-semibold text-[#1a4fb0] shadow-sm ring-1 ring-[#cfdcf2]" : "text-[#6b7a95] hover:text-[#0d2250]"}`}
-                >
-                  {tabLabels[k]}{k !== "all" && ` (${counts[k]})`}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {shownJobs.length === 0 ? (
-            <div className="flex flex-col items-center border-t border-[#eef2f8] px-4 pb-4 pt-8 text-center">
-              <span className="relative flex h-16 w-16 items-center justify-center rounded-full bg-[#eaf2ff] text-[#1a6cf0]">
-                <FiFileText size={28} aria-hidden="true" />
-                <span className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-[#1fb25a] text-white ring-2 ring-white"><FiCheckCircle size={14} aria-hidden="true" /></span>
-              </span>
-              <h3 className="mt-3 text-[15px] font-bold text-[#0d2250]">
-                {tab === "all" || tab === "completed" ? L("No jobs completed yet", "अभी कोई काम पूरा नहीं हुआ", "अजून कोणतेही काम पूर्ण झाले नाही") : L("Nothing here", "यहां कुछ नहीं", "येथे काही नाही")}
-              </h3>
-              <p className="mt-1 max-w-[380px] text-[12.5px] text-[#6b7a95]">
-                {L("Accept your first nearby gig to start building your earnings, ratings, and reputation on HireMate.", "अपनी कमाई, रेटिंग और साख बनाने के लिए पहला काम स्वीकार करें।", "कमाई, रेटिंग आणि प्रतिष्ठा वाढवण्यासाठी पहिले काम स्वीकारा.")}
-              </p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2.5">
-                <Link href="/jobs" className="rounded-xl bg-[#1a6cf0] px-5 py-2.5 text-[13px] font-semibold text-white no-underline shadow-[0_6px_16px_rgba(26,108,240,0.3)]">
-                  {L("Browse Nearby Available Jobs", "उपलब्ध नौकरियां देखें", "उपलब्ध नोकऱ्या पहा")}
-                </Link>
-                <Link href="/worker-profile" className="rounded-xl border border-[#dbe4f0] bg-white px-5 py-2.5 text-[13px] font-semibold text-[#5b6a85] no-underline hover:bg-[#f2f7ff]">
-                  {L("Update My Profile", "प्रोफ़ाइल अपडेट करें", "प्रोफाइल अपडेट करा")}
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2.5 border-t border-[#eef2f8] pt-4">
-              {shownJobs.map((j) => {
-                const sc = (j.status && STATUS_CONFIG[j.status]) || STATUS_CONFIG.accepted;
-                return (
-                  <div key={j._id} className="flex items-center justify-between gap-3 rounded-xl border border-[#eef2f8] bg-[#fbfcff] px-4 py-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-[14px] font-semibold text-[#0d2250]">{j.job?.jobTitle?.[language] || j.job?.jobTitle?.en}</div>
-                      <div className="truncate text-[12px] text-[#6b7a95]">{j.job?.location?.[language] || j.job?.location?.en}</div>
-                      <div className="mt-0.5 text-[12.5px] font-semibold text-[#1a4fb0]">₹{j.job?.salary}</div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <span className={`inline-block rounded-full px-3 py-1 text-[12px] font-semibold ${sc.soft} ${sc.text}`}>{sc.label}</span>
-                      {j.isCompleted && j.rating ? <div className="mt-1 flex items-center justify-end gap-1 text-[12px] text-[#8a5a00]"><FiStar size={12} aria-hidden="true" /> {j.rating}/5</div> : null}
-                    </div>
+              <div className="mt-4">
+                <div className="mb-2 flex items-center gap-2 text-[13.5px] font-semibold text-[#0d2250]"><FiBriefcase size={15} aria-hidden="true" /> {L("Join work today", "तुरंत जॉइन करने के लिए", "लगेच कामावर रुजू होण्यासाठी")}</div>
+                {gpsOn ? (
+                  <div className="flex items-center gap-2.5 rounded-xl border border-[#bfe9d1] bg-[#effaf4] px-4 py-3 text-[13.5px] font-semibold text-[#0b8a4c]">
+                    <FiCheckCircle size={18} aria-hidden="true" /> {L("Location on — you're ready", "लोकेशन चालू — आप तैयार हैं", "लोकेशन सुरू — तुम्ही तयार आहात")}
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
+                ) : (
+                  <button onClick={enableGPS} className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl border border-[#bfe9d1] bg-[#effaf4] px-4 py-3 text-left text-[13.5px] font-semibold text-[#0b8a4c] hover:bg-[#e2f6ea]">
+                    <FiCheckCircle size={18} aria-hidden="true" /> {L("Start work today", "आज ही काम शुरू करें", "आजच काम सुरू करा")}
+                  </button>
+                )}
+              </div>
+            </section>
 
-        {/* ── HELP / SOS ─────────────────────────── */}
-        <section className="flex flex-col gap-4 rounded-2xl border border-[#d6e4fb] bg-[#eef5ff] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-          <div className="flex items-center gap-4">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#1a4fb0] text-white"><FiHeadphones size={22} aria-hidden="true" /></span>
-            <div>
-              <h2 className="text-[14.5px] font-bold text-[#0d3a8a]">{L("Need help or in an emergency?", "मदद चाहिए या आपातकाल है?", "मदत हवी आहे किंवा आणीबाणी आहे?")}</h2>
-              <p className="text-[12.5px] text-[#5b6a85]">{L("In an emergency, call 112 for police, fire or ambulance.", "आपातकाल में पुलिस, फायर या एम्बुलेंस के लिए 112 पर कॉल करें।", "आणीबाणीत पोलीस, अग्निशमन किंवा रुग्णवाहिकेसाठी 112 वर कॉल करा.")}</p>
-            </div>
-          </div>
-          <div className="flex gap-2.5">
-            <Link href="/ai-suggestions" className="rounded-xl border border-[#dbe4f0] bg-white px-5 py-2.5 text-[13px] font-semibold text-[#1a4fb0] no-underline hover:bg-[#f2f7ff]">
-              {L("Help Center", "सहायता केंद्र", "मदत केंद्र")}
-            </Link>
-            <a href="tel:112" className="inline-flex items-center gap-2 rounded-xl bg-[#f0264a] px-5 py-2.5 text-[13px] font-bold text-white no-underline shadow-[0_6px_16px_rgba(240,38,74,0.3)]">
-              <FiPhoneCall size={15} aria-hidden="true" /> {L("Emergency SOS", "इमरजेंसी SOS", "इमर्जन्सी SOS")}
+            {/* Service area */}
+            <section className={`${CARD} p-4 sm:p-5`}>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="m-0 text-[17px] font-bold text-[#0d2250]">{L("Service area", "सेवा क्षेत्र", "सेवा क्षेत्र")}{city ? ` (${city})` : ""}</h2>
+                <Link href="/worker-profile" className="text-[12.5px] font-semibold text-[#1a4fb0] no-underline hover:underline">{L("Edit", "संपादित करें", "संपादित करा")}</Link>
+              </div>
+              {areas.length === 0 ? (
+                <p className="m-0 mt-3 text-[13px] text-[#6b7a95]">{L("Add your area in your profile to get nearby jobs.", "पास की नौकरियों के लिए प्रोफ़ाइल में अपना इलाका जोड़ें।", "जवळच्या नोकऱ्यांसाठी प्रोफाइलमध्ये परिसर जोडा.")}</p>
+              ) : (
+                <ul className="m-0 mt-3 list-none space-y-2 p-0">
+                  {areas.map((a) => (
+                    <li key={a} className="flex items-center gap-2.5 rounded-lg bg-[#f4f6fa] px-3 py-2.5 text-[13.5px] text-[#0d2250]">
+                      <FiMapPin size={16} className="shrink-0 text-[#e5334f]" aria-hidden="true" /> <span className="min-w-0">{a}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="m-0 mt-3 text-[12.5px] text-[#8a96ae]">{L(`Search distance: within ${radius} km`, `खोज की सीमा: ${radius} किमी तक`, `शोध मर्यादा: ${radius} किमी पर्यंत`)}</p>
+            </section>
+
+            {/* Help */}
+            <section className="rounded-2xl bg-[linear-gradient(160deg,#10285a_0%,#0a1c42_100%)] p-5 text-white shadow-[0_10px_30px_rgba(11,42,92,0.25)]">
+              <div className="flex items-start gap-3.5">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/10 text-[#7fb2ff] ring-1 ring-white/20"><FiHeadphones size={24} aria-hidden="true" /></span>
+                <div>
+                  <h2 className="m-0 text-[17px] font-bold">{L("Trouble finding work?", "काम खोजने में दिक्कत?", "काम शोधण्यात अडचण?")}</h2>
+                  <p className="m-0 mt-1 text-[13px] text-[#c9d9f3]">
+                    {gpsOn
+                      ? L(`${alerts.length} new jobs match your profile`, `${alerts.length} नए जॉब आपके प्रोफ़ाइल के अनुसार`, `${alerts.length} नवीन कामे तुमच्या प्रोफाइलनुसार`)
+                      : L("Turn on location to see jobs near you", "पास के काम देखने के लिए लोकेशन चालू करें", "जवळची कामे पाहण्यासाठी लोकेशन सुरू करा")}
+                  </p>
+                </div>
+              </div>
+              <Link href="/jobs" className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-[#1f8bff] px-4 py-3 text-[14px] font-semibold text-white no-underline hover:brightness-110">
+                <FiSearch size={16} aria-hidden="true" /> {L("Browse jobs", "जॉब ब्राउज़ करें", "नोकऱ्या ब्राउझ करा")}
+              </Link>
+              <Link href="/my-jobs" className="mt-2.5 flex items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/5 px-4 py-3 text-[14px] font-semibold text-white no-underline hover:bg-white/10">
+                <FiCalendar size={16} aria-hidden="true" /> {L("My active contracts", "मेरे सक्रिय कॉन्ट्रैक्ट", "माझे सक्रिय कॉन्ट्रॅक्ट")}
+              </Link>
+            </section>
+          </aside>
+        </div>
+
+        {/* ── FOOTER ─────────────────────────── */}
+        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e3eaf5] pt-4 text-[12.5px] text-[#8a96ae]">
+          <span>© {new Date().getFullYear()} HireMate</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link href="/ai-suggestions" className="font-semibold text-[#5b6a85] no-underline hover:underline">{L("Help Center", "सहायता केंद्र", "मदत केंद्र")}</Link>
+            <a href="tel:112" className="inline-flex items-center gap-2 rounded-full border border-[#f7b9c4] bg-[#fff1f3] px-4 py-2 text-[12.5px] font-bold text-[#d6203a] no-underline hover:bg-[#ffe4e8]">
+              <FiPhoneCall size={14} aria-hidden="true" /> {L("Emergency SOS (112)", "इमरजेंसी SOS (112)", "इमर्जन्सी SOS (112)")}
             </a>
           </div>
-        </section>
+        </footer>
       </div>
     </>
   );
