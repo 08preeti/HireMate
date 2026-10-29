@@ -57,7 +57,7 @@ const VOICE_SKILL_MAP: Record<string, string> = {
   "waiter": "Waiter",
 };
 
-function matchSkill(transcript: string): string | null {
+export function matchSkill(transcript: string): string | null {
   const lower = transcript.toLowerCase();
   for (const [word, skill] of Object.entries(VOICE_SKILL_MAP)) {
     if (lower.includes(word.toLowerCase())) return skill;

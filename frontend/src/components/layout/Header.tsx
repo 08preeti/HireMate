@@ -7,6 +7,7 @@ import { useLanguage } from "@/context/LanguageContext";
 import { ROLE_SELECT, isStandalonePath } from "@/config/routes";
 import { translations } from "@/i18n/translations";
 import type { Language } from "@/types";
+import { SHELL_PATHS } from "@/config/routes";
 
 const NAV_ACTIVE = "bg-amber-400 text-black rounded-md py-1 px-2.5 font-bold text-[14px] no-underline";
 const NAV_IDLE = "text-white py-1 px-1.5 text-[14px] no-underline";
@@ -32,6 +33,8 @@ export default function Header() {
   if (isStandalonePath(pathname)) return null;
 
   const L = (en: string, hi: string, mr: string): string => (language === "hi" ? hi : language === "mr" ? mr : en);
+
+  if (SHELL_PATHS.some((p) => pathname.startsWith(p))) return null;
 
   return (
     <div className="bg-brand py-3 px-5 flex items-center justify-between flex-wrap gap-2.5 font-plain">

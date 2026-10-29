@@ -22,4 +22,7 @@ export const STANDALONE_PATHS: readonly string[] = [
   "/employer-login",
   "/employer-register",
 ];
-export const isStandalonePath = (pathname: string): boolean => STANDALONE_PATHS.includes(pathname);
+export const isStandalonePath = (pathname: string): boolean =>
+  STANDALONE_PATHS.includes(pathname);
+// Routes where the worker app shell is displayed.
+export const SHELL_PATHS: readonly string[] = ["/worker-dashboard"];
