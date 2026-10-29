@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, type ReactNode } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
+import Link from "next/link";
+import { FiCalendar, FiCheckCircle, FiChevronRight, FiBriefcase, FiFileText, FiHeadphones, FiMapPin, FiPhoneCall, FiPlus, FiSearch, FiShield, FiStar, FiUser, FiZap } from "react-icons/fi";
+import { HERO_PEOPLE } from "@/features/home/homeAssets";
 import { useLanguage } from "@/context/LanguageContext";
 import { translations } from "@/i18n/translations";
 import { fixLeafletIcons } from "@/lib/leaflet";
@@ -282,6 +285,38 @@ function NavModal({ job, appId, workerPos, onClose, t, language }: NavModalProps
 }
 
 // ══ MAIN DASHBOARD ════════════════════════════════════════════════════════
+const RADII = [5, 10, 25] as const;
+type Radius = (typeof RADII)[number];
+type SortKey = "distance" | "pay";
+
+const CARD = "rounded-2xl border border-[#e3eaf5] bg-white shadow-[0_4px_18px_rgba(20,50,110,0.05)]";
+
+const tradeEmoji = (title = "") => {
+  const t = title.toLowerCase();
+  if (/driv|चालक|ड्रायव्हर/.test(t)) return "🚚";
+  if (/chef|cook|कुक|रसोई|स्वयंपाक|स्वयंपाकी/.test(t)) return "🍳";
+  if (/mechanic|मैकेनिक|मेकॅनिक/.test(t)) return "🔧";
+  if (/plumb|नल/.test(t)) return "🚰";
+  if (/electric|बिजली|वीज/.test(t)) return "⚡";
+  if (/clean|सफाई|स्वच्छ/.test(t)) return "🧹";
+  if (/paint|पेंट|रंग/.test(t)) return "🎨";
+  if (/guard|security|सुरक्षा/.test(t)) return "💂";
+  return "💼";
+};
+
+function StatTile({ icon, iconBg, label, value, sub, subClass = "text-[#6b7a95]" }: {
+  icon: ReactNode; iconBg: string; label: string; value: ReactNode; sub?: string; subClass?: string;
+}) {
+  return (
+    <div className={`${CARD} p-4 sm:p-5`}>
+      <span className={`flex h-11 w-11 items-center justify-center rounded-xl ${iconBg}`}>{icon}</span>
+      <div className="mt-3 text-[14px] text-[#33415f]">{label}</div>
+      <div className="mt-0.5 text-[26px] font-extrabold leading-tight text-[#0d2250]">{value}</div>
+      {sub && <div className={`mt-1 text-[13px] ${subClass}`}>{sub}</div>}
+    </div>
+  );
+}
+
 export default function WorkerDashboard() {
   const { language }              = useLanguage();
   const t                         = translations[language];
@@ -291,18 +326,47 @@ export default function WorkerDashboard() {
   const [gpsOn, setGpsOn]         = useState(false);
   const [activeNav, setActiveNav] = useState<{ job: Job; appId?: string } | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [radius, setRadius]       = useState<Radius>(10);
+  const [sort, setSort]           = useState<SortKey>("distance");
+  const [available, setAvailable] = useState(true);
   const watchRef                  = useRef<number | null>(null);
 
   const { worker } = useAuth();
 
-  // Earnings calculation
-  const todayEarnings = jobs
-    .filter(j => j.isCompleted && new Date(j.updatedAt ?? 0).toDateString() === new Date().toDateString())
-    .reduce((sum, j) => sum + Number(j.job?.salary || 0), 0);
-  const weekEarnings = jobs
-    .filter(j => j.isCompleted && (Date.now() - new Date(j.updatedAt ?? 0).getTime()) < 7 * 24 * 60 * 60 * 1000)
-    .reduce((sum, j) => sum + Number(j.job?.salary || 0), 0);
-  const totalJobs = jobs.filter(j => j.isCompleted).length;
+  const L = (en: string, hi: string, mr: string) => (language === "hi" ? hi : language === "mr" ? mr : en);
+
+  // "Available for work" is a per-device setting kept in the browser.
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("hm_available");
+      if (v !== null) setAvailable(v === "1");
+    } catch { /* storage unavailable */ }
+  }, []);
+  const toggleAvailable = () =>
+    setAvailable((v) => {
+      const next = !v;
+      try { localStorage.setItem("hm_available", next ? "1" : "0"); } catch { /* ignore */ }
+      return next;
+    });
+
+  // ── Numbers for the stat cards ──
+  const completed = jobs.filter((j) => j.isCompleted || j.status === "completed");
+  const salaryOf = (a: Application) => Number(String(a.job?.salary ?? "").replace(/[^\d.]/g, "")) || 0;
+  const totalEarned = completed.reduce((s, a) => s + salaryOf(a), 0);
+  const weekEarned = completed
+    .filter((j) => Date.now() - new Date(j.updatedAt ?? 0).getTime() < 7 * 24 * 60 * 60 * 1000)
+    .reduce((s, a) => s + salaryOf(a), 0);
+
+  const ratings = completed.map((j) => Number(j.rating)).filter((r) => r > 0);
+  const avgRating = ratings.length
+    ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1)
+    : worker?.rating && Number(worker.rating) > 0 ? Number(worker.rating).toFixed(1) : null;
+  const reviewCount = ratings.length || worker?.totalReviews || 0;
+
+  const reviews = completed.filter((j) => j.review).sort((a, b) => new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime());
+
+  const profileFields = [worker?.name, worker?.skills, worker?.location, worker?.phone || worker?.contact];
+  const profilePct = Math.round((profileFields.filter(Boolean).length / profileFields.length) * 100);
 
   const enableGPS = () => {
     if (!navigator.geolocation) return alert("Geolocation not supported");
@@ -316,12 +380,18 @@ export default function WorkerDashboard() {
 
   useEffect(() => () => { if (watchRef.current) navigator.geolocation.clearWatch(watchRef.current); }, []);
 
+  // Job history (earnings, reviews) doesn't need GPS
+  useEffect(() => {
+    if (!worker) return;
+    getJobHistory(worker._id)
+      .then((d) => setJobs(Array.isArray(d) ? d : [])).catch(() => {});
+  }, [worker]);
+
+  // Nearby jobs need the live position
   useEffect(() => {
     if (!worker || !workerPos) return;
     getJobAlerts(workerPos.lat, workerPos.lng)
-      .then(d => setAlerts(Array.isArray(d) ? d : [])).catch(() => {});
-    getJobHistory(worker._id)
-      .then(d => setJobs(Array.isArray(d) ? d : [])).catch(() => {});
+      .then((d) => setAlerts(Array.isArray(d) ? d : [])).catch(() => {});
   }, [worker, workerPos]);
 
   const acceptJob = async (job: Job) => {
@@ -333,20 +403,48 @@ export default function WorkerDashboard() {
     } catch (err) {
       alert(err instanceof ApiError ? err.message || "Could not accept job" : "Server error");
     }
-        finally { setAcceptingId(null); }
+    finally { setAcceptingId(null); }
   };
 
   if (!worker) return (
     <div className="p-10 text-center font-plain">
-      <div className="text-[48px] mb-4">👷</div>
-      <div className="font-bold text-[18px] mb-3">
-        {language === "hi" ? "लॉगिन करें या रजिस्टर करें" : language === "mr" ? "लॉगिन किंवा नोंदणी करा" : "Please Login or Register"}
+      <div className="mb-4 text-[48px]">👷</div>
+      <div className="mb-3 text-[18px] font-bold">
+        {L("Please Login or Register", "लॉगिन करें या रजिस्टर करें", "लॉगिन किंवा नोंदणी करा")}
       </div>
-      <a href="/worker-login" className="inline-block bg-brand text-white py-3 px-7 rounded-xl no-underline font-bold text-[16px]">
-        {language === "hi" ? "लॉगिन करें" : language === "mr" ? "लॉगिन करा" : "Login / Register"}
+      <a href="/worker-login" className="inline-block rounded-xl bg-brand px-7 py-3 text-[16px] font-bold text-white no-underline">
+        {L("Login / Register", "लॉगिन करें", "लॉगिन करा")}
       </a>
     </div>
   );
+
+  // ── Nearby feed ──
+  const feed = alerts.map((job) => ({
+    job,
+    dist: workerPos && job.latitude && job.longitude ? haversine(workerPos.lat, workerPos.lng, job.latitude, job.longitude) : null,
+  }));
+  const inRange = feed.filter((f) => f.dist === null || f.dist <= radius);
+  const hiddenCount = feed.length - inRange.length;
+  const sortedFeed = [...inRange].sort(
+    sort === "pay"
+      ? (a, b) => Number(b.job.salary || 0) - Number(a.job.salary || 0)
+      : (a, b) => (a.dist ?? 999) - (b.dist ?? 999)
+  );
+  const nextRadius = RADII.find((r) => r > radius);
+
+  const skillList = (worker.skills || "").split(/[,،;、]/).map((s) => s.trim()).filter(Boolean);
+  const city = (worker.location || "").split(",")[0].trim();
+  const areas = [worker.location, ...(worker.serviceAreas || [])].filter((a): a is string => Boolean(a));
+  const docs = worker.documents || [];
+  const allDocsVerified = docs.length > 0 && docs.every((d) => d.verified);
+
+  const greeting = L("Namaste", "नमस्ते", "नमस्कार");
+  const ago = (iso?: string) => {
+    if (!iso) return "";
+    const days = Math.round((Date.now() - new Date(iso).getTime()) / 86400000);
+    const rtf = new Intl.RelativeTimeFormat(language, { numeric: "auto" });
+    return days < 1 ? rtf.format(0, "day") : days < 14 ? rtf.format(-days, "day") : rtf.format(-Math.round(days / 7), "week");
+  };
 
   return (
     <>
@@ -357,137 +455,429 @@ export default function WorkerDashboard() {
         />
       )}
 
-      <div className="max-w-[680px] my-0 mx-auto py-6 px-4 font-plain">
+      <div className="mx-auto max-w-[1180px] space-y-5 px-4 py-5 sm:px-6">
 
-        {/* Header */}
-        <div className="bg-[linear-gradient(135deg,#006491,#004f73)] text-white rounded-2xl py-5 px-6 mb-5 shadow-[0_4px_20px_rgba(0,100,145,.3)]">
-          <div className="text-[20px] font-bold">{t.workerDashboardTitle}</div>
-          <div className="text-[14px] opacity-[0.85] mt-1">{t.welcome}, <b>{worker.name}</b></div>
-          {gpsOn && workerPos && (
-            <div className="mt-2.5 bg-[rgba(255,255,255,.15)] rounded-lg py-[5px] px-3 text-[12px] inline-flex items-center gap-1.5">
-              <span className="w-2 h-2 bg-green-400 rounded-full inline-block" />
-              {t.liveActive}
-            </div>
-          )}
-        </div>
-
-        {/* ── EARNINGS TRACKER ─────────────────────────── */}
-        <div className="bg-white rounded-2xl py-4 px-5 mb-5 shadow-[0_2px_12px_rgba(0,0,0,.08)]">
-          <div className="text-[14px] font-bold mb-3 text-gray-700">
-            💰 {language === "hi" ? "मेरी कमाई" : language === "mr" ? "माझी कमाई" : "My Earnings"}
-          </div>
-          <div className="grid grid-cols-3 gap-2.5">
-            {[
-              { label: language === "hi" ? "आज" : language === "mr" ? "आज" : "Today",   value: `₹${todayEarnings}`, text: "text-emerald-500", soft: "bg-green-50" },
-              { label: language === "hi" ? "इस हफ्ते" : language === "mr" ? "या आठवड्यात" : "This Week", value: `₹${weekEarnings}`, text: "text-brand", soft: "bg-brand-light" },
-              { label: language === "hi" ? "कुल काम" : language === "mr" ? "एकूण काम" : "Total Jobs",  value: totalJobs, text: "text-violet-500", soft: "bg-violet-50" },
-            ].map(s => (
-              <div key={s.label} className={`text-center rounded-xl py-3 px-1.5 ${s.soft}`}>
-                <div className={`text-[20px] font-extrabold ${s.text}`}>{s.value}</div>
-                <div className="text-[11px] text-gray-500 mt-0.5">{s.label}</div>
+        {/* ── WELCOME BANNER ─────────────────────────── */}
+        <section className={`${CARD} overflow-hidden`}>
+          <div className="relative bg-[linear-gradient(100deg,#eef5ff_0%,#dcebff_60%,#c8dcf6_100%)] px-5 py-6 sm:px-7 sm:py-7">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={HERO_PEOPLE}
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 right-0 hidden h-full w-[50%] select-none object-cover object-[center_25%] [mask-image:linear-gradient(to_right,transparent_0%,#000_45%)] md:block"
+              draggable={false}
+            />
+            <div className="relative z-10 max-w-[620px]">
+              <h1 className="m-0 text-[clamp(26px,3.2vw,36px)] font-extrabold leading-tight text-[#0d2250]">
+                {greeting} <span className="text-[#1a6cf0]">{worker.name}!</span>
+              </h1>
+              <h2 className="m-0 mt-1.5 text-[clamp(17px,2vw,22px)] font-bold text-[#0d2250]">
+                {L("Welcome to your Worker Portal", "आपका Worker Portal में स्वागत है", "तुमच्या Worker Portal मध्ये स्वागत आहे")}
+              </h2>
+              <p className="m-0 mt-2 text-[14.5px] text-[#33415f]">
+                {L("Find new jobs, get the right information, and receive payments on time.", "यहाँ आपको नए काम, सही जानकारी और समय पर पेमेंट की सुविधा मिलती है।", "येथे तुम्हाला नवीन कामे, योग्य माहिती आणि वेळेवर पेमेंटची सुविधा मिळते.")}
+              </p>
+              <div className="mt-4">
+                {profilePct === 100 ? (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-[#a7e8c8] bg-[#dff6e8] px-4 py-1.5 text-[13.5px] font-semibold text-[#0b6b3a]">
+                    <FiCheckCircle size={17} aria-hidden="true" /> {L("Your profile is complete", "आपकी प्रोफ़ाइल पूरी है", "तुमची प्रोफाइल पूर्ण आहे")}
+                  </span>
+                ) : (
+                  <Link href="/worker-profile" className="inline-flex items-center gap-2 rounded-full border border-[#fcd9a1] bg-[#fff3d6] px-4 py-1.5 text-[13.5px] font-semibold text-[#8a5a00] no-underline">
+                    {L(`Profile ${profilePct}% complete — finish it`, `प्रोफ़ाइल ${profilePct}% पूरी — पूरा करें`, `प्रोफाइल ${profilePct}% पूर्ण — पूर्ण करा`)}
+                  </Link>
+                )}
               </div>
-            ))}
+            </div>
           </div>
+
+          <div className="flex flex-wrap items-center gap-3 border-t border-[#e3eaf5] bg-white px-4 py-3.5 sm:px-5">
+            <div className="flex items-center gap-3 rounded-xl border border-[#fde6b0] bg-[#fff8e6] px-4 py-2">
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#fff0c2] text-[#f5a000]"><FiStar size={20} className="fill-current" aria-hidden="true" /></span>
+              <div className="leading-tight">
+                <div className="text-[15px] font-bold text-[#0d2250]">{avgRating ?? "—"}</div>
+                <div className="text-[12px] text-[#6b7a95]">({reviewCount} {L("Reviews", "रिव्यू", "रिव्ह्यू")})</div>
+              </div>
+            </div>
+            <div className={`flex items-center gap-3 rounded-xl border px-4 py-2 ${gpsOn && workerPos ? "border-[#bfe9d1] bg-[#effaf4]" : "border-[#e3eaf5] bg-[#f7f9fd]"}`}>
+              <span className={`flex h-10 w-10 items-center justify-center rounded-lg ${gpsOn && workerPos ? "bg-[#d3f3e1] text-[#13783d]" : "bg-[#e9eef8] text-[#6b7a95]"}`}><FiMapPin size={20} aria-hidden="true" /></span>
+              <div className="leading-tight">
+                <div className="text-[14px] font-bold text-[#0d2250]">{gpsOn && workerPos ? L("Live location on", "लाइव लोकेशन चालू", "लाइव्ह लोकेशन सुरू") : L("Location off", "लोकेशन बंद", "लोकेशन बंद")}</div>
+                <div className="text-[12px] text-[#6b7a95]">{city || L("Set your area in profile", "प्रोफ़ाइल में इलाका जोड़ें", "प्रोफाइलमध्ये परिसर जोडा")}</div>
+              </div>
+            </div>
+            <Link href="/worker-profile" className="ml-auto inline-flex items-center gap-2 rounded-xl bg-[#1a6cf0] px-5 py-3 text-[14px] font-semibold text-white no-underline shadow-[0_6px_16px_rgba(26,108,240,0.3)] hover:brightness-95">
+              <FiUser size={17} aria-hidden="true" /> {L("View my profile", "अपना प्रोफ़ाइल देखें", "माझी प्रोफाइल पहा")} <FiChevronRight size={16} aria-hidden="true" />
+            </Link>
+          </div>
+        </section>
+
+        {/* ── STAT TILES ─────────────────────────── */}
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <StatTile
+            icon={<FiBriefcase size={22} className="text-[#1a6cf0]" aria-hidden="true" />} iconBg="bg-[#e6efff]"
+            label={L("Total jobs done", "कुल काम पूरे किए", "एकूण कामे पूर्ण")}
+            value={completed.length}
+            sub={completed.length ? L("Payments received", "पेमेंट मिल चुका", "पेमेंट मिळाले") : L("Accept your first job", "पहला काम स्वीकारें", "पहिले काम स्वीकारा")}
+            subClass="text-[#0b8a4c]"
+          />
+          <StatTile
+            icon={<span className="text-[22px] font-bold text-[#1a6cf0]">₹</span>} iconBg="bg-[#e6efff]"
+            label={L("Total earnings", "कुल कमाई", "एकूण कमाई")}
+            value={`₹${totalEarned.toLocaleString("en-IN")}`}
+            sub={L("Added to your account", "आपके खाते में जोड़ा गया", "तुमच्या खात्यात जमा")}
+            subClass="text-[#0b8a4c]"
+          />
+          {worker.experienceYears ? (
+            <StatTile
+              icon={<FiCalendar size={22} className="text-[#1a6cf0]" aria-hidden="true" />} iconBg="bg-[#e6efff]"
+              label={L("Experience", "अनुभव", "अनुभव")}
+              value={`${worker.experienceYears}+ ${L("years", "साल", "वर्षे")}`}
+              sub={worker.skills}
+            />
+          ) : (
+            <StatTile
+              icon={<FiStar size={22} className="fill-[#f5a000] text-[#f5a000]" aria-hidden="true" />} iconBg="bg-[#fff0c2]"
+              label={L("Average rating", "औसत रेटिंग", "सरासरी रेटिंग")}
+              value={avgRating ?? "—"}
+              sub={`${reviewCount} ${L("employer reviews", "नियोक्ता रिव्यू", "मालक रिव्ह्यू")}`}
+            />
+          )}
+          {worker.backgroundVerified ? (
+            <StatTile
+              icon={<FiShield size={22} className="text-[#13a05a]" aria-hidden="true" />} iconBg="bg-[#dff6e8]"
+              label={L("Background check", "पृष्ठभूमि जाँच", "पार्श्वभूमी तपासणी")}
+              value={<span className="text-[#0b8a4c]">{L("Verified", "सत्यापित", "सत्यापित")} ✓</span>}
+              sub={L("Verification passed", "वेरिफिकेशन पास", "पडताळणी पूर्ण")}
+              subClass="text-[#0b8a4c]"
+            />
+          ) : (
+            <StatTile
+              icon={<FiCalendar size={22} className="text-[#13a05a]" aria-hidden="true" />} iconBg="bg-[#dff6e8]"
+              label={L("This week", "इस हफ्ते", "या आठवड्यात")}
+              value={`₹${weekEarned.toLocaleString("en-IN")}`}
+              sub={L("Last 7 days", "पिछले 7 दिन", "मागील 7 दिवस")}
+            />
+          )}
         </div>
 
-        {/* GPS button */}
-        {!gpsOn && (
-          <button onClick={enableGPS} className="w-full p-3.5 mb-5 bg-brand text-white rounded-xl text-[15px] font-semibold cursor-pointer shadow-[0_4px_14px_rgba(0,100,145,.3)] flex items-center justify-center gap-2">
-            {t.enableLocationFull}
-          </button>
-        )}
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+          {/* ═════════ LEFT COLUMN ═════════ */}
+          <div className="min-w-0 space-y-5">
 
-        {/* Job Alerts */}
-        <div className="mb-6">
-          <div className="text-[17px] font-bold mb-3 flex items-center gap-1.5">
-            🔔 {t.newJobsNear}
-            {alerts.length > 0 && <span className="bg-danger text-white rounded-xl py-0.5 px-2 text-[12px]">{alerts.length}</span>}
-          </div>
-
-          {!gpsOn && (
-            <div className="bg-[#f8f9fa] rounded-xl p-6 text-center text-[#888888]">
-              <div className="text-[36px] mb-2">📍</div>
-              <div className="font-semibold">{t.enableToSee}</div>
-            </div>
-          )}
-
-          {gpsOn && alerts.length === 0 && (
-            <div className="bg-[#f8f9fa] rounded-xl p-6 text-center text-[#888888]">
-              <div className="text-[36px] mb-2">🔍</div>
-              <div className="font-semibold">{t.noJobsNearby}</div>
-              <div className="text-[12px] mt-1"><a href="/jobs" className="text-brand">{t.browseJobs}</a></div>
-            </div>
-          )}
-
-          {alerts.map(job => {
-            const dist = workerPos && job.latitude && job.longitude
-              ? haversine(workerPos.lat, workerPos.lng, job.latitude, job.longitude).toFixed(1) : null;
-            return (
-              <div key={job._id} className="bg-white rounded-2xl mb-3 shadow-[0_2px_12px_rgba(0,0,0,.08)] overflow-hidden border border-[#f0f0f0]">
-                {job.isUrgent && <div className="bg-danger text-white py-1 px-3 text-[12px] font-bold">🚨 {t.urgent}</div>}
-                <div className="p-4">
-                  <div className="flex justify-between items-start mb-2.5">
-                    <div>
-                      <div className="font-bold text-[16px]">{job.jobTitle?.[language] || job.jobTitle?.en}</div>
-                      <div className="text-[13px] text-gray-500 mt-0.5">📍 {job.location?.[language] || job.location?.en}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-extrabold text-[18px] text-danger">₹{job.salary}</div>
-                      <div className="text-[11px] text-[#888888]">{job.paymentMethod}</div>
-                    </div>
+            {/* ── WORK AVAILABLE TODAY ── */}
+            <section className={`${CARD} p-4 sm:p-5`}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#e6efff] text-[#1a6cf0]"><FiBriefcase size={24} aria-hidden="true" /></span>
+                  <div>
+                    <h2 className="m-0 text-[19px] font-bold text-[#0d2250]">{L("Work available today", "आज के लिए उपलब्ध काम", "आजसाठी उपलब्ध काम")}</h2>
+                    <p className="m-0 text-[13px] text-[#6b7a95]">{L("Best matches for your skills", "आपके कौशल के अनुसार सबसे बेहतर काम", "तुमच्या कौशल्यानुसार सर्वोत्तम कामे")}</p>
                   </div>
-
-                  <div className="flex gap-2 flex-wrap mb-3">
-                    {dist && <span className="bg-brand-light text-brand rounded-[20px] py-[3px] px-2.5 text-[12px] font-semibold">📏 {dist} {t.kmAway}</span>}
-                    {job.skills?.[language] && <span className="bg-gray-100 text-gray-700 rounded-[20px] py-[3px] px-2.5 text-[12px]">🛠️ {job.skills[language]}</span>}
-                  </div>
-
-                  {/* Accept + Call buttons */}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => acceptJob(job)}
-                      disabled={!!acceptingId}
-                      className={`flex-1 py-[13px] px-0 text-white rounded-xl text-[15px] font-bold ${acceptingId === job._id ? "bg-gray-400" : "bg-brand"} ${acceptingId ? "cursor-not-allowed shadow-none" : "cursor-pointer shadow-[0_4px_14px_rgba(0,100,145,.3)]"}`}
+                </div>
+                <div className="flex items-center gap-2.5">
+                  {gpsOn && (
+                    <select
+                      value={sort}
+                      onChange={(e) => setSort(e.target.value as SortKey)}
+                      aria-label={L("Sort by", "क्रम", "क्रम")}
+                      className="cursor-pointer rounded-lg border border-[#dbe4f0] bg-white px-2.5 py-1.5 text-[12.5px] text-[#0d2250] outline-none focus:border-[#1a6cf0]"
                     >
-                      {acceptingId === job._id ? t.accepting : t.acceptNavigate}
+                      <option value="distance">{L("Closest", "सबसे पास", "जवळचे")}</option>
+                      <option value="pay">{L("Highest pay", "सबसे ज़्यादा वेतन", "सर्वाधिक वेतन")}</option>
+                    </select>
+                  )}
+                  <Link href="/jobs" className="inline-flex items-center gap-1.5 rounded-full border border-[#bcd3ff] bg-[#eaf1ff] px-4 py-2 text-[13px] font-semibold text-[#1a4fb0] no-underline hover:bg-[#dbe8ff]">
+                    <FiPlus size={14} aria-hidden="true" /> {L("See more work", "और काम देखें", "आणखी कामे पहा")}
+                  </Link>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {!gpsOn ? (
+                  <div className="rounded-xl border border-dashed border-[#c5d5ee] bg-[#f7faff] p-7 text-center">
+                    <FiMapPin size={30} className="mx-auto mb-2 text-[#1a6cf0]" aria-hidden="true" />
+                    <div className="font-semibold text-[#0d2250]">{t.enableToSee}</div>
+                    <button onClick={enableGPS} className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-[#1a6cf0] px-5 py-2.5 text-[14px] font-semibold text-white shadow-[0_6px_16px_rgba(26,108,240,0.3)] hover:brightness-95">
+                      <FiMapPin size={16} aria-hidden="true" /> {L("Enable Location Now", "अभी लोकेशन चालू करें", "आता लोकेशन सुरू करा")}
                     </button>
-                    {job.contactInfo && (
-                      <a href={`tel:${job.contactInfo}`} className="py-[13px] px-4 bg-emerald-500 text-white rounded-xl font-bold text-[18px] no-underline flex items-center justify-center">
-                        📞
-                      </a>
+                  </div>
+                ) : !available ? (
+                  <div className="rounded-xl border border-dashed border-[#c5d5ee] bg-[#f7faff] p-7 text-center">
+                    <div className="font-semibold text-[#0d2250]">{L("You are set to Not Available", "आप उपलब्ध नहीं हैं", "तुम्ही उपलब्ध नाही")}</div>
+                    <button onClick={toggleAvailable} className="mt-3 cursor-pointer rounded-xl bg-[#1a6cf0] px-5 py-2 text-[13px] font-semibold text-white">
+                      {L("Go Available", "उपलब्ध हों", "उपलब्ध व्हा")}
+                    </button>
+                  </div>
+                ) : sortedFeed.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-[#c5d5ee] bg-[#f7faff] p-7 text-center text-[#6b7a95]">
+                    <div className="font-semibold text-[#0d2250]">{hiddenCount > 0 ? L("More Jobs Hidden", "और नौकरियां छिपी हैं", "आणखी नोकऱ्या लपलेल्या आहेत") : t.noJobsNearby}</div>
+                    <p className="m-0 mt-1 text-[12.5px]">
+                      {hiddenCount > 0
+                        ? L(`${hiddenCount} more employers are hiring beyond ${radius} km.`, `${hiddenCount} और नियोक्ता ${radius} किमी के बाहर भर्ती कर रहे हैं।`, `${hiddenCount} आणखी नियोक्ते ${radius} किमीच्या बाहेर भरती करत आहेत.`)
+                        : L("Check back soon or browse all open jobs.", "जल्द फिर देखें या सभी खुली नौकरियां देखें।", "लवकरच पुन्हा पहा किंवा सर्व खुल्या नोकऱ्या पहा.")}
+                    </p>
+                    {hiddenCount > 0 && nextRadius && (
+                      <button onClick={() => setRadius(nextRadius)} className="mt-3 cursor-pointer rounded-xl bg-[#1a6cf0] px-4 py-2 text-[12.5px] font-semibold text-white">
+                        {L(`Expand to ${nextRadius} km`, `${nextRadius} किमी तक बढ़ाएं`, `${nextRadius} किमी पर्यंत वाढवा`)}
+                      </button>
                     )}
                   </div>
+                ) : (
+                  <>
+                    {sortedFeed.map(({ job, dist }) => {
+                      const title = job.jobTitle?.[language] || job.jobTitle?.en || "";
+                      const skills = job.skills?.[language] || job.skills?.en || "";
+                      return (
+                        <article key={job._id} className="rounded-xl border border-[#d4e2f8] bg-[#f6faff] p-4">
+                          <div className="flex flex-wrap items-start gap-3.5">
+                            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#1a6cf0] text-[24px]" aria-hidden="true">{tradeEmoji(job.jobTitle?.en || title)}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="m-0 text-[16px] font-bold text-[#0d2250]">{title}</h3>
+                                {job.isUrgent && <span className="rounded-md bg-[#1a6cf0] px-2 py-0.5 text-[11px] font-bold text-white">{t.urgent}</span>}
+                              </div>
+                              {skills && <p className="m-0 mt-1 text-[12.5px] text-[#6b7a95]">{skills}</p>}
+                              <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[12.5px] font-semibold">
+                                <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#bcd3ff] bg-white px-2.5 py-1 text-[#0d2250]">
+                                  <span className="flex h-5 w-5 items-center justify-center rounded bg-[#e6efff] text-[11px] text-[#1a6cf0]">₹</span>
+                                  {Number(job.salary).toLocaleString("en-IN")} <span className="font-normal text-[#6b7a95]">{job.paymentMethod}</span>
+                                </span>
+                                {dist !== null && (
+                                  <span className="rounded-lg border border-[#bfe9d1] bg-[#effaf4] px-2.5 py-1 text-[#0b8a4c]">{dist.toFixed(1)} {t.kmAway}</span>
+                                )}
+                                <span className="inline-flex items-center gap-1 truncate text-[12px] font-normal text-[#6b7a95]">
+                                  <FiMapPin size={12} aria-hidden="true" /> {job.location?.[language] || job.location?.en}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex w-full items-center justify-end gap-2 sm:w-auto sm:flex-col sm:items-stretch">
+                              <Link href={`/jobs/${job._id}`} className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#1a6cf0] px-5 py-2.5 text-[13.5px] font-semibold text-white no-underline shadow-[0_6px_16px_rgba(26,108,240,0.3)] hover:brightness-95">
+                                {L("View details", "विवरण देखें", "तपशील पहा")} <FiChevronRight size={15} aria-hidden="true" />
+                              </Link>
+                              <button
+                                onClick={() => acceptJob(job)}
+                                disabled={!!acceptingId}
+                                className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-4 py-2 text-[13px] font-semibold transition ${acceptingId === job._id ? "border-[#cdd8ec] bg-[#eef2f9] text-[#8a96ae]" : "border-[#1a6cf0] bg-white text-[#1a4fb0] hover:bg-[#eaf1ff]"} ${acceptingId ? "cursor-not-allowed" : "cursor-pointer"}`}
+                              >
+                                {acceptingId === job._id ? t.accepting : L("Accept Gig", "काम लें", "काम घ्या")}
+                              </button>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                    {hiddenCount > 0 && nextRadius && (
+                      <button onClick={() => setRadius(nextRadius)} className="w-full cursor-pointer rounded-xl border border-dashed border-[#c5d5ee] bg-[#f7faff] px-4 py-2.5 text-[13px] font-semibold text-[#1a4fb0] hover:bg-[#eaf1ff]">
+                        {L(`${hiddenCount} more jobs beyond ${radius} km — expand to ${nextRadius} km`, `${radius} किमी के बाहर ${hiddenCount} और काम — ${nextRadius} किमी तक बढ़ाएं`, `${radius} किमीच्या बाहेर ${hiddenCount} आणखी कामे — ${nextRadius} किमी पर्यंत वाढवा`)}
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Skills */}
+              {skillList.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="m-0 mb-3 text-[17px] font-bold text-[#0d2250]">{L("Your skills", "आपके कौशल", "तुमची कौशल्ये")}</h3>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {skillList.map((s) => (
+                      <Link key={s} href="/worker-profile" className="flex items-center gap-3 rounded-xl border border-[#e3eaf5] bg-[#fbfcff] p-3.5 no-underline hover:bg-[#f2f7ff]">
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#fff3d6] text-[22px]" aria-hidden="true">{tradeEmoji(s)}</span>
+                        <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-[#0d2250]">{s}</span>
+                        <FiChevronRight size={16} className="shrink-0 text-[#8a96ae]" aria-hidden="true" />
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* ── DOCUMENTS (only when an admin has reviewed some) ── */}
+            {docs.length > 0 && (
+              <section className={`${CARD} p-4 sm:p-5`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#dff6e8] text-[#13a05a]"><FiShield size={24} aria-hidden="true" /></span>
+                    <div>
+                      <h2 className="m-0 text-[18px] font-bold text-[#0d2250]">{L("ID & document verification", "सरकारी पहचान और दस्तावेज़ सत्यापन", "ओळख आणि कागदपत्र पडताळणी")}</h2>
+                      <p className="m-0 text-[13px] text-[#6b7a95]">{allDocsVerified ? L("All your documents are verified. You are ready to work.", "सभी दस्तावेज़ों की पुष्टि हो चुकी है। अब आप काम के लिए तैयार हैं।", "सर्व कागदपत्रांची पुष्टी झाली आहे. आता तुम्ही कामासाठी तयार आहात.") : L("Some documents are pending review.", "कुछ दस्तावेज़ों की जाँच बाकी है।", "काही कागदपत्रांची तपासणी बाकी आहे.")}</p>
+                    </div>
+                  </div>
+                  {allDocsVerified && <span className="rounded-full bg-[#dff6e8] px-4 py-1.5 text-[13px] font-bold text-[#0b8a4c]">{L("All approved", "सभी स्वीकृत", "सर्व मंजूर")}</span>}
+                </div>
+                <div className="mt-4 space-y-3">
+                  {docs.map((d) => (
+                    <div key={d.title} className={`flex items-center gap-3.5 rounded-xl border-2 p-3.5 ${d.verified ? "border-[#bfe9d1] bg-[#f3fbf7]" : "border-[#fde6b0] bg-[#fffaf0]"}`}>
+                      <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${d.verified ? "bg-[#d3f3e1] text-[#13a05a]" : "bg-[#fff0c2] text-[#d97706]"}`}><FiFileText size={22} aria-hidden="true" /></span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[14.5px] font-bold text-[#0d2250]">{d.title}</div>
+                        {d.detail && <div className="truncate text-[12px] text-[#6b7a95]">{d.detail}</div>}
+                      </div>
+                      <span className={`shrink-0 text-[14px] font-bold ${d.verified ? "text-[#0b8a4c]" : "text-[#b45309]"}`}>
+                        {d.verified ? <>{L("Verified", "सत्यापित", "सत्यापित")} ✓</> : L("Pending", "बाकी", "प्रलंबित")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* ── EMPLOYER FEEDBACK ── */}
+            <section className={`${CARD} p-4 sm:p-5`}>
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <h2 className="m-0 text-[18px] font-bold text-[#0d2250]">{L("Recent employer feedback", "हाल के नियोक्ता की प्रतिक्रिया", "अलीकडील मालकांचा अभिप्राय")}</h2>
+                  <p className="m-0 text-[13px] text-[#6b7a95]">{L("What employers said about your completed jobs", "आपके द्वारा पूरे किए गए कामों पर नियोक्ताओं की राय", "तुम्ही पूर्ण केलेल्या कामांवर मालकांचे मत")}</p>
+                </div>
+                {reviews.length > 0 && (
+                  <Link href="/my-jobs" className="text-[13px] font-semibold text-[#1a4fb0] no-underline hover:underline">
+                    {L(`See all ${reviews.length} reviews`, `सभी ${reviews.length} समीक्षाएँ देखें`, `सर्व ${reviews.length} पुनरावलोकने पहा`)} →
+                  </Link>
+                )}
+              </div>
+              {reviews.length === 0 ? (
+                <div className="mt-4 rounded-xl border border-dashed border-[#c5d5ee] bg-[#f7faff] p-6 text-center text-[13px] text-[#6b7a95]">
+                  {L("Reviews from employers will appear here after you complete jobs.", "काम पूरे करने के बाद नियोक्ताओं के रिव्यू यहाँ दिखेंगे।", "काम पूर्ण केल्यानंतर मालकांचे रिव्ह्यू येथे दिसतील.")}
+                </div>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  {reviews.slice(0, 2).map((r) => {
+                    const company = r.job?.companyName || L("Employer", "नियोक्ता", "मालक");
+                    return (
+                      <div key={r._id} className="rounded-xl border border-[#e3eaf5] bg-[#fbfcff] p-4">
+                        <div className="flex items-start gap-3">
+                          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#e6efff] text-[17px] font-bold text-[#1a4fb0]">{company.charAt(0).toUpperCase()}</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="truncate text-[14.5px] font-bold text-[#0d2250]">{company}</div>
+                                <div className="text-[12px] text-[#8a96ae]">{r.job?.location?.[language] || r.job?.location?.en} {r.updatedAt ? `• ${ago(r.updatedAt)}` : ""}</div>
+                              </div>
+                              {Number(r.rating) > 0 && (
+                                <span className="inline-flex gap-0.5" aria-label={`${r.rating} / 5`}>
+                                  {[1, 2, 3, 4, 5].map((n) => <FiStar key={n} size={15} className={n <= Math.round(Number(r.rating)) ? "fill-[#f5b301] text-[#f5b301]" : "text-[#d5dbe8]"} aria-hidden="true" />)}
+                                </span>
+                              )}
+                            </div>
+                            <p className="m-0 mt-2 text-[13.5px] italic leading-relaxed text-[#33415f]">&ldquo;{r.review}&rdquo;</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          </div>
+
+          {/* ═════════ RIGHT COLUMN ═════════ */}
+          <aside className="min-w-0 space-y-5">
+            {/* Quick start */}
+            <section className={`${CARD} p-4 sm:p-5`}>
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#fff0c2] text-[#f5a000]"><FiZap size={22} className="fill-current" aria-hidden="true" /></span>
+                <h2 className="m-0 text-[18px] font-bold text-[#0d2250]">{L("Start work quickly", "जल्दी से काम के लिए", "लवकर कामासाठी")}</h2>
+              </div>
+
+              <div className="mt-4 border-t border-[#eef2f8] pt-4">
+                <div className="mb-2 text-[13.5px] font-semibold text-[#0d2250]">{L("Availability", "उपलब्धता", "उपलब्धता")}</div>
+                <button
+                  role="switch"
+                  aria-checked={available}
+                  onClick={toggleAvailable}
+                  className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-[#e3eaf5] bg-[#fbfcff] p-3 text-left"
+                >
+                  <span className={`relative h-6 w-11 shrink-0 rounded-full transition ${available ? "bg-[#1fb25a]" : "bg-[#c3cddd]"}`}>
+                    <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${available ? "left-[22px]" : "left-0.5"}`} />
+                  </span>
+                  <span className="text-[13.5px] font-semibold text-[#0d2250]">{available ? L("Available for Work", "काम के लिए उपलब्ध", "कामासाठी उपलब्ध") : L("Not Available", "उपलब्ध नहीं", "उपलब्ध नाही")}</span>
+                </button>
+              </div>
+
+              <div className="mt-4">
+                <div className="mb-2 text-[13.5px] font-semibold text-[#0d2250]">{L("Job search distance", "काम खोजने की दूरी", "काम शोधण्याचे अंतर")}</div>
+                <div className="flex flex-wrap gap-2">
+                  {RADII.map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => setRadius(r)}
+                      className={`cursor-pointer rounded-full border px-4 py-1.5 text-[13px] font-semibold transition ${radius === r ? "border-[#1a6cf0] bg-[#1a6cf0] text-white" : "border-[#bcd3ff] bg-[#f2f7ff] text-[#1a4fb0] hover:bg-[#e3eeff]"}`}
+                    >
+                      {r} km
+                    </button>
+                  ))}
                 </div>
               </div>
-            );
-          })}
+
+              <div className="mt-4">
+                <div className="mb-2 flex items-center gap-2 text-[13.5px] font-semibold text-[#0d2250]"><FiBriefcase size={15} aria-hidden="true" /> {L("Join work today", "तुरंत जॉइन करने के लिए", "लगेच कामावर रुजू होण्यासाठी")}</div>
+                {gpsOn ? (
+                  <div className="flex items-center gap-2.5 rounded-xl border border-[#bfe9d1] bg-[#effaf4] px-4 py-3 text-[13.5px] font-semibold text-[#0b8a4c]">
+                    <FiCheckCircle size={18} aria-hidden="true" /> {L("Location on — you're ready", "लोकेशन चालू — आप तैयार हैं", "लोकेशन सुरू — तुम्ही तयार आहात")}
+                  </div>
+                ) : (
+                  <button onClick={enableGPS} className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl border border-[#bfe9d1] bg-[#effaf4] px-4 py-3 text-left text-[13.5px] font-semibold text-[#0b8a4c] hover:bg-[#e2f6ea]">
+                    <FiCheckCircle size={18} aria-hidden="true" /> {L("Start work today", "आज ही काम शुरू करें", "आजच काम सुरू करा")}
+                  </button>
+                )}
+              </div>
+            </section>
+
+            {/* Service area */}
+            <section className={`${CARD} p-4 sm:p-5`}>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="m-0 text-[17px] font-bold text-[#0d2250]">{L("Service area", "सेवा क्षेत्र", "सेवा क्षेत्र")}{city ? ` (${city})` : ""}</h2>
+                <Link href="/worker-profile" className="text-[12.5px] font-semibold text-[#1a4fb0] no-underline hover:underline">{L("Edit", "संपादित करें", "संपादित करा")}</Link>
+              </div>
+              {areas.length === 0 ? (
+                <p className="m-0 mt-3 text-[13px] text-[#6b7a95]">{L("Add your area in your profile to get nearby jobs.", "पास की नौकरियों के लिए प्रोफ़ाइल में अपना इलाका जोड़ें।", "जवळच्या नोकऱ्यांसाठी प्रोफाइलमध्ये परिसर जोडा.")}</p>
+              ) : (
+                <ul className="m-0 mt-3 list-none space-y-2 p-0">
+                  {areas.map((a) => (
+                    <li key={a} className="flex items-center gap-2.5 rounded-lg bg-[#f4f6fa] px-3 py-2.5 text-[13.5px] text-[#0d2250]">
+                      <FiMapPin size={16} className="shrink-0 text-[#e5334f]" aria-hidden="true" /> <span className="min-w-0">{a}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="m-0 mt-3 text-[12.5px] text-[#8a96ae]">{L(`Search distance: within ${radius} km`, `खोज की सीमा: ${radius} किमी तक`, `शोध मर्यादा: ${radius} किमी पर्यंत`)}</p>
+            </section>
+
+            {/* Help */}
+            <section className="rounded-2xl bg-[linear-gradient(160deg,#10285a_0%,#0a1c42_100%)] p-5 text-white shadow-[0_10px_30px_rgba(11,42,92,0.25)]">
+              <div className="flex items-start gap-3.5">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/10 text-[#7fb2ff] ring-1 ring-white/20"><FiHeadphones size={24} aria-hidden="true" /></span>
+                <div>
+                  <h2 className="m-0 text-[17px] font-bold">{L("Trouble finding work?", "काम खोजने में दिक्कत?", "काम शोधण्यात अडचण?")}</h2>
+                  <p className="m-0 mt-1 text-[13px] text-[#c9d9f3]">
+                    {gpsOn
+                      ? L(`${alerts.length} new jobs match your profile`, `${alerts.length} नए जॉब आपके प्रोफ़ाइल के अनुसार`, `${alerts.length} नवीन कामे तुमच्या प्रोफाइलनुसार`)
+                      : L("Turn on location to see jobs near you", "पास के काम देखने के लिए लोकेशन चालू करें", "जवळची कामे पाहण्यासाठी लोकेशन सुरू करा")}
+                  </p>
+                </div>
+              </div>
+              <Link href="/jobs" className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-[#1f8bff] px-4 py-3 text-[14px] font-semibold text-white no-underline hover:brightness-110">
+                <FiSearch size={16} aria-hidden="true" /> {L("Browse jobs", "जॉब ब्राउज़ करें", "नोकऱ्या ब्राउझ करा")}
+              </Link>
+              <Link href="/my-jobs" className="mt-2.5 flex items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/5 px-4 py-3 text-[14px] font-semibold text-white no-underline hover:bg-white/10">
+                <FiCalendar size={16} aria-hidden="true" /> {L("My active contracts", "मेरे सक्रिय कॉन्ट्रैक्ट", "माझे सक्रिय कॉन्ट्रॅक्ट")}
+              </Link>
+            </section>
+          </aside>
         </div>
 
-        {/* Job History */}
-        <div>
-          <div className="text-[17px] font-bold mb-3">📋 {t.jobHistory}</div>
-          {jobs.length === 0 ? (
-            <div className="bg-[#f8f9fa] rounded-xl p-6 text-center text-[#888888]">
-              <div className="text-[36px] mb-2">📂</div>
-              <div className="font-semibold">{t.noJobsYet}</div>
-            </div>
-          ) : jobs.map(j => {
-            const sc = (j.status && STATUS_CONFIG[j.status]) || STATUS_CONFIG.accepted;
-            return (
-              <div key={j._id} className="bg-white rounded-[14px] py-3.5 px-4 mb-2.5 shadow-[0_2px_8px_rgba(0,0,0,.06)] flex justify-between items-center border border-[#f0f0f0]">
-                <div>
-                  <div className="font-semibold text-[14px]">{j.job?.jobTitle?.[language] || j.job?.jobTitle?.en}</div>
-                  <div className="text-[12px] text-gray-500 mt-0.5">{j.job?.location?.[language] || j.job?.location?.en}</div>
-                  <div className="text-[12px] text-brand mt-0.5 font-semibold">₹{j.job?.salary}</div>
-                </div>
-                <div className="text-right">
-                  <div className={`rounded-[20px] py-1 px-2.5 text-[12px] font-semibold ${sc.soft} ${sc.text}`}>{sc.icon} {sc.label}</div>
-                  {j.isCompleted && j.rating && <div className="text-[12px] mt-1">⭐ {j.rating}/5</div>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        {/* ── FOOTER ─────────────────────────── */}
+        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e3eaf5] pt-4 text-[12.5px] text-[#8a96ae]">
+          <span>© {new Date().getFullYear()} HireMate</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link href="/ai-suggestions" className="font-semibold text-[#5b6a85] no-underline hover:underline">{L("Help Center", "सहायता केंद्र", "मदत केंद्र")}</Link>
+            <a href="tel:112" className="inline-flex items-center gap-2 rounded-full border border-[#f7b9c4] bg-[#fff1f3] px-4 py-2 text-[12.5px] font-bold text-[#d6203a] no-underline hover:bg-[#ffe4e8]">
+              <FiPhoneCall size={14} aria-hidden="true" /> {L("Emergency SOS (112)", "इमरजेंसी SOS (112)", "इमर्जन्सी SOS (112)")}
+            </a>
+          </div>
+        </footer>
       </div>
     </>
   );

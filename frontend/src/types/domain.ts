@@ -24,6 +24,25 @@ export interface Job {
   longitude?: number;
   applicationCount?: number;
   status?: string;
+  // ── Optional employer-supplied details shown on the job page (each section hides when empty) ──
+  /** Trade category tag, e.g. "Automobile Repair". */
+  category?: string | LocalizedText;
+  ownerName?: string;
+  employerVerified?: boolean;
+  /** Wage period. Without it the page shows the amount with no "/ Day" label. */
+  salaryUnit?: "hour" | "day" | "week" | "month";
+  vacancies?: number;
+  /** e.g. "Afternoon lunch + 2 cups hot tea included". */
+  perks?: string | LocalizedText;
+  /** Nearby landmarks; the first is highlighted. */
+  landmarks?: (string | LocalizedText)[];
+  busStop?: string | LocalizedText;
+  dutyTimings?: string;
+  dutyNote?: string | LocalizedText;
+  toolsProvided?: string | LocalizedText;
+  toolsNote?: string | LocalizedText;
+  /** ISO timestamp from the API (when present), used for "Posted 2 hours ago". */
+  createdAt?: string;
 }
 
 export type ApplicationStatus = "accepted" | "on_the_way" | "arrived" | "completed";

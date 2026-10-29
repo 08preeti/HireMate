@@ -18,6 +18,22 @@ export interface Worker {
   rating?: number | string;
   totalReviews?: number;
   currentLocation?: LatLng;
+  // Optional verification / profile details shown on the dashboard. Each section hides when empty.
+  /** Short self-introduction shown under "About Me". */
+  about?: string;
+  experienceYears?: number;
+  /** True only once an admin has completed the background check. */
+  backgroundVerified?: boolean;
+  /** Documents an admin has reviewed, e.g. { title: "Driving Licence", detail: "MH-15-…", verified: true }. */
+  documents?: WorkerDocument[];
+  /** Extra neighbourhoods the worker serves (besides `location`). */
+  serviceAreas?: string[];
+}
+
+export interface WorkerDocument {
+  title: string;
+  detail?: string;
+  verified: boolean;
 }
 
 export interface Employer {
