@@ -22,4 +22,9 @@ export const STANDALONE_PATHS: readonly string[] = [
   "/employer-login",
   "/employer-register",
 ];
-export const isStandalonePath = (pathname: string): boolean => STANDALONE_PATHS.includes(pathname);
+export const isStandalonePath = (pathname: string): boolean =>
+  STANDALONE_PATHS.includes(pathname);
+
+// Pages that draw their own sidebar + top bar (WorkerShell / EmployerShell).
+// The global Header and BottomNav stay hidden on these paths.
+export const SHELL_PATHS: string[] = ["/ai-suggestions", "/employer-dashboard", "/post-job", "/applications"];

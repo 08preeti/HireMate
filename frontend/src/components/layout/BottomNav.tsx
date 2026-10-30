@@ -4,6 +4,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { isStandalonePath } from "@/config/routes";
+import { SHELL_PATHS } from "@/config/routes";
+
 
 interface NavTab {
   path: string;
@@ -29,7 +31,7 @@ const EMPLOYER_TABS: NavTab[] = [
 ];
 
 // Pages where bottom nav should NOT show
-const HIDE_ON = ["/onboarding", "/worker-login", "/navigate"];
+const HIDE_ON = ["/onboarding", "/worker-login", "/navigate", ...SHELL_PATHS];
 
 export default function BottomNav() {
   const pathname = usePathname();

@@ -11,6 +11,27 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 }
 
+// "Later" / install-dismissal is remembered so the banner doesn't come back on every page load.
+const DISMISS_KEY = "hm_install_dismissed_at";
+const SNOOZE_MS = 7 * 24 * 60 * 60 * 1000; // ask again after 7 days
+
+const recentlyDismissed = (): boolean => {
+  try {
+    const at = Number(window.localStorage.getItem(DISMISS_KEY));
+    return !!at && Date.now() - at < SNOOZE_MS;
+  } catch {
+    return false;
+  }
+};
+
+const rememberDismissal = () => {
+  try {
+    window.localStorage.setItem(DISMISS_KEY, String(Date.now()));
+  } catch {
+    /* storage unavailable — ignore */
+  }
+};
+
 export default function InstallPrompt() {
   const pathname = usePathname();
   const { language }           = useLanguage();
@@ -19,30 +40,42 @@ export default function InstallPrompt() {
   const [installed, setInstalled] = useState(false);
 
   useEffect(() => {
-    // Check if already installed
+    // Already installed, or the user tapped "Later" recently — never show the banner.
     if (window.matchMedia("(display-mode: standalone)").matches) {
       setInstalled(true);
       return;
     }
+    const snoozed = recentlyDismissed();
 
-    // Listen for the install prompt event
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    // Listen for the install prompt event (keep it so the Install button still works)
     const handler = (e: Event) => {
       e.preventDefault();
       setPrompt(e as BeforeInstallPromptEvent);
-      // Show banner after 3 seconds
-      setTimeout(() => setVisible(true), 3000);
+      if (!snoozed) timer = setTimeout(() => setVisible(true), 3000);
+    };
+
+    // Listen for successful install
+    const onInstalled = () => {
+      setInstalled(true);
+      setVisible(false);
     };
 
     window.addEventListener("beforeinstallprompt", handler);
+    window.addEventListener("appinstalled", onInstalled);
 
-    // Listen for successful install
-    window.addEventListener("appinstalled", () => {
-      setInstalled(true);
-      setVisible(false);
-    });
-
-    return () => window.removeEventListener("beforeinstallprompt", handler);
+    return () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
   }, []);
+
+  const dismiss = () => {
+    rememberDismissal();
+    setVisible(false);
+  };
 
   const install = async () => {
     if (!prompt) return;
@@ -51,6 +84,8 @@ export default function InstallPrompt() {
     if (outcome === "accepted") {
       setVisible(false);
       setInstalled(true);
+    } else {
+      dismiss();
     }
     setPrompt(null);
   };
@@ -60,7 +95,7 @@ export default function InstallPrompt() {
   if (!visible || installed || isStandalonePath(pathname)) return null;
 
   return (
-    <div className="fixed bottom-20 left-4 right-4 bg-white rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,.18)] py-4 px-[18px] flex items-center gap-3.5 z-[9999] border-[1.5px] border-brand animate-slide-up">
+    <div className="fixed bottom-20 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-[420px] bg-white rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,.18)] py-4 px-[18px] flex items-center gap-3.5 z-[9999] border-[1.5px] border-brand animate-slide-up">
 
       <div className="text-[36px] shrink-0">📲</div>
 
@@ -78,7 +113,7 @@ export default function InstallPrompt() {
           className="py-2 px-3.5 bg-brand text-white rounded-[10px] font-bold text-[13px] cursor-pointer">
           {L("Install", "इंस्टॉल", "इन्स्टॉल")}
         </button>
-        <button onClick={() => setVisible(false)}
+        <button onClick={dismiss}
           className="py-[5px] px-3.5 bg-transparent text-gray-400 text-[12px] cursor-pointer">
           {L("Later", "बाद में", "नंतर")}
         </button>
