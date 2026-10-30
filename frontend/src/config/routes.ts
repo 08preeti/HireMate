@@ -24,5 +24,7 @@ export const STANDALONE_PATHS: readonly string[] = [
 ];
 export const isStandalonePath = (pathname: string): boolean =>
   STANDALONE_PATHS.includes(pathname);
-// Routes where the worker app shell is displayed.
-export const SHELL_PATHS: readonly string[] = ["/worker-dashboard"];
+
+// Pages that draw their own sidebar + top bar (WorkerShell / EmployerShell).
+// The global Header and BottomNav stay hidden on these paths.
+export const SHELL_PATHS: string[] = ["/ai-suggestions", "/employer-dashboard", "/post-job", "/applications"];

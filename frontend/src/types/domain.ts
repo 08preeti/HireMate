@@ -56,6 +56,7 @@ export interface Application {
   message?: string;
   applicantName?: string;
   applicantContact?: string;
+  createdAt?: string;
   updatedAt?: string;
   job?: Job;
   worker?: Worker;

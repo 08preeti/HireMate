@@ -16,7 +16,10 @@ export async function rateApplication(employerId, applicationId, { rating, revie
 }
 
 export function listEmployerApplications(employerId) {
-  return Application.find({ employer: employerId }).populate("job");
+  return Application.find({ employer: employerId })
+    .sort({ createdAt: -1 })
+    .populate("job")
+    .populate("worker", "name phone skills location rating totalReviews currentLocation");
 }
 
 // Active (not completed) applications with the worker's live GPS location.

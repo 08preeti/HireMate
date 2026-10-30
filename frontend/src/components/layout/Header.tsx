@@ -9,7 +9,8 @@ import { translations } from "@/i18n/translations";
 import type { Language } from "@/types";
 import { SHELL_PATHS } from "@/config/routes";
 
-const NAV_ACTIVE = "bg-amber-400 text-black rounded-md py-1 px-2.5 font-bold text-[14px] no-underline";
+const NAV_ACTIVE =
+  "bg-amber-400 text-black rounded-md py-1 px-2.5 font-bold text-[14px] no-underline";
 const NAV_IDLE = "text-white py-1 px-1.5 text-[14px] no-underline";
 
 export default function Header() {
@@ -21,7 +22,8 @@ export default function Header() {
   // ONE active role (or none) comes from AuthContext; the nav below shows only that role's links.
   const { role, loading, logout } = useAuth();
 
-  const navClass = (path: string): string => (pathname === path ? NAV_ACTIVE : NAV_IDLE);
+  const navClass = (path: string): string =>
+    pathname === path ? NAV_ACTIVE : NAV_IDLE;
 
   const handleLogout = () => {
     if (!role) return;
@@ -32,7 +34,8 @@ export default function Header() {
   // Role selection and sign-in/sign-up screens are standalone: no header there.
   if (isStandalonePath(pathname)) return null;
 
-  const L = (en: string, hi: string, mr: string): string => (language === "hi" ? hi : language === "mr" ? mr : en);
+  const L = (en: string, hi: string, mr: string): string =>
+    language === "hi" ? hi : language === "mr" ? mr : en;
 
   if (SHELL_PATHS.some((p) => pathname.startsWith(p))) return null;
 
@@ -40,31 +43,61 @@ export default function Header() {
     <div className="bg-brand py-3 px-5 flex items-center justify-between flex-wrap gap-2.5 font-plain">
       {/* Logo */}
       <Link href="/" className="flex items-center gap-2.5 no-underline">
-        <div className="bg-white text-brand font-extrabold py-1 px-2 rounded-md text-[14px]">HM</div>
+        <div className="bg-white text-brand font-extrabold py-1 px-2 rounded-md text-[14px]">
+          HM
+        </div>
         <span className="text-white text-[20px] font-extrabold">HireMate</span>
       </Link>
 
       {/* Nav links */}
       <div className="flex items-center gap-1.5 flex-wrap">
-        <Link className={navClass("/")} href="/">{t.home}</Link>
+        <Link className={navClass("/")} href="/">
+          {t.home}
+        </Link>
 
         {/* Jobs: visitors and workers only (employers manage jobs from their dashboard) */}
-        {role !== "employer" && <Link className={navClass("/jobs")} href="/jobs">{t.jobs}</Link>}
+        {role !== "employer" && (
+          <Link className={navClass("/jobs")} href="/jobs">
+            {t.jobs}
+          </Link>
+        )}
 
         {/* Worker links */}
         {role === "worker" && (
           <>
-            <Link className={navClass("/worker-dashboard")} href="/worker-dashboard">{t.workerDashboard}</Link>
-            <Link className={navClass("/worker-profile")} href="/worker-profile">{t.workerProfile}</Link>
-            <Link className={navClass("/ai-suggestions")} href="/ai-suggestions">🤖 AI</Link>
+            <Link
+              className={navClass("/worker-dashboard")}
+              href="/worker-dashboard"
+            >
+              {t.workerDashboard}
+            </Link>
+            <Link
+              className={navClass("/worker-profile")}
+              href="/worker-profile"
+            >
+              {t.workerProfile}
+            </Link>
+            <Link
+              className={navClass("/ai-suggestions")}
+              href="/ai-suggestions"
+            >
+              🤖 AI
+            </Link>
           </>
         )}
 
         {/* Employer links */}
         {role === "employer" && (
           <>
-            <Link className={navClass("/applications")} href="/applications">{t.applications}</Link>
-            <Link className={navClass("/employer-dashboard")} href="/employer-dashboard">{t.dashboard}</Link>
+            <Link className={navClass("/applications")} href="/applications">
+              {t.applications}
+            </Link>
+            <Link
+              className={navClass("/employer-dashboard")}
+              href="/employer-dashboard"
+            >
+              {t.dashboard}
+            </Link>
           </>
         )}
 
