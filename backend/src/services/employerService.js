@@ -29,7 +29,7 @@ export async function listWorkers() {
     name: { $exists: true, $nin: [null, ""] },
   })
     .select(
-      "name phone skills location rating totalReviews currentLocation createdAt",
+      "name phone skills location gender rating totalReviews currentLocation createdAt",
     )
     .sort({ createdAt: -1 })
     .limit(500)

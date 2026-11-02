@@ -6,6 +6,7 @@ const workerSchema = new mongoose.Schema(
     phone: String,
     skills: String,
     location: String,
+    gender: { type: String, enum: ["male", "female", ""], default: "" },
 
     rating: { type: Number, default: 0 },
     totalReviews: { type: Number, default: 0 },
@@ -15,7 +16,7 @@ const workerSchema = new mongoose.Schema(
     otp: String,
     otpExpires: Date,
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export default mongoose.model("Worker", workerSchema);

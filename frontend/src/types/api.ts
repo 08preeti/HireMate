@@ -81,6 +81,8 @@ export interface WorkerListItem {
   phone?: string;
   skills?: string;
   location?: string;
+  /** Optional; used to pick the male/female cartoon. */
+  gender?: "male" | "female" | "";
   rating?: number;
   totalReviews?: number;
   currentLocation?: { lat: number; lng: number };
