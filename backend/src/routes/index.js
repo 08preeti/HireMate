@@ -1,6 +1,7 @@
 import { Router } from "express";
 import employerAuthRoutes from "./employerAuthRoutes.js";
 import employerDashboardRoutes from "./employerDashboardRoutes.js";
+import employerWorkersRoutes from "./employerWorkersRoutes.js";
 import jobRoutes from "./jobRoutes.js";
 import applicationRoutes from "./applicationRoutes.js";
 import workerRoutes from "./workerRoutes.js";
@@ -11,6 +12,7 @@ const router = Router();
 
 // Same URL prefixes as before — the frontend does not need new endpoints.
 router.use("/employer/dashboard", employerDashboardRoutes);
+router.use("/employer/workers", employerWorkersRoutes);
 router.use("/employer", employerAuthRoutes);
 router.use("/jobs", jobRoutes);
 router.use("/applications", applicationRoutes);
