@@ -10,6 +10,11 @@ import {
   FiX,
 } from "react-icons/fi";
 import EmployerShell from "@/components/layout/EmployerShell";
+import WorkerCharacter, {
+  type CharGender,
+  type CharKind,
+} from "@/components/ui/WorkerCharacter";
+import WorkerSpotlight, { type Anchor } from "./WorkerSpotlight";
 import { useAuth } from "@/context/AuthContext";
 import { useEmployerT, type EmployerKey } from "@/i18n/employerText";
 import { getSeenCount } from "@/lib/seenApplications";
@@ -42,6 +47,27 @@ const waLink = (phone: string) => {
 const showPhone = (phone: string) =>
   /^\+/.test(phone) ? phone : `+91 ${phone}`;
 
+const kindOf = (w: WorkerListItem): CharKind => {
+  const t = (w.skills || "").toLowerCase();
+  if (/cook|chef|kitchen|रसोई|खाना|आचारी|स्वयंपाक/.test(t)) return "cook";
+  if (/driv|चालक|ड्रायव्हर|ड्राइवर/.test(t)) return "driver";
+  if (/electric|wire|इलेक्ट्रि|वायरमन/.test(t)) return "electrician";
+  return "generic";
+};
+// Uses the worker's saved gender; older profiles without one get a stable guess from the name.
+const genderOf = (w: WorkerListItem): CharGender => {
+  if (w.gender === "male" || w.gender === "female") return w.gender;
+  const first = (w.name || "").trim().toLowerCase().split(/\s+/)[0] || "";
+  if (
+    /(bai|devi|kumari|rani|sita|geeta|gita|sunita|anita|kavita|savita|lata|mala|asha|usha|rekha|sneha|pooja|puja|priya|meena|mina|seema|sima|shanti|laxmi|lakshmi|radha|rupali|sapna|nisha|ritu|ee)$/.test(
+      first,
+    )
+  ) {
+    return "female";
+  }
+  return "male";
+};
+
 export default function Workers() {
   const { employer } = useAuth();
   const { tr, trp, locale } = useEmployerT();
@@ -55,6 +81,10 @@ export default function Workers() {
   const [skill, setSkill] = useState("all");
   const [sort, setSort] = useState<SortKey>("newest");
   const [newApps, setNewApps] = useState(0);
+  const [picked, setPicked] = useState<{
+    w: WorkerListItem;
+    anchor: Anchor;
+  } | null>(null);
   const knownIds = useRef<Set<string> | null>(null);
 
   const load = useCallback(async () => {
@@ -171,6 +201,14 @@ export default function Workers() {
             year: "numeric",
           }),
         });
+  };
+
+  const openWorker = (w: WorkerListItem, el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    setPicked({
+      w,
+      anchor: { left: r.left, top: r.top, width: r.width, height: r.height },
+    });
   };
 
   const statCards: { key: EmployerKey; value: number; tone: string }[] = [
@@ -321,7 +359,16 @@ export default function Workers() {
                 return (
                   <div
                     key={w._id}
-                    className={`bg-white rounded-2xl border p-5 flex flex-col gap-3.5 shadow-[0_2px_12px_rgba(15,23,42,.05)] ${fresh ? "border-emerald-300 ring-2 ring-emerald-100" : "border-slate-100"}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => openWorker(w, e.currentTarget)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openWorker(w, e.currentTarget);
+                      }
+                    }}
+                    className={`cursor-pointer transition-shadow hover:shadow-[0_6px_20px_rgba(15,23,42,.12)] bg-white rounded-2xl border p-5 flex flex-col gap-3.5 shadow-[0_2px_12px_rgba(15,23,42,.05)] ${fresh ? "border-emerald-300 ring-2 ring-emerald-100" : "border-slate-100"}`}
                   >
                     <div className="flex items-start gap-3.5">
                       <span className="w-12 h-12 rounded-xl bg-slate-100 text-slate-700 text-[15px] font-bold flex items-center justify-center shrink-0">
@@ -390,6 +437,7 @@ export default function Workers() {
                         <div className="flex gap-2">
                           <a
                             href={`tel:${phone}`}
+                            onClick={(e) => e.stopPropagation()}
                             aria-label={showPhone(phone)}
                             className="h-9 px-3 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-[12.5px] font-semibold text-slate-800 no-underline flex items-center gap-1.5"
                           >
@@ -399,6 +447,7 @@ export default function Workers() {
                             href={waLink(phone)}
                             target="_blank"
                             rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
                             className="h-9 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[12.5px] font-semibold no-underline flex items-center"
                           >
                             {tr("whatsapp")}
@@ -413,6 +462,107 @@ export default function Workers() {
           </>
         )}
       </div>
+
+      {picked && (
+        <WorkerSpotlight
+          key={picked.w._id}
+          anchor={picked.anchor}
+          kind={kindOf(picked.w)}
+          gender={genderOf(picked.w)}
+          onClose={() => setPicked(null)}
+        >
+          {(() => {
+            const w = picked.w;
+            const phone = w.phone || "";
+            const skills = skillsOf(w);
+            return (
+              <div className="flex flex-col gap-4 font-plain">
+                <div className="flex items-start gap-3.5">
+                  <span className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-700 text-[18px] font-bold flex items-center justify-center shrink-0">
+                    {initialsOf(w.name)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[19px] font-extrabold text-[#0F1F4B] break-words">
+                      {w.name}
+                    </div>
+                    <div className="mt-0.5 text-[13px] text-slate-500">
+                      {w.rating ? (
+                        <>
+                          ★ {w.rating.toFixed(1)}
+                          {w.totalReviews
+                            ? ` ${tr("shiftsN", { n: w.totalReviews })}`
+                            : ""}
+                        </>
+                      ) : (
+                        <>★ {tr("isNew")}</>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setPicked(null)}
+                    aria-label={tr("ws_dismiss")}
+                    className="text-slate-400 hover:text-slate-600 text-[20px] cursor-pointer"
+                  >
+                    <FiX />
+                  </button>
+                </div>
+                <span
+                  className={`self-start rounded-md px-2.5 py-1 text-[12px] font-bold ${w.busy ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}
+                >
+                  {w.busy ? tr("ws_busy") : tr("ws_available")}
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {skills.length > 0 ? (
+                    skills.map((s) => (
+                      <span
+                        key={s}
+                        className="rounded-md bg-blue-50 text-blue-700 text-[13px] font-semibold px-2.5 py-1"
+                      >
+                        {s}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-[13px] text-slate-400">
+                      {tr("ws_noSkills")}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-start gap-2 text-[13.5px] text-slate-600">
+                  <FiMapPin className="mt-0.5 text-slate-400 shrink-0" />
+                  <span>{w.location || tr("ws_noLocation")}</span>
+                </div>
+                {phone && (
+                  <div className="flex items-center gap-2 text-[13.5px] text-slate-600">
+                    <FiPhone className="text-slate-400 shrink-0" />
+                    <span>{showPhone(phone)}</span>
+                  </div>
+                )}
+                <div className="text-[12px] text-slate-400">
+                  {joinedLabel(w)}
+                </div>
+                {phone && (
+                  <div className="flex gap-2.5 pt-1">
+                    <a
+                      href={`tel:${phone}`}
+                      className="flex-1 h-11 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-[14px] font-semibold text-slate-800 no-underline flex items-center justify-center gap-2"
+                    >
+                      <FiPhone /> {tr("callNow")}
+                    </a>
+                    <a
+                      href={waLink(phone)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex-1 h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[14px] font-semibold no-underline flex items-center justify-center"
+                    >
+                      {tr("whatsapp")}
+                    </a>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </WorkerSpotlight>
+      )}
     </EmployerShell>
   );
 }

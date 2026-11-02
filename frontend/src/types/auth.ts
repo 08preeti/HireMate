@@ -15,6 +15,7 @@ export interface Worker {
   contact?: string;
   skills?: string;
   location?: string;
+  gender?: "male" | "female" | "";
   rating?: number | string;
   totalReviews?: number;
   currentLocation?: LatLng;

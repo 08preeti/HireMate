@@ -10,25 +10,44 @@ export async function getProfile(workerId) {
   const worker = await Worker.findById(workerId);
   if (!worker) throw new HttpError(404, "Worker not found");
 
-  const reviews = await Application.find({ worker: worker._id, isCompleted: true });
-  const avgRating = reviews.length ? reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length : 0;
+  const reviews = await Application.find({
+    worker: worker._id,
+    isCompleted: true,
+  });
+  const avgRating = reviews.length
+    ? reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length
+    : 0;
   // OTP fields are never sent to the client.
   const { otp, otpExpires, ...safe } = worker._doc;
-  return { ...safe, rating: avgRating.toFixed(1), totalReviews: reviews.length };
+  return {
+    ...safe,
+    rating: avgRating.toFixed(1),
+    totalReviews: reviews.length,
+  };
 }
 
-export async function updateProfile(workerId, { location, name, skills }) {
+export async function updateProfile(
+  workerId,
+  { location, name, skills, gender },
+) {
   const updated = await Worker.findByIdAndUpdate(
     workerId,
-    { ...(location && { location }), ...(name && { name }), ...(skills && { skills }) },
-    { new: true }
+    {
+      ...(location && { location }),
+      ...(name && { name }),
+      ...(skills && { skills }),
+      ...((gender === "male" || gender === "female") && { gender }),
+    },
+    { new: true },
   ).select("-otp -otpExpires");
   if (!updated) throw new HttpError(404, "Worker not found");
   return updated;
 }
 
 export function listMyApplications(workerId, phone) {
-  return Application.find({ $or: [{ worker: workerId }, { applicantContact: phone }] }).populate("job");
+  return Application.find({
+    $or: [{ worker: workerId }, { applicantContact: phone }],
+  }).populate("job");
 }
 
 export function listJobHistory(workerId) {
@@ -41,7 +60,10 @@ export async function findNearbyJobs(lat, lng) {
   const wLng = parseFloat(lng);
   const jobs = await Job.find({ status: "active" }).sort({ createdAt: -1 });
   return jobs.filter(
-    (job) => job.latitude && job.longitude && distanceKm(wLat, wLng, job.latitude, job.longitude) <= NEARBY_RADIUS_KM
+    (job) =>
+      job.latitude &&
+      job.longitude &&
+      distanceKm(wLat, wLng, job.latitude, job.longitude) <= NEARBY_RADIUS_KM,
   );
 }
 

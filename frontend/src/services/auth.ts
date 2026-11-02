@@ -13,15 +13,27 @@ import type {
 } from "@/types";
 
 // ── Employer ────────────────────────────────────────────────────────────────
-export async function employerLogin(form: EmployerLoginForm): Promise<EmployerSession> {
-  const data = await api.post<EmployerLoginResponse>("/api/employer/login", form);
+export async function employerLogin(
+  form: EmployerLoginForm,
+): Promise<EmployerSession> {
+  const data = await api.post<EmployerLoginResponse>(
+    "/api/employer/login",
+    form,
+  );
   return { role: "employer", token: data.token, user: data.employer };
 }
 
 /** Returns the new employer's session (signed in straight away), or null if the server sent none. */
-export async function employerRegister(form: EmployerRegisterForm): Promise<EmployerSession | null> {
-  const data = await api.post<EmployerRegisterResponse>("/api/employer/register", form);
-  return data.token && data.employer ? { role: "employer", token: data.token, user: data.employer } : null;
+export async function employerRegister(
+  form: EmployerRegisterForm,
+): Promise<EmployerSession | null> {
+  const data = await api.post<EmployerRegisterResponse>(
+    "/api/employer/register",
+    form,
+  );
+  return data.token && data.employer
+    ? { role: "employer", token: data.token, user: data.employer }
+    : null;
 }
 
 // ── Session check ───────────────────────────────────────────────────────────
@@ -45,9 +57,15 @@ export interface WorkerVerifyInput {
   name?: string;
   skills?: string;
   location?: string;
+  gender?: "male" | "female";
 }
 
-export async function workerVerifyOtp(input: WorkerVerifyInput): Promise<WorkerSession> {
-  const data = await api.post<WorkerAuthResponse>("/api/workers/verify-otp", input);
+export async function workerVerifyOtp(
+  input: WorkerVerifyInput,
+): Promise<WorkerSession> {
+  const data = await api.post<WorkerAuthResponse>(
+    "/api/workers/verify-otp",
+    input,
+  );
   return { role: "worker", token: data.token, user: data.worker };
 }
