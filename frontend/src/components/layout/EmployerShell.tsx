@@ -20,7 +20,7 @@ interface EmployerShellProps {
 
 const NAV = [
   { href: "/employer-dashboard", icon: <FiHome />, label: ["Dashboard", "डैशबोर्ड", "डॅशबोर्ड"] },
-  { href: "/employer-dashboard#workers", icon: <FiUsers />, label: ["Workers", "कामगार", "कामगार"] },
+  { href: "/workers", icon: <FiUsers />, label: ["Workers", "कामगार", "कामगार"] },
   { href: "/applications", icon: <FiFileText />, label: ["Applications", "आवेदन", "अर्ज"], badge: true },
 ];
 
@@ -29,7 +29,7 @@ export default function EmployerShell({ children, applicationBadge = 0, hasUnrea
   const { language } = useLanguage();
   const labelOf = (label: string[]) => (language === "hi" ? label[1] : language === "mr" ? label[2] : label[0]);
 
-  const active = (href: string) => (href === "/employer-dashboard" ? pathname === href : href.startsWith("/applications") && pathname.startsWith("/applications"));
+  const active = (href: string) => (href === "/employer-dashboard" ? pathname === href : pathname.startsWith(href));
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F5F8FC] font-app">

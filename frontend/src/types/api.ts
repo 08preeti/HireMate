@@ -73,3 +73,23 @@ export interface AiSuggestionsResponse extends ApiErrorBody {
 export interface AiTipsResponse {
   tips?: string[];
 }
+
+/** One row of the employer's "Workers" list. */
+export interface WorkerListItem {
+  _id: string;
+  name: string;
+  phone?: string;
+  skills?: string;
+  location?: string;
+  rating?: number;
+  totalReviews?: number;
+  currentLocation?: { lat: number; lng: number };
+  createdAt?: string;
+  /** On the way / on site for a job right now. */
+  busy: boolean;
+}
+
+export interface WorkersListResponse {
+  total: number;
+  workers: WorkerListItem[];
+}

@@ -2,25 +2,38 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FiChevronDown, FiChevronRight, FiDownload, FiHome, FiPhone, FiPlus, FiSearch } from "react-icons/fi";
+import {
+  FiChevronDown,
+  FiChevronRight,
+  FiDownload,
+  FiHome,
+  FiPhone,
+  FiPlus,
+  FiSearch,
+} from "react-icons/fi";
 import EmployerTopNav from "@/components/layout/EmployerTopNav";
-import { useLanguage } from "@/context/LanguageContext";
 import { useAuth } from "@/context/AuthContext";
 import { haversine } from "@/lib/geo";
+import { useEmployerT, type EmployerKey } from "@/i18n/employerText";
 import { markApplicationsSeen } from "@/lib/seenApplications";
-import { getEmployerApplications, rateApplication } from "@/services/applications";
-import type { Application, Job, Language, LocalizedText } from "@/types";
+import {
+  getEmployerApplications,
+  rateApplication,
+} from "@/services/applications";
+import type { Application, Job } from "@/types";
+
+type Tr = ReturnType<typeof useEmployerT>["tr"];
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 type Stage = "awaiting" | "confirmed" | "completed" | "rated";
 type TabKey = "all" | Stage;
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: "all", label: "All Applications" },
-  { key: "awaiting", label: "Awaiting Call / Review" },
-  { key: "confirmed", label: "Confirmed for Today" },
-  { key: "completed", label: "Completed & Ready to Rate" },
-  { key: "rated", label: "Rated" },
+const TABS: { key: TabKey; label: EmployerKey }[] = [
+  { key: "all", label: "tab_all" },
+  { key: "awaiting", label: "tab_awaiting" },
+  { key: "confirmed", label: "tab_confirmed" },
+  { key: "completed", label: "tab_completed" },
+  { key: "rated", label: "tab_rated" },
 ];
 
 const STAGE_BADGE: Record<Stage, { label: string; cls: string }> = {
@@ -30,18 +43,7 @@ const STAGE_BADGE: Record<Stage, { label: string; cls: string }> = {
   rated: { label: "Rated", cls: "bg-blue-50 text-blue-700" },
 };
 
-const SCORES = [
-  { value: "5", label: "5.0 - Excellent & Highly Recommended" },
-  { value: "4", label: "4.0 - Very Good" },
-  { value: "3", label: "3.0 - Good" },
-  { value: "2", label: "2.0 - Fair" },
-  { value: "1", label: "1.0 - Poor" },
-];
-
-const UNIT_LABEL: Record<string, string> = { hour: "hr", day: "day", week: "week", month: "month" };
-
-const loc = (t: LocalizedText | string | undefined, lang: Language): string =>
-  !t ? "" : typeof t === "string" ? t : t[lang] || t.en || "";
+const SCORES = ["5", "4", "3", "2", "1"];
 
 const stageOf = (a: Application): Stage => {
   if (a.rating) return "rated";
@@ -50,15 +52,28 @@ const stageOf = (a: Application): Stage => {
   return "awaiting";
 };
 
-const nameOf = (a: Application) => a.applicantName || a.worker?.name || "Worker";
-const phoneOf = (a: Application) => a.applicantContact || a.worker?.phone || a.worker?.contact || "";
-const initialsOf = (n: string) => n.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "W";
+const nameOf = (a: Application) =>
+  a.applicantName || a.worker?.name || "Worker";
+const phoneOf = (a: Application) =>
+  a.applicantContact || a.worker?.phone || a.worker?.contact || "";
+const initialsOf = (n: string) =>
+  n
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase() || "W";
 const wageOf = (j?: Job) => Number(j?.salary) || 0;
 const money = (n: number) => `₹${n.toLocaleString("en-IN")}`;
-const unitOf = (j?: Job) => (j?.salaryUnit ? UNIT_LABEL[j.salaryUnit] : "day");
+const unitKey = (j?: Job): EmployerKey =>
+  j?.salaryUnit ? (`unit_${j.salaryUnit}` as EmployerKey) : "unit_day";
 const workerRating = (a: Application) => Number(a.worker?.rating) || 0;
 const appCode = (a: Application) => a._id.slice(-6).toUpperCase();
-const skillsOf = (a: Application) => (a.worker?.skills || "").split(",").map((s) => s.trim()).filter(Boolean);
+const skillsOf = (a: Application) =>
+  (a.worker?.skills || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
 const distanceOf = (a: Application): number | null => {
   const c = a.worker?.currentLocation;
@@ -66,13 +81,19 @@ const distanceOf = (a: Application): number | null => {
   return haversine(c.lat, c.lng, a.job.latitude, a.job.longitude);
 };
 
-const appliedLabel = (iso?: string) => {
+const appliedLabel = (iso: string | undefined, tr: Tr, locale: string) => {
   if (!iso) return "";
   const d = new Date(iso);
-  const time = d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  const time = d.toLocaleTimeString(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   return d.toDateString() === new Date().toDateString()
-    ? `Applied today, ${time}`
-    : `Applied ${d.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}, ${time}`;
+    ? tr("appliedToday", { time })
+    : tr("appliedOn", {
+        date: d.toLocaleDateString(locale, { day: "numeric", month: "short" }),
+        time,
+      });
 };
 
 const waLink = (phone: string) => {
@@ -97,7 +118,13 @@ const writeJSON = (key: string, value: unknown) => {
   }
 };
 
-const Stars = ({ value, onChange }: { value: number; onChange?: (n: number) => void }) => (
+const Stars = ({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange?: (n: number) => void;
+}) => (
   <span className="inline-flex gap-1 text-[22px] leading-none">
     {[1, 2, 3, 4, 5].map((n) => (
       <button
@@ -121,14 +148,20 @@ interface RatePanelProps {
 }
 
 function RatePanel({ a, onRated }: RatePanelProps) {
+  const { tr } = useEmployerT();
   const draftKey = `hm_rating_draft_${a._id}`;
   const prefId = phoneOf(a) || a._id;
-  const draft = typeof window === "undefined" ? null : readJSON<{ rating?: string; notes?: string } | null>(draftKey, null);
+  const draft =
+    typeof window === "undefined"
+      ? null
+      : readJSON<{ rating?: string; notes?: string } | null>(draftKey, null);
 
   const [rating, setRating] = useState(draft?.rating || "5");
   const [notes, setNotes] = useState(draft?.notes || "");
   const [preferred, setPreferred] = useState(
-    () => typeof window !== "undefined" && readJSON<string[]>(PREF_KEY, []).includes(prefId)
+    () =>
+      typeof window !== "undefined" &&
+      readJSON<string[]>(PREF_KEY, []).includes(prefId),
   );
   const [busy, setBusy] = useState(false);
   const [savedMsg, setSavedMsg] = useState("");
@@ -139,19 +172,27 @@ function RatePanel({ a, onRated }: RatePanelProps) {
   if (a.rating) {
     return (
       <div className="px-6 py-6">
-        <h3 className="text-[17px] font-bold text-slate-900">Your rating</h3>
+        <h3 className="text-[17px] font-bold text-slate-900">
+          {tr("yourRating")}
+        </h3>
         <div className="mt-3 flex items-center gap-3">
           <Stars value={a.rating} />
-          <span className="text-[15px] font-semibold text-slate-700">{a.rating.toFixed(1)} / 5</span>
+          <span className="text-[15px] font-semibold text-slate-700">
+            {a.rating.toFixed(1)} / 5
+          </span>
         </div>
-        {a.review && <p className="mt-3 rounded-lg bg-slate-50 border border-slate-200 p-3.5 text-[14px] text-slate-700">{a.review}</p>}
+        {a.review && (
+          <p className="mt-3 rounded-lg bg-slate-50 border border-slate-200 p-3.5 text-[14px] text-slate-700">
+            {a.review}
+          </p>
+        )}
       </div>
     );
   }
 
   const saveDraft = () => {
     writeJSON(draftKey, { rating, notes });
-    setSavedMsg("Draft saved");
+    setSavedMsg(tr("draftSaved"));
     window.setTimeout(() => setSavedMsg(""), 2000);
   };
 
@@ -165,7 +206,7 @@ function RatePanel({ a, onRated }: RatePanelProps) {
       onRated();
     } catch (err) {
       console.error(err);
-      alert("Failed to submit rating");
+      alert(tr("failedRating"));
     } finally {
       setBusy(false);
     }
@@ -175,15 +216,21 @@ function RatePanel({ a, onRated }: RatePanelProps) {
     <div className="px-6 py-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-[18px] font-bold text-slate-900">Rate Worker &amp; Close Shift</h3>
-          <p className="text-[14px] text-slate-500 mt-0.5">Submit shift feedback to complete this application.</p>
+          <h3 className="text-[18px] font-bold text-slate-900">
+            {tr("rateClose")}
+          </h3>
+          <p className="text-[14px] text-slate-500 mt-0.5">{tr("rateSub")}</p>
         </div>
         {a.status === "completed" && (
-          <span className="shrink-0 rounded-md bg-emerald-50 text-emerald-700 text-[13px] font-medium px-3 py-1.5">Shift Completed</span>
+          <span className="shrink-0 rounded-md bg-emerald-50 text-emerald-700 text-[13px] font-medium px-3 py-1.5">
+            {tr("shiftCompletedChip")}
+          </span>
         )}
       </div>
 
-      <label className="block mt-5 text-[14.5px] font-semibold text-slate-800">Performance Score</label>
+      <label className="block mt-5 text-[14.5px] font-semibold text-slate-800">
+        {tr("perfScore")}
+      </label>
       <div className="mt-2 grid gap-3 sm:grid-cols-2">
         <div className="relative">
           <select
@@ -192,29 +239,43 @@ function RatePanel({ a, onRated }: RatePanelProps) {
             className="w-full h-12 appearance-none rounded-lg border border-slate-300 bg-white px-3.5 pr-9 text-[14.5px] text-slate-800 outline-none focus:border-red-500"
           >
             {SCORES.map((s) => (
-              <option key={s.value} value={s.value}>{s.label}</option>
+              <option key={s} value={s}>
+                {tr(`score_${s}` as EmployerKey)}
+              </option>
             ))}
           </select>
           <FiChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" />
         </div>
         <div className="h-12 rounded-lg border border-slate-200 bg-slate-50 px-4 flex items-center justify-between">
-          <Stars value={Number(rating)} onChange={(n) => setRating(String(n))} />
-          <span className="text-[14.5px] font-semibold text-slate-700">{Number(rating).toFixed(1)} / 5</span>
+          <Stars
+            value={Number(rating)}
+            onChange={(n) => setRating(String(n))}
+          />
+          <span className="text-[14.5px] font-semibold text-slate-700">
+            {Number(rating).toFixed(1)} / 5
+          </span>
         </div>
       </div>
 
-      <label className="block mt-5 text-[14.5px] font-semibold text-slate-800">Site Manager Notes</label>
+      <label className="block mt-5 text-[14.5px] font-semibold text-slate-800">
+        {tr("managerNotes")}
+      </label>
       <textarea
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
         rows={4}
-        placeholder={`How did ${name} perform on this shift?`}
+        placeholder={tr("notesPlaceholder", { name })}
         className="mt-2 w-full resize-y rounded-lg border border-slate-300 px-3.5 py-3 text-[14.5px] text-slate-800 outline-none focus:border-red-500"
       />
 
       <label className="mt-4 flex items-center gap-3 text-[14.5px] text-slate-700 cursor-pointer">
-        <input type="checkbox" checked={preferred} onChange={(e) => setPreferred(e.target.checked)} className="w-[18px] h-[18px] accent-slate-900" />
-        Add {name} to my preferred workers for tomorrow
+        <input
+          type="checkbox"
+          checked={preferred}
+          onChange={(e) => setPreferred(e.target.checked)}
+          className="w-[18px] h-[18px] accent-slate-900"
+        />
+        {tr("preferred", { name })}
       </label>
 
       <div className="mt-6 flex flex-col sm:flex-row gap-3">
@@ -223,10 +284,15 @@ function RatePanel({ a, onRated }: RatePanelProps) {
           disabled={busy}
           className="flex-1 h-[54px] rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white text-[15.5px] font-semibold cursor-pointer"
         >
-          {busy ? "Submitting…" : `Submit Rating${wage ? ` (${money(wage)})` : ""}`}
+          {busy
+            ? tr("submitting")
+            : `${tr("submitRating")}${wage ? ` (${money(wage)})` : ""}`}
         </button>
-        <button onClick={saveDraft} className="h-[54px] px-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[15px] font-semibold cursor-pointer">
-          {savedMsg || "Save as Draft"}
+        <button
+          onClick={saveDraft}
+          className="h-[54px] px-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[15px] font-semibold cursor-pointer"
+        >
+          {savedMsg || tr("saveDraft")}
         </button>
       </div>
     </div>
@@ -235,7 +301,7 @@ function RatePanel({ a, onRated }: RatePanelProps) {
 
 // ── Page ────────────────────────────────────────────────────────────────────
 export default function Applications() {
-  const { language } = useLanguage();
+  const { tr, trp, loc, locale } = useEmployerT();
   const { employer } = useAuth();
   const employerId = employer?._id;
   const [apps, setApps] = useState<Application[]>([]);
@@ -264,14 +330,24 @@ export default function Applications() {
   }, [fetchApps]);
 
   const counts = useMemo(() => {
-    const c: Record<TabKey, number> = { all: apps.length, awaiting: 0, confirmed: 0, completed: 0, rated: 0 };
-    apps.forEach((a) => { c[stageOf(a)] += 1; });
+    const c: Record<TabKey, number> = {
+      all: apps.length,
+      awaiting: 0,
+      confirmed: 0,
+      completed: 0,
+      rated: 0,
+    };
+    apps.forEach((a) => {
+      c[stageOf(a)] += 1;
+    });
     return c;
   }, [apps]);
 
   const jobs = useMemo(() => {
     const map = new Map<string, Job>();
-    apps.forEach((a) => { if (a.job) map.set(a.job._id, a.job); });
+    apps.forEach((a) => {
+      if (a.job) map.set(a.job._id, a.job);
+    });
     return [...map.values()];
   }, [apps]);
 
@@ -284,32 +360,55 @@ export default function Applications() {
       const d = distanceOf(a);
       if (d !== null && d > maxKm) return false;
       if (!q) return true;
-      return [nameOf(a), phoneOf(a), loc(a.job?.jobTitle, language), a.worker?.skills || ""].join(" ").toLowerCase().includes(q);
+      return [
+        nameOf(a),
+        phoneOf(a),
+        loc(a.job?.jobTitle),
+        a.worker?.skills || "",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(q);
     });
     return list.sort((x, y) => {
-      if (sort === "newest") return (y.createdAt || "").localeCompare(x.createdAt || "");
+      if (sort === "newest")
+        return (y.createdAt || "").localeCompare(x.createdAt || "");
       if (sort === "wage") return wageOf(y.job) - wageOf(x.job);
-      const v = Number(!!y.worker?.backgroundVerified) - Number(!!x.worker?.backgroundVerified);
+      const v =
+        Number(!!y.worker?.backgroundVerified) -
+        Number(!!x.worker?.backgroundVerified);
       return v || workerRating(y) - workerRating(x);
     });
-  }, [apps, tab, roleFilter, distance, query, sort, language]);
+  }, [apps, tab, roleFilter, distance, query, sort, loc]);
 
   const selected = filtered.find((a) => a._id === selectedId) ?? filtered[0];
-  const jobApps = selected?.job ? apps.filter((a) => a.job?._id === selected.job?._id) : [];
-  const activeNow = apps.filter((a) => a.status === "on_the_way" || a.status === "arrived").length;
-  const jobTitle = loc(selected?.job?.jobTitle, language);
-  const jobPlace = loc(selected?.job?.location, language);
+  const jobApps = selected?.job
+    ? apps.filter((a) => a.job?._id === selected.job?._id)
+    : [];
+  const activeNow = apps.filter(
+    (a) => a.status === "on_the_way" || a.status === "arrived",
+  ).length;
+  const jobTitle = loc(selected?.job?.jobTitle);
+  const jobPlace = loc(selected?.job?.location);
 
   const exportCsv = () => {
     const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
     const rows = [
       ["Name", "Phone", "Job", "Status", "Rating", "Review", "Wage", "Applied"],
       ...apps.map((a) => [
-        nameOf(a), phoneOf(a), loc(a.job?.jobTitle, language), STAGE_BADGE[stageOf(a)].label,
-        a.rating ?? "", a.review ?? "", wageOf(a.job) || "", a.createdAt ?? "",
+        nameOf(a),
+        phoneOf(a),
+        a.job?.jobTitle?.en ?? "",
+        STAGE_BADGE[stageOf(a)].label,
+        a.rating ?? "",
+        a.review ?? "",
+        wageOf(a.job) || "",
+        a.createdAt ?? "",
       ]),
     ];
-    const blob = new Blob([rows.map((r) => r.map(esc).join(",")).join("\n")], { type: "text/csv" });
+    const blob = new Blob([rows.map((r) => r.map(esc).join(",")).join("\n")], {
+      type: "text/csv",
+    });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -318,7 +417,8 @@ export default function Applications() {
     URL.revokeObjectURL(url);
   };
 
-  const sel = "h-12 w-full appearance-none rounded-lg border border-slate-300 bg-white px-4 pr-10 text-[14.5px] text-slate-700 outline-none focus:border-red-500";
+  const sel =
+    "h-12 w-full appearance-none rounded-lg border border-slate-300 bg-white px-4 pr-10 text-[14.5px] text-slate-700 outline-none focus:border-red-500";
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] font-app text-slate-900">
@@ -328,14 +428,23 @@ export default function Applications() {
       <div className="bg-white border-b border-slate-200">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 lg:px-8 py-3.5 text-[14.5px] text-slate-500">
           <nav className="flex items-center gap-2 min-w-0">
-            <Link href="/employer-dashboard" className="flex items-center gap-1.5 text-slate-500 no-underline hover:text-slate-800"><FiHome /> Home</Link>
+            <Link
+              href="/employer-dashboard"
+              className="flex items-center gap-1.5 text-slate-500 no-underline hover:text-slate-800"
+            >
+              <FiHome /> {tr("crumb_home")}
+            </Link>
             <FiChevronRight className="text-slate-300 shrink-0" />
-            <span>Applications</span>
+            <span>{tr("applications")}</span>
             {selected?.job && (
               <>
                 <FiChevronRight className="text-slate-300 shrink-0" />
                 <span className="font-semibold text-slate-900 truncate">
-                  {jobTitle} (Listing #{selected.job._id.slice(-5).toUpperCase()})
+                  {jobTitle} (
+                  {tr("listingNo", {
+                    id: selected.job._id.slice(-5).toUpperCase(),
+                  })}
+                  )
                 </span>
               </>
             )}
@@ -344,11 +453,14 @@ export default function Applications() {
             {activeNow > 0 && (
               <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 text-[13.5px] font-medium px-3.5 py-1">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                Live: {activeNow} worker{activeNow > 1 ? "s" : ""} on the way / on site
+                {trp("livePill", activeNow)}
               </span>
             )}
             {jobPlace && (
-              <span className="hidden md:inline text-[14px]">Site: <b className="text-slate-700 font-semibold">{jobPlace}</b></span>
+              <span className="hidden md:inline text-[14px]">
+                {tr("site")}{" "}
+                <b className="text-slate-700 font-semibold">{jobPlace}</b>
+              </span>
             )}
           </div>
         </div>
@@ -359,19 +471,29 @@ export default function Applications() {
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div className="max-w-[760px]">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-[30px] lg:text-[34px] font-extrabold tracking-tight">Applications &amp; Candidate Review</h1>
-              <span className="rounded-md bg-slate-100 text-slate-600 text-[14px] font-mono px-2.5 py-1">{apps.length} Total</span>
+              <h1 className="text-[30px] lg:text-[34px] font-extrabold tracking-tight">
+                {tr("pageTitle")}
+              </h1>
+              <span className="rounded-md bg-slate-100 text-slate-600 text-[14px] font-mono px-2.5 py-1">
+                {tr("totalN", { n: apps.length })}
+              </span>
             </div>
             <p className="mt-2 text-[16px] leading-relaxed text-slate-500">
-              Review daily-wage applicants, verify credentials, conduct phone verification, and record official performance ratings.
+              {tr("pageSub")}
             </p>
           </div>
           <div className="flex flex-col gap-3 w-full sm:w-auto">
-            <button onClick={exportCsv} className="h-[50px] px-6 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-[15px] font-semibold text-slate-800 flex items-center justify-center gap-2.5 cursor-pointer">
-              <FiDownload /> Export Applications Log
+            <button
+              onClick={exportCsv}
+              className="h-[50px] px-6 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-[15px] font-semibold text-slate-800 flex items-center justify-center gap-2.5 cursor-pointer"
+            >
+              <FiDownload /> {tr("exportLog")}
             </button>
-            <Link href="/post-job" className="h-[50px] px-6 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[15px] font-semibold no-underline flex items-center justify-center gap-2.5">
-              <FiPlus /> Post a Replacement Job
+            <Link
+              href="/post-job"
+              className="h-[50px] px-6 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[15px] font-semibold no-underline flex items-center justify-center gap-2.5"
+            >
+              <FiPlus /> {tr("postReplacement")}
             </Link>
           </div>
         </div>
@@ -386,11 +508,15 @@ export default function Applications() {
                 onClick={() => setTab(t.key)}
                 className={`relative whitespace-nowrap pb-4 pt-1 text-[16px] font-medium cursor-pointer ${on ? "text-red-600 font-semibold" : "text-slate-500 hover:text-slate-800"}`}
               >
-                {t.label}
-                <span className={`ml-2.5 rounded-md px-2 py-0.5 text-[13px] font-semibold ${on ? "bg-red-50 text-red-600" : "bg-slate-100 text-slate-600"}`}>
+                {tr(t.label)}
+                <span
+                  className={`ml-2.5 rounded-md px-2 py-0.5 text-[13px] font-semibold ${on ? "bg-red-50 text-red-600" : "bg-slate-100 text-slate-600"}`}
+                >
                   {counts[t.key]}
                 </span>
-                {on && <span className="absolute left-0 right-0 -bottom-px h-[3px] bg-red-600 rounded-t" />}
+                {on && (
+                  <span className="absolute left-0 right-0 -bottom-px h-[3px] bg-red-600 rounded-t" />
+                )}
               </button>
             );
           })}
@@ -400,33 +526,54 @@ export default function Applications() {
         <div className="mt-6 rounded-xl border border-slate-200 bg-white p-5 grid gap-4 md:grid-cols-2 xl:grid-cols-[1.1fr_1.1fr_1.1fr_auto] items-center">
           <label className="flex items-center gap-3 h-12 rounded-lg border border-slate-300 px-4 focus-within:border-red-500">
             <FiSearch className="text-slate-400 shrink-0" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, phone or skill" className="flex-1 min-w-0 bg-transparent text-[14.5px] outline-none" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={tr("searchPh")}
+              className="flex-1 min-w-0 bg-transparent text-[14.5px] outline-none"
+            />
           </label>
           <div className="relative">
-            <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className={sel}>
-              <option value="all">Role: All jobs</option>
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className={sel}
+            >
+              <option value="all">{tr("role_all")}</option>
               {jobs.map((j) => (
-                <option key={j._id} value={j._id}>Role: {loc(j.jobTitle, language) || "Untitled job"}</option>
+                <option key={j._id} value={j._id}>
+                  {tr("role_x", { title: loc(j.jobTitle) || tr("untitled") })}
+                </option>
               ))}
             </select>
             <FiChevronDown className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
           </div>
           <div className="relative">
-            <select value={distance} onChange={(e) => setDistance(e.target.value)} className={sel}>
-              <option value="any">Distance: Any</option>
-              <option value="5">Distance: Within 5 km radius</option>
-              <option value="10">Distance: Within 10 km radius</option>
-              <option value="25">Distance: Within 25 km radius</option>
+            <select
+              value={distance}
+              onChange={(e) => setDistance(e.target.value)}
+              className={sel}
+            >
+              <option value="any">{tr("dist_any")}</option>
+              <option value="5">{tr("dist_n", { n: 5 })}</option>
+              <option value="10">{tr("dist_n", { n: 10 })}</option>
+              <option value="25">{tr("dist_n", { n: 25 })}</option>
             </select>
             <FiChevronDown className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[14.5px] text-slate-500 whitespace-nowrap">Sort by:</span>
+            <span className="text-[14.5px] text-slate-500 whitespace-nowrap">
+              {tr("sortBy")}
+            </span>
             <div className="relative flex-1">
-              <select value={sort} onChange={(e) => setSort(e.target.value)} className={sel}>
-                <option value="rating">Top Rated &amp; Verified First</option>
-                <option value="newest">Newest First</option>
-                <option value="wage">Highest Wage First</option>
+              <select
+                value={sort}
+                onChange={(e) => setSort(e.target.value)}
+                className={sel}
+              >
+                <option value="rating">{tr("sort_rating")}</option>
+                <option value="newest">{tr("sort_newest")}</option>
+                <option value="wage">{tr("sort_wage")}</option>
               </select>
               <FiChevronDown className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
             </div>
@@ -434,18 +581,22 @@ export default function Applications() {
         </div>
 
         {loading ? (
-          <p className="mt-10 text-slate-500">Loading applications…</p>
+          <p className="mt-10 text-slate-500">{tr("loading")}</p>
         ) : filtered.length === 0 ? (
           <div className="mt-8 rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center text-slate-500">
-            {apps.length === 0 ? "No applications yet. Workers who apply to your jobs will appear here." : "No applicants match these filters."}
+            {apps.length === 0 ? tr("emptyNone") : tr("emptyFilter")}
           </div>
         ) : (
           <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(300px,0.95fr)_minmax(0,1.3fr)_minmax(280px,0.7fr)] items-start">
             {/* ── Applicant list ── */}
             <section>
               <div className="flex items-center justify-between px-1 mb-4 text-[13.5px]">
-                <span className="font-bold tracking-wider text-slate-500">APPLICANTS ({filtered.length})</span>
-                <span className="text-slate-500">{sort === "newest" ? "Sorted by date" : sort === "wage" ? "Sorted by wage" : "Sorted by rating"}</span>
+                <span className="font-bold tracking-wider text-slate-500">
+                  {tr("applicantsN", { n: filtered.length })}
+                </span>
+                <span className="text-slate-500">
+                  {tr(`sorted_${sort}` as EmployerKey)}
+                </span>
               </div>
               <div className="flex flex-col gap-4">
                 {filtered.map((a) => {
@@ -465,20 +616,40 @@ export default function Applications() {
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-2">
-                            <span className="text-[18px] font-bold truncate">{nameOf(a)}</span>
-                            <span className={`shrink-0 rounded-md px-2.5 py-1 text-[13px] font-medium ${STAGE_BADGE[st].cls}`}>{STAGE_BADGE[st].label}</span>
+                            <span className="text-[18px] font-bold truncate">
+                              {nameOf(a)}
+                            </span>
+                            <span
+                              className={`shrink-0 rounded-md px-2.5 py-1 text-[13px] font-medium ${STAGE_BADGE[st].cls}`}
+                            >
+                              {tr(`badge_${st}` as EmployerKey)}
+                            </span>
                           </div>
                           <div className="text-[15px] text-slate-500 truncate">
-                            {skillsOf(a)[0] || loc(a.job?.jobTitle, language) || "Worker"}
+                            {skillsOf(a)[0] ||
+                              loc(a.job?.jobTitle) ||
+                              tr("worker")}
                             {d !== null && ` • ${d.toFixed(1)} km`}
                           </div>
                         </div>
                       </div>
                       <div className="mt-4 pt-3.5 border-t border-slate-100 flex items-center justify-between gap-3 text-[14.5px]">
-                        <span className="text-slate-500"><span className="text-slate-500">★</span> {r ? r.toFixed(1) : "New"}{a.worker?.totalReviews ? ` (${a.worker.totalReviews} shifts)` : ""}</span>
-                        {wageOf(a.job) > 0 && <span className="font-bold">{money(wageOf(a.job))} / {unitOf(a.job)}</span>}
+                        <span className="text-slate-500">
+                          <span className="text-slate-500">★</span>{" "}
+                          {r ? r.toFixed(1) : tr("isNew")}
+                          {a.worker?.totalReviews
+                            ? ` ${tr("shiftsN", { n: a.worker.totalReviews })}`
+                            : ""}
+                        </span>
+                        {wageOf(a.job) > 0 && (
+                          <span className="font-bold">
+                            {money(wageOf(a.job))} / {tr(unitKey(a.job))}
+                          </span>
+                        )}
                         {st === "completed" ? (
-                          <span className="text-emerald-600 font-medium">Shift completed</span>
+                          <span className="text-emerald-600 font-medium">
+                            {tr("shiftCompleted")}
+                          </span>
                         ) : (
                           <span className="text-slate-500">{phoneOf(a)}</span>
                         )}
@@ -494,8 +665,8 @@ export default function Applications() {
               <section className="rounded-xl border border-slate-200 bg-white overflow-hidden">
                 <div className="px-6 pt-6 pb-6">
                   <div className="flex flex-wrap items-center justify-between gap-2 text-[14.5px] text-slate-500">
-                    <span>Application #APP-{appCode(selected)}</span>
-                    <span>{appliedLabel(selected.createdAt)}</span>
+                    <span>{tr("appNo", { code: appCode(selected) })}</span>
+                    <span>{appliedLabel(selected.createdAt, tr, locale)}</span>
                   </div>
 
                   <div className="mt-5 flex items-start gap-5">
@@ -504,18 +675,32 @@ export default function Applications() {
                     </span>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-3">
-                        <h2 className="text-[26px] font-extrabold leading-tight">{nameOf(selected)}</h2>
+                        <h2 className="text-[26px] font-extrabold leading-tight">
+                          {nameOf(selected)}
+                        </h2>
                         {selected.worker?.backgroundVerified && (
-                          <span className="rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700 text-[14px] font-medium px-2.5 py-0.5">Verified</span>
+                          <span className="rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700 text-[14px] font-medium px-2.5 py-0.5">
+                            {tr("verified")}
+                          </span>
                         )}
                       </div>
                       <p className="mt-1 text-[15.5px] text-slate-600">
-                        Applied for: <b className="text-slate-900 font-semibold">{jobTitle || "—"}</b>
+                        {tr("appliedFor")}{" "}
+                        <b className="text-slate-900 font-semibold">
+                          {jobTitle || "—"}
+                        </b>
                       </p>
                       <p className="mt-1 text-[15px] text-slate-500">
-                        ★ {workerRating(selected) ? workerRating(selected).toFixed(1) : "New"}
-                        {selected.worker?.totalReviews ? ` (${selected.worker.totalReviews} shifts)` : ""}
-                        {selected.worker?.location && <>  •  {selected.worker.location}</>}
+                        ★{" "}
+                        {workerRating(selected)
+                          ? workerRating(selected).toFixed(1)
+                          : tr("isNew")}
+                        {selected.worker?.totalReviews
+                          ? ` ${tr("shiftsN", { n: selected.worker.totalReviews })}`
+                          : ""}
+                        {selected.worker?.location && (
+                          <> • {selected.worker.location}</>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -523,26 +708,56 @@ export default function Applications() {
                   {/* Contact */}
                   <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <div className="text-[13.5px] text-slate-500">Worker Contact</div>
-                      <div className="text-[21px] font-bold">{phoneOf(selected) ? (/^\+/.test(phoneOf(selected)) ? phoneOf(selected) : `+91 ${phoneOf(selected)}`) : "Not provided"}</div>
+                      <div className="text-[13.5px] text-slate-500">
+                        {tr("workerContact")}
+                      </div>
+                      <div className="text-[21px] font-bold">
+                        {phoneOf(selected)
+                          ? /^\+/.test(phoneOf(selected))
+                            ? phoneOf(selected)
+                            : `+91 ${phoneOf(selected)}`
+                          : tr("notProvided")}
+                      </div>
                     </div>
                     {phoneOf(selected) && (
                       <div className="flex gap-2.5">
-                        <a href={`tel:${phoneOf(selected)}`} className="h-11 px-5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-[15px] font-medium text-slate-800 no-underline flex items-center gap-2"><FiPhone /> Call Now</a>
-                        <a href={waLink(phoneOf(selected))} target="_blank" rel="noreferrer" className="h-11 px-5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[15px] font-medium no-underline flex items-center">WhatsApp</a>
+                        <a
+                          href={`tel:${phoneOf(selected)}`}
+                          className="h-11 px-5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-[15px] font-medium text-slate-800 no-underline flex items-center gap-2"
+                        >
+                          <FiPhone /> {tr("callNow")}
+                        </a>
+                        <a
+                          href={waLink(phoneOf(selected))}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="h-11 px-5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[15px] font-medium no-underline flex items-center"
+                        >
+                          WhatsApp
+                        </a>
                       </div>
                     )}
                   </div>
 
                   {/* Tags */}
-                  {(skillsOf(selected).length > 0 || (selected.worker?.documents?.length ?? 0) > 0) && (
+                  {(skillsOf(selected).length > 0 ||
+                    (selected.worker?.documents?.length ?? 0) > 0) && (
                     <div className="mt-4 flex flex-wrap gap-2.5">
                       {skillsOf(selected).map((s) => (
-                        <span key={s} className="rounded-lg border border-slate-200 bg-slate-50 text-slate-600 text-[14.5px] px-3.5 py-2">{s}</span>
+                        <span
+                          key={s}
+                          className="rounded-lg border border-slate-200 bg-slate-50 text-slate-600 text-[14.5px] px-3.5 py-2"
+                        >
+                          {s}
+                        </span>
                       ))}
                       {selected.worker?.documents?.map((d) => (
-                        <span key={d.title} className="rounded-lg border border-slate-200 bg-slate-50 text-slate-600 text-[14.5px] px-3.5 py-2">
-                          {d.title}{d.verified ? " ✓" : ""}
+                        <span
+                          key={d.title}
+                          className="rounded-lg border border-slate-200 bg-slate-50 text-slate-600 text-[14.5px] px-3.5 py-2"
+                        >
+                          {d.title}
+                          {d.verified ? " ✓" : ""}
                         </span>
                       ))}
                     </div>
@@ -552,22 +767,44 @@ export default function Applications() {
                 {/* Wage strip */}
                 <div className="bg-slate-50 border-y border-slate-200 px-6 py-5 grid gap-4 sm:grid-cols-3">
                   <div>
-                    <div className="text-[14px] text-slate-500">Agreed Wage</div>
-                    <div className="text-[19px] font-bold">{wageOf(selected.job) ? `${money(wageOf(selected.job))} / ${unitOf(selected.job)}` : "—"}</div>
+                    <div className="text-[14px] text-slate-500">
+                      {tr("agreedWage")}
+                    </div>
+                    <div className="text-[19px] font-bold">
+                      {wageOf(selected.job)
+                        ? `${money(wageOf(selected.job))} / ${tr(unitKey(selected.job))}`
+                        : "—"}
+                    </div>
                   </div>
                   <div>
-                    <div className="text-[14px] text-slate-500">Shift Hours</div>
-                    <div className="text-[19px] font-bold leading-snug">{selected.job?.dutyTimings || "—"}</div>
+                    <div className="text-[14px] text-slate-500">
+                      {tr("shiftHours")}
+                    </div>
+                    <div className="text-[19px] font-bold leading-snug">
+                      {selected.job?.dutyTimings || "—"}
+                    </div>
                   </div>
                   <div>
-                    <div className="text-[14px] text-slate-500">Payout Status</div>
-                    <div className={`text-[19px] font-bold ${stageOf(selected) === "rated" ? "text-blue-600" : stageOf(selected) === "completed" ? "text-emerald-600" : "text-slate-500"}`}>
-                      {stageOf(selected) === "rated" ? "Rated" : stageOf(selected) === "completed" ? "Ready to Pay" : "Pending shift"}
+                    <div className="text-[14px] text-slate-500">
+                      {tr("payoutStatus")}
+                    </div>
+                    <div
+                      className={`text-[19px] font-bold ${stageOf(selected) === "rated" ? "text-blue-600" : stageOf(selected) === "completed" ? "text-emerald-600" : "text-slate-500"}`}
+                    >
+                      {stageOf(selected) === "rated"
+                        ? tr("payout_rated")
+                        : stageOf(selected) === "completed"
+                          ? tr("payout_ready")
+                          : tr("payout_pending")}
                     </div>
                   </div>
                 </div>
 
-                <RatePanel key={selected._id} a={selected} onRated={fetchApps} />
+                <RatePanel
+                  key={selected._id}
+                  a={selected}
+                  onRated={fetchApps}
+                />
               </section>
             )}
 
@@ -576,45 +813,75 @@ export default function Applications() {
               <aside className="flex flex-col gap-6">
                 <div className="rounded-xl border border-slate-200 bg-white p-6">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-[14px] font-bold tracking-wider text-slate-500">SHIFT STAFFING</span>
+                    <span className="text-[14px] font-bold tracking-wider text-slate-500">
+                      {tr("shiftStaffing")}
+                    </span>
                     <span className="rounded-full bg-emerald-50 text-emerald-700 text-[13.5px] font-medium px-3 py-1 whitespace-nowrap">
-                      {jobApps.filter((x) => stageOf(x) !== "awaiting").length} of {selected.job?.vacancies || jobApps.length} Confirmed
+                      {tr("confirmedOf", {
+                        a: jobApps.filter((x) => stageOf(x) !== "awaiting")
+                          .length,
+                        b: selected.job?.vacancies || jobApps.length,
+                      })}
                     </span>
                   </div>
                   <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-3.5">
                     {jobApps.map((x) => (
-                      <div key={x._id} className="flex items-center justify-between gap-3 text-[15px]">
-                        <span className="text-slate-600 truncate">{skillsOf(x)[0] || "Worker"}</span>
-                        <span className="font-medium truncate">{nameOf(x)}</span>
+                      <div
+                        key={x._id}
+                        className="flex items-center justify-between gap-3 text-[15px]"
+                      >
+                        <span className="text-slate-600 truncate">
+                          {skillsOf(x)[0] || tr("worker")}
+                        </span>
+                        <span className="font-medium truncate">
+                          {nameOf(x)}
+                        </span>
                       </div>
                     ))}
                   </div>
                   <div className="mt-4 h-1.5 rounded-full bg-slate-100 overflow-hidden">
                     <div
                       className="h-full bg-slate-900"
-                      style={{ width: `${Math.min(100, (jobApps.filter((x) => stageOf(x) !== "awaiting").length / (selected.job?.vacancies || jobApps.length || 1)) * 100)}%` }}
+                      style={{
+                        width: `${Math.min(100, (jobApps.filter((x) => stageOf(x) !== "awaiting").length / (selected.job?.vacancies || jobApps.length || 1)) * 100)}%`,
+                      }}
                     />
                   </div>
                 </div>
 
                 <div className="rounded-xl border border-slate-200 bg-white p-6">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-[14px] font-bold tracking-wider text-slate-500">WAGE SUMMARY</span>
+                    <span className="text-[14px] font-bold tracking-wider text-slate-500">
+                      {tr("wageSummary")}
+                    </span>
                     {selected.job?.paymentMethod && (
-                      <span className="text-[14px] font-medium text-emerald-600">● Pay via {selected.job.paymentMethod}</span>
+                      <span className="text-[14px] font-medium text-emerald-600">
+                        ● {tr("payVia", { m: selected.job.paymentMethod })}
+                      </span>
                     )}
                   </div>
                   <div className="mt-5 pt-5 border-t border-slate-100">
                     <div className="text-[34px] font-extrabold tracking-tight">
-                      {money(jobApps.reduce((sum, x) => sum + wageOf(x.job), 0))}
+                      {money(
+                        jobApps.reduce((sum, x) => sum + wageOf(x.job), 0),
+                      )}
                     </div>
-                    <p className="mt-1 text-[14.5px] text-slate-500">Total wages for this listing&apos;s crew</p>
+                    <p className="mt-1 text-[14.5px] text-slate-500">
+                      {tr("totalWages")}
+                    </p>
                   </div>
                   <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col gap-3">
                     {jobApps.map((x) => (
-                      <div key={x._id} className="flex items-center justify-between gap-3 text-[15px]">
-                        <span className="text-slate-600 truncate">{nameOf(x)}</span>
-                        <span className="font-medium">{money(wageOf(x.job))}</span>
+                      <div
+                        key={x._id}
+                        className="flex items-center justify-between gap-3 text-[15px]"
+                      >
+                        <span className="text-slate-600 truncate">
+                          {nameOf(x)}
+                        </span>
+                        <span className="font-medium">
+                          {money(wageOf(x.job))}
+                        </span>
                       </div>
                     ))}
                   </div>
