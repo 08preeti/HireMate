@@ -27,8 +27,21 @@ export interface Worker {
   backgroundVerified?: boolean;
   /** Documents an admin has reviewed, e.g. { title: "Driving Licence", detail: "MH-15-…", verified: true }. */
   documents?: WorkerDocument[];
-  /** Extra neighbourhoods the worker serves (besides `location`). */
+  /** Preferred work locations (besides `location`). */
   serviceAreas?: string[];
+  /** Free-text summary of previous work. */
+  experienceDetails?: string;
+  availability?: WorkerAvailability;
+  createdAt?: string;
+}
+
+export interface WorkerAvailability {
+  isAvailable?: boolean;
+  /** Working days: mon … sun. */
+  days?: string[];
+  /** Daily start / end time, "HH:MM". */
+  from?: string;
+  to?: string;
 }
 
 export interface WorkerDocument {

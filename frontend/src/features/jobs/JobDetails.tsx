@@ -16,6 +16,7 @@ import { speakWithEnd, stopSpeaking } from "@/lib/speech";
 import { ApiError } from "@/services/api";
 import { getJob, reportJob } from "@/services/jobs";
 import { applyToJob } from "@/services/applications";
+import { getMyJobs } from "@/services/workers";
 import type { Job, LocalizedText } from "@/types";
 
 const digits = (s?: string) => (s || "").replace(/\D/g, "");
@@ -71,6 +72,7 @@ export default function JobDetails() {
   const [reportDone, setReportDone] = useState(false);
   const [appliedSuccess, setAppliedSuccess] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [alreadyApplied, setAlreadyApplied] = useState(false);
 
   // Optional employer details may be a plain string or a per-language object.
   const loc = (v?: string | LocalizedText) => (typeof v === "string" ? v : v?.[language] || v?.en || "");
@@ -85,6 +87,13 @@ export default function JobDetails() {
       .catch(() => setLoading(false));
   }, [id]);
 
+  useEffect(() => {
+    if (!worker?.phone) return;
+    getMyJobs(worker.phone)
+      .then((apps) => setAlreadyApplied(apps.some((a) => a.job?._id === id)))
+      .catch(() => {});
+  }, [worker?.phone, id]);
+
   const submitApplication = async (body: { applicantName: string; applicantContact?: string; message?: string }) => {
     if (!job) return;
     setSubmitting(true);
@@ -93,6 +102,7 @@ export default function JobDetails() {
       toast(t.appliedSuccess, "success");
       setShowApply(false);
       setAppliedSuccess(true);
+      setAlreadyApplied(true);
     } catch (err) {
       toast(err instanceof ApiError ? err.message : "Error submitting application", "error");
     }
@@ -101,6 +111,7 @@ export default function JobDetails() {
 
   // 1-tap apply: use the worker's saved profile. Only ask for details if the profile has none.
   const handleApplyClick = () => {
+    if (alreadyApplied) { toast(L("You have already applied for this job.", "आप इस काम के लिए आवेदन कर चुके हैं।", "तुम्ही या कामासाठी अर्ज केला आहे."), "info"); return; }
     if (!worker) { router.push(ROLE_LOGIN.worker); return; }
     const phone = worker.phone || worker.contact || "";
     if (worker.name && phone) {
@@ -260,7 +271,7 @@ export default function JobDetails() {
               </div>
               {typeof job.vacancies === "number" && job.vacancies > 0 ? (
                 <span className="rounded-full bg-black/20 px-3 py-0.5 text-[12px] font-semibold">
-                  {job.vacancies} {L("vacancy available", "पद उपलब्ध", "जागा उपलब्ध")}
+                  {job.availablePositions ?? job.vacancies} / {job.vacancies} {L("vacancy available", "पद उपलब्ध", "जागा उपलब्ध")}
                 </span>
               ) : typeof job.applicationCount === "number" ? (
                 <span className="rounded-full bg-black/20 px-3 py-0.5 text-[12px] font-semibold">
@@ -297,6 +308,11 @@ export default function JobDetails() {
                   </p>
                 )}
                 <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                  {!job.isUrgent && typeof job.vacancies === "number" && job.vacancies > 0 && (
+                    <span className="rounded-md border border-[#dde4f0] bg-white px-2 py-0.5 text-[11.5px] font-semibold text-[#33415f]">
+                      {job.availablePositions ?? job.vacancies} / {job.vacancies} {L("vacancy available", "पद उपलब्ध", "जागा उपलब्ध")}
+                    </span>
+                  )}
                   {job.employerVerified && (
                     <span className="inline-flex items-center gap-1 rounded-md border border-[#a7e8c8] bg-[#ecfdf5] px-2 py-0.5 text-[12px] font-semibold text-[#047857]">
                       <FiCheckCircle size={12} aria-hidden="true" /> {L("Verified Employer", "सत्यापित नियोक्ता", "सत्यापित नियोक्ता")} ✓
@@ -450,12 +466,12 @@ export default function JobDetails() {
             <div className="grid gap-4 sm:grid-cols-2">
               <button
                 onClick={handleApplyClick}
-                disabled={submitting}
+                disabled={submitting || alreadyApplied}
                 className="flex min-h-[68px] cursor-pointer items-center justify-center gap-3.5 rounded-2xl bg-gradient-to-r from-[#e3202f] to-[#e11d48] px-5 py-3.5 text-white shadow-[0_10px_24px_rgba(225,29,72,0.35)] transition hover:brightness-110 disabled:opacity-70"
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[#0b1b3d]/70 bg-white text-[#16a34a]"><FiCheck size={24} strokeWidth={4} aria-hidden="true" /></span>
                 <span className="text-left leading-tight">
-                  <span className="block text-[19px] font-extrabold tracking-tight">{submitting ? "…" : L("Apply Now (1-Tap Apply)", "अभी आवेदन करें (1-टैप)", "आता अर्ज करा (1-टॅप)")}</span>
+                  <span className="block text-[19px] font-extrabold tracking-tight">{submitting ? "…" : alreadyApplied ? L("Already applied", "आवेदन किया जा चुका", "अर्ज केला आहे") : L("Apply Now (1-Tap Apply)", "अभी आवेदन करें (1-टैप)", "आता अर्ज करा (1-टॅप)")}</span>
                   <span className="block text-[11.5px] font-medium opacity-95">{L("Direct apply with profile (No forms)", "प्रोफ़ाइल से सीधे आवेदन (कोई फ़ॉर्म नहीं)", "प्रोफाइलवरून थेट अर्ज (फॉर्म नाही)")}</span>
                 </span>
               </button>

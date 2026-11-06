@@ -7,6 +7,7 @@ import applicationRoutes from "./applicationRoutes.js";
 import workerRoutes from "./workerRoutes.js";
 import aiRoutes from "./aiRoutes.js";
 import sessionRoutes from "./sessionRoutes.js";
+import notificationRoutes from "./notificationRoutes.js";
 
 const router = Router();
 
@@ -19,5 +20,6 @@ router.use("/applications", applicationRoutes);
 router.use("/workers", workerRoutes);
 router.use("/ai", aiRoutes);
 router.use("/auth", sessionRoutes);
+router.use("/notifications", notificationRoutes);
 
 export default router;

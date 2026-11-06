@@ -8,6 +8,7 @@ import {
   updateLocation,
 } from "../services/workerService.js";
 import { HttpError, sendError } from "../utils/httpError.js";
+import { validateWorkerProfile } from "../validators/workerValidators.js";
 
 // A worker may only touch their own resources. The id in the URL/body is
 // compared with the id from the verified token — never trusted by itself.
@@ -27,6 +28,7 @@ export async function profile(req, res) {
 export async function update(req, res) {
   try {
     assertSelf(req, req.params.id, "Not authorized to update this profile");
+    validateWorkerProfile(req.body);
     res.json(await updateProfile(req.params.id, req.body));
   } catch (err) {
     sendError(res, err, "Update failed");

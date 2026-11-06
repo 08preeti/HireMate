@@ -7,10 +7,12 @@ import type { ApiErrorBody } from "@/types";
 /** Thrown for non-2xx responses so callers can read the status and server message. */
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  fieldErrors?: Record<string, string>;
+  constructor(message: string, status: number, fieldErrors?: Record<string, string>) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.fieldErrors = fieldErrors;
   }
 }
 
@@ -47,7 +49,7 @@ async function request<T>(method: string, path: string, { body, auth = false }: 
 
   if (!res.ok) {
     if (res.status === 401 && auth) onUnauthorized?.();
-    throw new ApiError(data.message || data.error || `Request failed (${res.status})`, res.status);
+    throw new ApiError(data.message || data.error || `Request failed (${res.status})`, res.status, data.errors);
   }
   return data;
 }
@@ -56,6 +58,8 @@ const api = {
   get: <T>(path: string, auth: boolean | string = false) => request<T>("GET", path, { auth }),
   post: <T>(path: string, body: unknown, auth: boolean | string = false) => request<T>("POST", path, { body, auth }),
   put: <T>(path: string, body: unknown, auth: boolean | string = false) => request<T>("PUT", path, { body, auth }),
+  patch: <T>(path: string, body: unknown = {}, auth: boolean | string = false) => request<T>("PATCH", path, { body, auth }),
+  delete: <T>(path: string, auth: boolean | string = false) => request<T>("DELETE", path, { auth }),
 };
 
 export default api;

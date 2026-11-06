@@ -1,61 +1,90 @@
 "use client";
 
-import type { ReactNode } from "react";
-import Link from "next/link";
+import { Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
-import { FiFileText, FiHome, FiUsers } from "react-icons/fi";
+import { FiX } from "react-icons/fi";
+import EmployerSidebar from "@/components/layout/EmployerSidebar";
 import EmployerTopNav from "@/components/layout/EmployerTopNav";
-import { useLanguage } from "@/context/LanguageContext";
+import { useEmployerT } from "@/i18n/employerText";
 
 interface EmployerShellProps {
   children: ReactNode;
-  /** No longer shown in the header (kept so existing callers still compile). */
+  /** No longer used: the sidebar reads live counts from the shared employer data. Kept so existing callers still compile. */
   search?: string;
   onSearch?: (value: string) => void;
-  /** Red count on the Applications link. */
   applicationBadge?: number;
-  /** Shows the red dot on the bell. */
   hasUnread?: boolean;
 }
 
-const NAV = [
-  { href: "/employer-dashboard", icon: <FiHome />, label: ["Dashboard", "डैशबोर्ड", "डॅशबोर्ड"] },
-  { href: "/workers", icon: <FiUsers />, label: ["Workers", "कामगार", "कामगार"] },
-  { href: "/applications", icon: <FiFileText />, label: ["Applications", "आवेदन", "अर्ज"], badge: true },
-];
+const SidebarFallback = () => <div className="h-40 animate-pulse rounded-xl bg-slate-100" aria-hidden />;
 
-export default function EmployerShell({ children, applicationBadge = 0, hasUnread }: EmployerShellProps) {
+export default function EmployerShell({ children, hasUnread }: EmployerShellProps) {
   const pathname = usePathname();
-  const { language } = useLanguage();
-  const labelOf = (label: string[]) => (language === "hi" ? label[1] : language === "mr" ? label[2] : label[0]);
+  const { tr } = useEmployerT();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
-  const active = (href: string) => (href === "/employer-dashboard" ? pathname === href : pathname.startsWith(href));
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setDrawerOpen(false);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [drawerOpen]);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F5F8FC] font-app">
-      <EmployerTopNav hasUnread={hasUnread} />
+      <EmployerTopNav hasUnread={hasUnread} onMenuClick={() => setDrawerOpen(true)} menuOpen={drawerOpen} />
 
       <div className="flex flex-1">
-        {/* Sidebar */}
-        <aside className="hidden lg:block w-[220px] shrink-0 bg-white border-r border-slate-200 sticky top-16 h-[calc(100vh-64px)] p-3 pt-5">
-          <nav className="flex flex-col gap-1.5">
-            {NAV.map((n) => (
-              <Link
-                key={n.label[0]}
-                href={n.href}
-                className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-[14px] font-semibold no-underline ${active(n.href) ? "bg-blue-50 text-blue-600" : "text-slate-600 hover:bg-slate-50"}`}
-              >
-                <span className="text-[18px] shrink-0">{n.icon}</span>
-                {labelOf(n.label)}
-                {n.badge && applicationBadge > 0 && (
-                  <span className="ml-auto text-[10px] font-bold rounded-full bg-red-500 text-white px-1.5 py-0.5 min-w-[20px] text-center">{applicationBadge}</span>
-                )}
-              </Link>
-            ))}
-          </nav>
+        <aside className="hidden lg:block w-[230px] shrink-0 bg-white border-r border-slate-200 sticky top-16 h-[calc(100vh-64px)] overflow-y-auto p-3 pt-5">
+          <Suspense fallback={<SidebarFallback />}>
+            <EmployerSidebar />
+          </Suspense>
         </aside>
 
         <main className="flex-1 min-w-0">{children}</main>
+      </div>
+
+      <div className={`lg:hidden fixed inset-0 z-50 ${drawerOpen ? "" : "pointer-events-none"}`} aria-hidden={!drawerOpen}>
+        <div
+          onClick={closeDrawer}
+          className={`absolute inset-0 bg-slate-900/50 transition-opacity duration-200 ${drawerOpen ? "opacity-100" : "opacity-0"}`}
+        />
+        <aside
+          role="dialog"
+          aria-modal="true"
+          aria-label={tr("nav_main")}
+          className={`absolute left-0 top-0 h-full w-[280px] max-w-[85vw] bg-white shadow-2xl p-3 overflow-y-auto transition-transform duration-200 ${drawerOpen ? "translate-x-0" : "-translate-x-full"}`}
+        >
+          <div className="flex items-center justify-between px-1.5 pb-3 mb-1 border-b border-slate-100">
+            <span className="flex items-center gap-2 text-[17px] font-extrabold text-slate-900">
+              <span className="bg-red-600 text-white text-[12px] rounded-lg w-8 h-8 flex items-center justify-center">HM</span>
+              HireMate
+            </span>
+            <button
+              type="button"
+              onClick={closeDrawer}
+              aria-label={tr("nav_close")}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100 cursor-pointer"
+            >
+              <FiX size={20} />
+            </button>
+          </div>
+          {drawerOpen && (
+            <Suspense fallback={<SidebarFallback />}>
+              <EmployerSidebar onNavigate={closeDrawer} />
+            </Suspense>
+          )}
+        </aside>
       </div>
     </div>
   );

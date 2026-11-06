@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FiBell, FiCheck, FiChevronDown, FiGlobe, FiLogOut } from "react-icons/fi";
+import { FiCheck, FiChevronDown, FiGlobe, FiLogOut, FiMenu } from "react-icons/fi";
+import NotificationBell from "@/components/notifications/NotificationBell";
 import { useAuth } from "@/context/AuthContext";
+import { useEmployerData } from "@/context/EmployerDataContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { ROLE_LOGIN } from "@/config/routes";
 import type { Language } from "@/types";
@@ -16,13 +18,17 @@ const LANGUAGES: { code: Language; short: string; label: string }[] = [
 ];
 
 interface EmployerTopNavProps {
-  /** Red dot on the bell. */
+  /** Unused: the bell now shows the real unread count. Kept so existing callers compile. */
   hasUnread?: boolean;
+  /** Shows the hamburger button (below the desktop breakpoint) that opens the sidebar drawer. */
+  onMenuClick?: () => void;
+  menuOpen?: boolean;
 }
 
 /** The one header used on every employer page (Dashboard, Post a Job, Applications). */
-export default function EmployerTopNav({ hasUnread }: EmployerTopNavProps) {
+export default function EmployerTopNav({ onMenuClick, menuOpen }: EmployerTopNavProps) {
   const router = useRouter();
+  const { setUnreadNotifications } = useEmployerData();
   const { employer, logout } = useAuth();
   const { language, setLanguage } = useLanguage();
   const [menu, setMenu] = useState(false);
@@ -55,6 +61,18 @@ export default function EmployerTopNav({ hasUnread }: EmployerTopNavProps) {
   return (
     <header className="sticky top-0 z-40 bg-[#0B1228] text-white border-b border-white/10">
       <div className="h-16 px-4 lg:px-8 flex items-center gap-3 lg:gap-6">
+        {onMenuClick && (
+          <button
+            type="button"
+            onClick={onMenuClick}
+            aria-label={L("Open menu", "मेनू खोलें", "मेनू उघडा")}
+            aria-expanded={menuOpen}
+            className="lg:hidden -ml-1 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-[20px] text-white hover:bg-white/10"
+          >
+            <FiMenu />
+          </button>
+        )}
+
         {/* Brand */}
         <Link href="/employer-dashboard" className="flex items-center gap-2.5 no-underline shrink-0">
           <span className="bg-red-600 text-white font-extrabold text-[13px] rounded-lg w-9 h-9 flex items-center justify-center">HM</span>
@@ -92,10 +110,7 @@ export default function EmployerTopNav({ hasUnread }: EmployerTopNavProps) {
           )}
         </div>
 
-        <span className="relative text-slate-300 text-[19px] shrink-0" aria-label={L("Notifications", "सूचनाएं", "सूचना")}>
-          <FiBell />
-          {hasUnread && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500" />}
-        </span>
+        <NotificationBell role="employer" onUnreadChange={setUnreadNotifications} />
 
         {/* Account */}
         <div ref={menuRef} className="relative shrink-0 sm:border-l sm:border-white/10 sm:pl-4">

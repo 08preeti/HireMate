@@ -3,10 +3,16 @@ import {
   listEmployerApplications,
   listLiveApplications,
   applyToJob,
+  decideApplication,
+  respondToOffer,
   updateApplicationStatus,
+  setLocationConsent,
+  withdrawApplication,
+  cancelApplication,
+  markReviewed,
   getRatingByName,
 } from "../services/applicationService.js";
-import { validateRating, validateStatus } from "../validators/applicationValidators.js";
+import { validateApplyBody, validateDecision, validateLocationConsent, validateOfferResponse, validateRating, validateStatus } from "../validators/applicationValidators.js";
 import { sendError } from "../utils/httpError.js";
 
 // ── Employer ────────────────────────────────────────────────────────────────
@@ -14,6 +20,26 @@ export async function rate(req, res) {
   try {
     validateRating(req.body.rating);
     await rateApplication(req.auth.id, req.params.id, req.body);
+    res.json({ success: true });
+  } catch (err) {
+    sendError(res, err, "Server error");
+  }
+}
+
+export async function decide(req, res) {
+  try {
+    const { decision } = req.body;
+    validateDecision(decision);
+    const application = await decideApplication(req.auth.id, req.params.id, decision);
+    res.json({ success: true, status: application.status });
+  } catch (err) {
+    sendError(res, err, "Server error");
+  }
+}
+
+export async function review(req, res) {
+  try {
+    await markReviewed(req.auth.id, req.params.id);
     res.json({ success: true });
   } catch (err) {
     sendError(res, err, "Server error");
@@ -39,10 +65,22 @@ export async function employerList(req, res) {
 // ── Worker ──────────────────────────────────────────────────────────────────
 export async function apply(req, res) {
   try {
+    validateApplyBody(req.body);
     const application = await applyToJob(req.auth.id, req.params.jobId, req.body);
     res.json({ success: true, application });
   } catch (err) {
     sendError(res, err, "Apply failed");
+  }
+}
+
+export async function respondOffer(req, res) {
+  try {
+    const { response } = req.body;
+    validateOfferResponse(response);
+    const application = await respondToOffer(req.auth, req.params.id, response);
+    res.json({ success: true, status: application.status });
+  } catch (err) {
+    sendError(res, err, "Server error");
   }
 }
 
@@ -52,6 +90,35 @@ export async function updateStatus(req, res) {
     validateStatus(status);
     await updateApplicationStatus(req.auth, req.params.id, status);
     res.json({ success: true, status });
+  } catch (err) {
+    sendError(res, err, "Server error");
+  }
+}
+
+export async function locationConsent(req, res) {
+  try {
+    const { consent } = req.body;
+    validateLocationConsent(consent);
+    const locationConsent = await setLocationConsent(req.auth, req.params.id, consent);
+    res.json({ success: true, locationConsent });
+  } catch (err) {
+    sendError(res, err, "Server error");
+  }
+}
+
+export async function withdraw(req, res) {
+  try {
+    const application = await withdrawApplication(req.auth, req.params.id);
+    res.json({ success: true, status: application.status });
+  } catch (err) {
+    sendError(res, err, "Server error");
+  }
+}
+
+export async function cancel(req, res) {
+  try {
+    const application = await cancelApplication(req.auth.id, req.params.id);
+    res.json({ success: true, status: application.status });
   } catch (err) {
     sendError(res, err, "Server error");
   }

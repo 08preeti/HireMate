@@ -1,35 +1,27 @@
-import Job from "../models/Job.js";
 import Application from "../models/Application.js";
 import Worker from "../models/Worker.js";
+import { listEmployerJobs } from "./employerJobService.js";
 
 export async function getDashboard(employerId) {
-  const jobs = await Job.find({ employer: employerId });
-  const applications = await Application.find({ employer: employerId });
-
-  const jobsWithCounts = jobs.map((job) => ({
-    ...job._doc,
-    applicationCount: applications.filter(
-      (app) => app.job.toString() === job._id.toString(),
-    ).length,
-  }));
-
+  const { jobs, summary } = await listEmployerJobs(employerId);
   return {
-    totalJobs: jobs.length,
-    totalApplications: applications.length,
-    jobs: jobsWithCounts,
+    totalJobs: summary.totalJobs,
+    totalApplications: summary.totalApplications,
+    jobs,
+    stats: summary,
   };
 }
 
 /**
  * Every worker who has created a work profile (a name is saved), newest first.
- * Only safe fields are returned — never the OTP. `busy` = currently on the way / on site for a job.
+ * Only non-private fields are returned — never the OTP, phone number or GPS location. `busy` = currently on the way / on site for a job.
  */
 export async function listWorkers() {
   const workers = await Worker.find({
     name: { $exists: true, $nin: [null, ""] },
   })
     .select(
-      "name phone skills location gender rating totalReviews currentLocation createdAt",
+      "name skills location gender rating totalReviews createdAt",
     )
     .sort({ createdAt: -1 })
     .limit(500)

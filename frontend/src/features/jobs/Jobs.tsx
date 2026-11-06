@@ -14,6 +14,7 @@ import { useLanguage } from "@/context/LanguageContext";
 import { translations } from "@/i18n/translations";
 import { haversine } from "@/lib/geo";
 import { getJobs } from "@/services/jobs";
+import { getMyJobs } from "@/services/workers";
 import type { Job, Language, LatLng } from "@/types";
 
 const poppins = Poppins({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"] });
@@ -41,6 +42,25 @@ const getJobIcon = (title?: string): IconType => {
   if (t.includes("mechanic")) return FiSettings;
   return FiBriefcase;
 };
+
+// Trade category, taken from the job title (jobs carry no separate category field).
+const CATEGORIES: [RegExp, string][] = [
+  [/electric|weld/, "Electrical & Welding"],
+  [/driver|auto|deliver/, "Driving & Delivery"],
+  [/plumb/, "Plumbing"],
+  [/clean|sweep|maid|house/, "Cleaning & Housekeeping"],
+  [/cook|chef|waiter/, "Food & Hospitality"],
+  [/security|guard/, "Security"],
+  [/paint|carpent|mason|construct|helper|labour/, "Construction & Repair"],
+  [/mechanic/, "Mechanic"],
+  [/garden|mali/, "Gardening"],
+];
+const categoryOf = (job: Job): string => {
+  const t = (job.jobTitle?.en || "").toLowerCase();
+  return CATEGORIES.find(([re]) => re.test(t))?.[1] ?? "Other";
+};
+const skillsOf = (job: Job, language: Language): string[] =>
+  (job.skills?.[language] || job.skills?.en || "").split(/[,،;、]/).map((x) => x.trim()).filter(Boolean);
 
 const BANNERS = [
   "bg-[linear-gradient(120deg,#0f3a73,#1a6cf0)]",
@@ -78,6 +98,11 @@ export default function Jobs() {
   const [filterPayment, setFilterPayment]     = useState("");
   const [filterMinSalary, setFilterMinSalary] = useState(0);
   const [savedOnly, setSavedOnly] = useState(false);
+  const [filterCategory, setFilterCategory] = useState("");
+  const [filterSkill, setFilterSkill] = useState("");
+  const [filterType, setFilterType] = useState<"" | "urgent" | "regular">("");
+  const [loadError, setLoadError] = useState(false);
+  const [appliedIds, setAppliedIds] = useState<string[]>([]);
   const [sort, setSort]       = useState<SortKey>("default");
   const [moreOpen, setMoreOpen] = useState(false);
   const [pos, setPos]         = useState<LatLng | null>(null);
@@ -94,8 +119,16 @@ export default function Jobs() {
   useEffect(() => {
     getJobs()
       .then((data) => { setJobs(data); setLoading(false); })
-      .catch(() => setLoading(false));
+      .catch(() => { setLoadError(true); setLoading(false); });
   }, []);
+
+  // Jobs the worker already applied for are marked, so they are not applied for twice.
+  useEffect(() => {
+    if (role !== "worker" || !worker?.phone) return;
+    getMyJobs(worker.phone)
+      .then((apps) => setAppliedIds(apps.map((a) => a.job?._id).filter((x): x is string => !!x)))
+      .catch(() => {});
+  }, [role, worker?.phone]);
 
   // The top-bar search sends people here as /jobs?q=...
   const q = params.get("q") ?? "";
@@ -144,6 +177,10 @@ export default function Jobs() {
       if (filterPayment && job.paymentMethod !== filterPayment) return false;
       if (filterMinSalary > 0 && Number(job.salary) < filterMinSalary) return false;
       if (savedOnly && !saved.includes(job._id)) return false;
+      if (filterCategory && categoryOf(job) !== filterCategory) return false;
+      if (filterSkill && !skillsOf(job, language).some((x) => x.toLowerCase() === filterSkill.toLowerCase())) return false;
+      if (filterType === "urgent" && !job.isUrgent) return false;
+      if (filterType === "regular" && job.isUrgent) return false;
       return true;
     })
     .sort(
@@ -153,11 +190,20 @@ export default function Jobs() {
     );
 
   const urgentCount = jobs.filter((j) => j.isUrgent).length;
-  const hasFilters = !!(filterUrgent || filterPayment || filterMinSalary > 0 || savedOnly || area || sort !== "default");
-  const clearAll = () => { setFilterUrgent(false); setFilterPayment(""); setFilterMinSalary(0); setSavedOnly(false); setArea(""); setSort("default"); };
+  const categoryOptions = Array.from(new Set(jobs.map(categoryOf))).sort();
+  const skillOptions = Array.from(new Map(jobs.flatMap((j) => skillsOf(j, language)).map((x) => [x.toLowerCase(), x])).values()).sort();
+  const hasFilters = !!(filterCategory || filterSkill || filterType || filterUrgent || filterPayment || filterMinSalary > 0 || savedOnly || area || sort !== "default");
+  const clearAll = () => { setFilterCategory(""); setFilterSkill(""); setFilterType(""); setFilterUrgent(false); setFilterPayment(""); setFilterMinSalary(0); setSavedOnly(false); setArea(""); setSort("default"); };
 
   if (loading) return (
     <div className={`${poppins.className} p-10 text-center text-[16px] text-gray-500`}>{t.loading}</div>
+  );
+
+  if (loadError) return (
+    <div className={`${poppins.className} p-10 text-center`} role="alert">
+      <p className="text-[15px] font-semibold text-[#0d2250]">{L("Could not load jobs.", "नौकरियां लोड नहीं हो सकीं।", "नोकऱ्या लोड करता आल्या नाहीत.")}</p>
+      <button onClick={() => { setLoadError(false); setLoading(true); getJobs().then((d) => { setJobs(d); setLoading(false); }).catch(() => { setLoadError(true); setLoading(false); }); }} className="mt-3 cursor-pointer rounded-lg bg-[#1f6bff] px-5 py-2.5 text-[14px] font-semibold text-white">{L("Try again", "फिर कोशिश करें", "पुन्हा प्रयत्न करा")}</button>
+    </div>
   );
 
   const chip = "inline-flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-xl border px-4 py-2.5 text-[13px] font-semibold transition";
@@ -236,7 +282,7 @@ export default function Jobs() {
         </button>
 
         <div className="relative ml-auto">
-          <button onClick={() => setMoreOpen((v) => !v)} className={`${chip} ${moreOpen || savedOnly || filterPayment === "UPI" || sort !== "default" ? "border-[#1a6cf0]" : ""} bg-white text-[#0d2250]`} aria-expanded={moreOpen}>
+          <button onClick={() => setMoreOpen((v) => !v)} className={`${chip} ${moreOpen || savedOnly || filterCategory || filterSkill || filterType || filterPayment === "UPI" || sort !== "default" ? "border-[#1a6cf0]" : ""} bg-white text-[#0d2250]`} aria-expanded={moreOpen}>
             <FiSliders size={15} aria-hidden="true" /> {L("More Filters", "और फ़िल्टर", "आणखी फिल्टर")} <FiChevronDown size={15} aria-hidden="true" />
           </button>
           {moreOpen && (
@@ -252,6 +298,28 @@ export default function Jobs() {
                       </button>
                     ))}
                   </div>
+                </div>
+                <div className="mb-3">
+                  <div className="mb-1.5 text-[12px] font-semibold text-[#6b7a95]">{L("Category", "श्रेणी", "प्रवर्ग")}</div>
+                  <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full cursor-pointer rounded-lg border border-[#e3eaf5] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#1a6cf0]">
+                    <option value="">{L("All categories", "सभी श्रेणियां", "सर्व प्रवर्ग")}</option>
+                    {categoryOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="mb-3">
+                  <div className="mb-1.5 text-[12px] font-semibold text-[#6b7a95]">{L("Skill", "कौशल", "कौशल्य")}</div>
+                  <select value={filterSkill} onChange={(e) => setFilterSkill(e.target.value)} className="w-full cursor-pointer rounded-lg border border-[#e3eaf5] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#1a6cf0]">
+                    <option value="">{L("Any skill", "कोई भी कौशल", "कोणतेही कौशल्य")}</option>
+                    {skillOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="mb-3">
+                  <div className="mb-1.5 text-[12px] font-semibold text-[#6b7a95]">{L("Job type", "काम का प्रकार", "कामाचा प्रकार")}</div>
+                  <select value={filterType} onChange={(e) => setFilterType(e.target.value as "" | "urgent" | "regular")} className="w-full cursor-pointer rounded-lg border border-[#e3eaf5] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#1a6cf0]">
+                    <option value="">{L("Any", "कोई भी", "कोणतेही")}</option>
+                    <option value="urgent">{L("Urgent hiring", "तत्काल भर्ती", "तातडीची भरती")}</option>
+                    <option value="regular">{L("Regular", "सामान्य", "नियमित")}</option>
+                  </select>
                 </div>
                 <div className="mb-3">
                   <div className="mb-1.5 text-[12px] font-semibold text-[#6b7a95]">{L("Sort by", "क्रम", "क्रम")}</div>
@@ -323,6 +391,12 @@ export default function Jobs() {
                   {(job.rating ?? 0) > 0 && <span className="inline-flex items-center gap-1.5 text-[#8a5a00]"><FiStar size={13} aria-hidden="true" /> {job.rating} ({job.totalReviews} {t.reviews})</span>}
                 </div>
 
+                {typeof job.vacancies === "number" && (
+                  <div className="mt-1.5 text-[12px] text-[#6b7a95]">{job.availablePositions ?? job.vacancies} / {job.vacancies} {L("vacancies available", "पद उपलब्ध", "जागा उपलब्ध")}</div>
+                )}
+                {appliedIds.includes(job._id) && (
+                  <span className="mt-2 inline-block rounded-full bg-[#eaf2ff] px-3 py-1 text-[12px] font-semibold text-[#1a4fc4]">{L("Already applied", "आवेदन किया जा चुका", "अर्ज केला आहे")}</span>
+                )}
                 {tags.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {tags.map((tag) => <span key={tag} className="rounded-lg bg-[#eef4ff] px-2.5 py-1 text-[11.5px] font-medium text-[#1a4fb0]">{tag}</span>)}
