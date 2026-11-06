@@ -80,7 +80,7 @@ interface NotificationItem {
   cfg: StatusStyle;
   workerName?: string;
   status: ApplicationStatus;
-  app: Application;
+  app: LiveApplication;
 }
 
 const STATUS_CONFIG: Record<ApplicationStatus, StatusStyle> = {
