@@ -105,7 +105,7 @@ export function EmployerDataProvider({ children }: { children: ReactNode }) {
     },
     [employerId],
   );
-
+    
   const stageCounts = useMemo(() => {
     const counts = Object.fromEntries(STAGES.map((s) => [s, 0])) as Record<Stage, number>;
     applications.forEach((a) => {

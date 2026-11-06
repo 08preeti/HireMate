@@ -14,6 +14,7 @@ import { ApiError } from "@/services/api";
 import { fixLeafletIcons } from "@/lib/leaflet";
 import { useAuth } from "@/context/AuthContext";
 import EmployerShell from "@/components/layout/EmployerShell";
+import { usePostJobT } from "@/i18n/postJobText";
 import type { EmployerJobDetail, JobType, LatLng } from "@/types";
 
 // ── Location search types ──────────────────────────────────────────────────
@@ -313,6 +314,7 @@ const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigi
 export default function PostJobs({ jobId }: { jobId?: string } = {}) {
   const { employer } = useAuth();
   const isEdit = Boolean(jobId);
+  const { t, tl } = usePostJobT();
 
   // 1 · Role
   const [trade, setTrade] = useState("Construction Helper");
@@ -452,7 +454,7 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
   const q = jobSearch.trim().toLowerCase();
   const customTiles = customJobs.map((label) => ({ label, icon: <FiPlus />, custom: true }));
   const visibleJobs: { label: string; icon: ReactNode; custom?: boolean }[] = q
-    ? [...ALL_JOBS, ...customTiles].filter((j) => j.label.toLowerCase().includes(q))
+    ? [...ALL_JOBS, ...customTiles].filter((j) => j.label.toLowerCase().includes(q) || t(j.label).toLowerCase().includes(q))
     : groupKey === "custom"
       ? customTiles
       : ALL_JOBS.filter((j) => j.group === groupKey);
@@ -517,7 +519,7 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
         fillFrom(j);
       })
       .catch((err) => {
-        if (alive) setLoadError(err instanceof ApiError && err.status !== 500 ? err.message : "Could not load this job. Please try again.");
+        if (alive) setLoadError(err instanceof ApiError && err.status !== 500 ? err.message : tl("Could not load this job. Please try again.", "यह नौकरी लोड नहीं हो सकी। कृपया फिर कोशिश करें।", "ही नोकरी लोड होऊ शकली नाही. कृपया पुन्हा प्रयत्न करा."));
       })
       .finally(() => alive && setLoadingJob(false));
     return () => {
@@ -558,7 +560,7 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
   };
 
   const detectGps = () => {
-    if (!navigator.geolocation) { setError("Geolocation is not supported on this device."); return; }
+    if (!navigator.geolocation) { setError(tl("Geolocation is not supported on this device.", "इस डिवाइस पर लोकेशन समर्थित नहीं है।", "या डिव्हाइसवर लोकेशन समर्थित नाही.")); return; }
     setDetecting(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -568,7 +570,7 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
         await movePin(lat, lng);
         setDetecting(false);
       },
-      () => { setDetecting(false); setError("Please allow location access to detect GPS."); }
+      () => { setDetecting(false); setError(tl("Please allow location access to detect GPS.", "GPS पता करने के लिए कृपया लोकेशन की अनुमति दें।", "GPS शोधण्यासाठी कृपया लोकेशनची परवानगी द्या.")); }
     );
   };
 
@@ -576,19 +578,19 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
   const validate = (): FormErrors => {
     const e: FormErrors = {};
     const digits = phone.replace(/\D/g, "");
-    if (!jobTitle.trim()) e.jobTitle = "Please enter a job title.";
-    else if (jobTitle.trim().length > 150) e.jobTitle = "Job title must be 150 characters or fewer.";
-    if (!company.trim()) e.companyName = "Please enter the hiring entity / contractor name.";
-    if (workers < 1 || workers > 500) e.vacancies = "Workers required must be between 1 and 500.";
-    else if (workers < heldWorkers) e.vacancies = `${heldWorkers} worker${heldWorkers > 1 ? "s are" : " is"} already accepted or confirmed, so this cannot be lower than ${heldWorkers}.`;
-    if (!location.trim() || !pinPos) e.location = "Please search the site address or tap the map to pin the exact gate location.";
-    if (postalCode.trim() && !/^\d{6}$/.test(postalCode.trim())) e.postalCode = "Postal code must be 6 digits.";
-    if (digits.length !== 10) e.contactInfo = "Enter a valid 10-digit on-site contact number.";
-    if (dateMode === "custom" && !customDate && !isEdit) e.startDate = "Please choose the work date.";
-    if (!isEdit && dateMode === "custom" && customDate && customDate < isoDay(0)) e.startDate = "Work date cannot be in the past.";
-    if (wageNum <= 0) e.salary = "Please enter the pay amount per worker.";
-    if (summary.length > 3000) e.summary = "Job description must be 3000 characters or fewer.";
-    if (note.length > 1500) e.workInstructions = "Work instructions must be 1500 characters or fewer.";
+    if (!jobTitle.trim()) e.jobTitle = tl("Please enter a job title.", "कृपया नौकरी का शीर्षक लिखें।", "कृपया नोकरीचे शीर्षक लिहा.");
+    else if (jobTitle.trim().length > 150) e.jobTitle = tl("Job title must be 150 characters or fewer.", "नौकरी का शीर्षक 150 अक्षरों से ज़्यादा नहीं हो सकता।", "नोकरीचे शीर्षक 150 अक्षरांपेक्षा जास्त असू शकत नाही.");
+    if (!company.trim()) e.companyName = tl("Please enter the hiring entity / contractor name.", "कृपया नियोक्ता / ठेकेदार का नाम लिखें।", "कृपया नियुक्ती करणाऱ्याचे / कंत्राटदाराचे नाव लिहा.");
+    if (workers < 1 || workers > 500) e.vacancies = tl("Workers required must be between 1 and 500.", "ज़रूरी कामगारों की संख्या 1 से 500 के बीच होनी चाहिए।", "आवश्यक कामगारांची संख्या 1 ते 500 दरम्यान असावी.");
+    else if (workers < heldWorkers) e.vacancies = tl(`${heldWorkers} worker${heldWorkers > 1 ? "s are" : " is"} already accepted or confirmed, so this cannot be lower than ${heldWorkers}.`, `${heldWorkers} कामगार पहले ही स्वीकार या पक्के हो चुके हैं, इसलिए यह ${heldWorkers} से कम नहीं हो सकता।`, `${heldWorkers} कामगार आधीच स्वीकारले किंवा निश्चित झाले आहेत, त्यामुळे ही संख्या ${heldWorkers} पेक्षा कमी असू शकत नाही.`);
+    if (!location.trim() || !pinPos) e.location = tl("Please search the site address or tap the map to pin the exact gate location.", "कृपया साइट का पता खोजें या गेट की सटीक जगह पिन करने के लिए मैप पर टैप करें।", "कृपया साइटचा पत्ता शोधा किंवा गेटची अचूक जागा पिन करण्यासाठी मॅपवर टॅप करा.");
+    if (postalCode.trim() && !/^\d{6}$/.test(postalCode.trim())) e.postalCode = tl("Postal code must be 6 digits.", "पिन कोड 6 अंकों का होना चाहिए।", "पिन कोड 6 अंकी असावा.");
+    if (digits.length !== 10) e.contactInfo = tl("Enter a valid 10-digit on-site contact number.", "साइट संपर्क का सही 10 अंकों का नंबर लिखें।", "साइट संपर्काचा वैध 10 अंकी क्रमांक लिहा.");
+    if (dateMode === "custom" && !customDate && !isEdit) e.startDate = tl("Please choose the work date.", "कृपया काम की तारीख चुनें।", "कृपया कामाची तारीख निवडा.");
+    if (!isEdit && dateMode === "custom" && customDate && customDate < isoDay(0)) e.startDate = tl("Work date cannot be in the past.", "काम की तारीख बीती हुई नहीं हो सकती।", "कामाची तारीख भूतकाळातील असू शकत नाही.");
+    if (wageNum <= 0) e.salary = tl("Please enter the pay amount per worker.", "कृपया प्रति कामगार भुगतान की राशि लिखें।", "कृपया प्रति कामगार देयकाची रक्कम लिहा.");
+    if (summary.length > 3000) e.summary = tl("Job description must be 3000 characters or fewer.", "नौकरी का विवरण 3000 अक्षरों से ज़्यादा नहीं हो सकता।", "नोकरीचे वर्णन 3000 अक्षरांपेक्षा जास्त असू शकत नाही.");
+    if (note.length > 1500) e.workInstructions = tl("Work instructions must be 1500 characters or fewer.", "काम के निर्देश 1500 अक्षरों से ज़्यादा नहीं हो सकते।", "कामाच्या सूचना 1500 अक्षरांपेक्षा जास्त असू शकत नाहीत.");
     return e;
   };
 
@@ -647,7 +649,7 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
     } catch (err) {
       console.error(err);
       if (err instanceof ApiError && err.fieldErrors) setErrors(err.fieldErrors);
-      setError(err instanceof ApiError && err.message ? err.message : isEdit ? "Failed to save the job. Please try again." : "Failed to post job. Make sure you are logged in.");
+      setError(err instanceof ApiError && err.message ? err.message : isEdit ? tl("Failed to save the job. Please try again.", "नौकरी सहेजी नहीं जा सकी। कृपया फिर कोशिश करें।", "नोकरी जतन करता आली नाही. कृपया पुन्हा प्रयत्न करा.") : tl("Failed to post job. Make sure you are logged in.", "नौकरी पोस्ट नहीं हो सकी। सुनिश्चित करें कि आप लॉगिन हैं।", "नोकरी पोस्ट करता आली नाही. तुम्ही लॉगिन आहात याची खात्री करा."));
     } finally {
       setLoading(false);
     }
@@ -658,12 +660,12 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
       <EmployerShell>
         <div className="max-w-[720px] mx-auto px-4 py-12 text-center font-app">
           {loadingJob ? (
-            <p role="status" className="text-[14px] text-slate-500">Loading job…</p>
+            <p role="status" className="text-[14px] text-slate-500">{t("Loading job…")}</p>
           ) : (
             <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-6 text-[14px] text-red-800">
-              {loadError || "A completed job cannot be edited."}
+              {loadError || t("A completed job cannot be edited.")}
               <div className="mt-4">
-                <Link href="/employer-jobs" className="font-semibold text-red-700 underline">Back to My Jobs</Link>
+                <Link href="/employer-jobs" className="font-semibold text-red-700 underline">{t("Back to My Jobs")}</Link>
               </div>
             </div>
           )}
@@ -682,15 +684,15 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-6">
           <div className="flex items-center gap-1.5 text-[12px] text-slate-500 mb-3">
-            <Link href="/employer-dashboard" className="no-underline text-slate-500 hover:text-slate-800">Dashboard</Link>
+            <Link href="/employer-dashboard" className="no-underline text-slate-500 hover:text-slate-800">{t("Dashboard")}</Link>
             <FiChevronRight size={12} />
-            <span className="text-slate-900 font-semibold">{isEdit ? "Edit Job" : "Post a Job & Request Workers"}</span>
+            <span className="text-slate-900 font-semibold">{isEdit ? t("Edit Job") : t("Post a Job & Request Workers")}</span>
           </div>
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h1 className="text-[28px] sm:text-[32px] font-extrabold tracking-tight leading-tight">{isEdit ? "Edit Job" : "Post a Job & Request Workers"}</h1>
+              <h1 className="text-[28px] sm:text-[32px] font-extrabold tracking-tight leading-tight">{isEdit ? t("Edit Job") : t("Post a Job & Request Workers")}</h1>
               <p className="text-[14px] text-slate-600 mt-1.5 max-w-[620px]">
-                Find daily-wage helpers, skilled tradesmen and loaders. Pin your site gate so workers can navigate straight to you.
+                {t("Find daily-wage helpers, skilled tradesmen and loaders. Pin your site gate so workers can navigate straight to you.")}
               </p>
             </div>
             <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 text-[13px] font-semibold">
@@ -699,14 +701,14 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
                 onClick={() => setUrgent(false)}
                 className={`rounded-lg px-3.5 py-2 cursor-pointer ${!urgent ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`}
               >
-                Standard Posting
+                {t("Standard Posting")}
               </button>
               <button
                 type="button"
                 onClick={() => setUrgent(true)}
                 className={`rounded-lg px-3.5 py-2 cursor-pointer flex items-center gap-1.5 ${urgent ? "bg-white shadow-sm text-red-600" : "text-slate-500"}`}
               >
-                <FiZap className="text-amber-500" /> Urgent Dispatch
+                <FiZap className="text-amber-500" /> {t("Urgent Dispatch")}
               </button>
             </div>
           </div>
@@ -718,17 +720,17 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
         <div className="flex flex-col gap-6 min-w-0">
 
           {/* 1 · Role & requirements */}
-          <SectionCard n={1} title="Basic Information" subtitle="What kind of work is it and who do you need?" badge={<span className="text-[12px] font-semibold text-red-600 bg-red-50 rounded px-2.5 py-1">Required</span>}>
+          <SectionCard n={1} title={t("Basic Information")} subtitle={t("What kind of work is it and who do you need?")} badge={<span className="text-[12px] font-semibold text-red-600 bg-red-50 rounded px-2.5 py-1">{t("Required")}</span>}>
             <fieldset disabled={locked} className="contents">
-            <span className={LABEL}>Select worker trade / category</span>
+            <span className={LABEL}>{t("Select worker trade / category")}</span>
 
             {/* Search all jobs */}
             <div className="relative mb-3">
               <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 value={jobSearch} onChange={(e) => setJobSearch(e.target.value)}
-                placeholder="Search all jobs — mason, driver, cook, electrician…"
-                className={`${INPUT} pl-10`} aria-label="Search jobs"
+                placeholder={t("Search all jobs — mason, driver, cook, electrician…")}
+                className={`${INPUT} pl-10`} aria-label={t("Search jobs")}
               />
             </div>
 
@@ -742,7 +744,7 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
                       groupKey === g.key ? "border-red-500 bg-red-50 text-red-600" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
                     }`}
                   >
-                    {g.label}
+                    {t(g.label)}
                   </button>
                 ))}
               </div>
@@ -753,10 +755,10 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
               {visibleJobs.map((j) => (
                 <Tile key={j.label} active={trade === j.label} onClick={() => pickJob(j.label)} className="relative min-h-[72px] flex flex-col items-center justify-center gap-1.5 px-2 py-2 text-center">
                   <span className={`text-[18px] ${trade === j.label ? "text-red-600" : "text-slate-500"}`}>{j.icon}</span>
-                  <span className="text-[12.5px] font-semibold text-slate-800 leading-tight">{j.label}</span>
+                  <span className="text-[12.5px] font-semibold text-slate-800 leading-tight">{t(j.label)}</span>
                   {j.custom && (
                     <span
-                      role="button" aria-label={`Remove ${j.label}`}
+                      role="button" aria-label={`${tl("Remove", "हटाएं", "काढा")} ${j.label}`}
                       onClick={(e) => { e.stopPropagation(); removeCustomJob(j.label); }}
                       className="absolute top-1 right-1.5 text-[12px] text-slate-400 hover:text-red-500"
                     >✕</span>
@@ -771,13 +773,13 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
                   className="min-h-[72px] rounded-lg border-2 border-dashed border-slate-300 text-slate-600 hover:border-red-400 hover:text-red-600 flex flex-col items-center justify-center gap-1.5 px-2 cursor-pointer"
                 >
                   <FiPlus className="text-[18px]" />
-                  <span className="text-[12.5px] font-semibold">Add other job</span>
+                  <span className="text-[12.5px] font-semibold">{t("Add other job")}</span>
                 </button>
               )}
             </div>
 
             {q && visibleJobs.length === 0 && (
-              <p className="text-[13px] text-slate-500 mb-3">No job matches &quot;{jobSearch}&quot;. Use <b>Add other job</b> to create it.</p>
+              <p className="text-[13px] text-slate-500 mb-3">{tl("No job matches", "कोई नौकरी मेल नहीं खाती:", "कोणतीही नोकरी जुळत नाही:")} &quot;{jobSearch}&quot;. {tl("Use", "बनाने के लिए", "तयार करण्यासाठी")} <b>{t("Add other job")}</b> {tl("to create it.", "दबाएं।", "वापरा.")}</p>
             )}
 
             {addingJob && (
@@ -785,60 +787,60 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
                 <input
                   autoFocus value={newJob} onChange={(e) => setNewJob(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomJob(newJob); } }}
-                  placeholder="Type the job name, e.g. Tent Decorator" maxLength={60}
-                  className={INPUT} aria-label="New job name"
+                  placeholder={t("Type the job name, e.g. Tent Decorator")} maxLength={60}
+                  className={INPUT} aria-label={t("New job name")}
                 />
-                <button type="button" onClick={() => addCustomJob(newJob)} className="h-11 shrink-0 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[13px] font-semibold px-4 cursor-pointer">Add</button>
-                <button type="button" onClick={() => { setAddingJob(false); setNewJob(""); }} className="h-11 shrink-0 rounded-lg border border-slate-200 text-slate-600 text-[13px] font-semibold px-3 cursor-pointer">Cancel</button>
+                <button type="button" onClick={() => addCustomJob(newJob)} className="h-11 shrink-0 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[13px] font-semibold px-4 cursor-pointer">{t("Add")}</button>
+                <button type="button" onClick={() => { setAddingJob(false); setNewJob(""); }} className="h-11 shrink-0 rounded-lg border border-slate-200 text-slate-600 text-[13px] font-semibold px-3 cursor-pointer">{t("Cancel")}</button>
               </div>
             )}
 
-            <p className="text-[12.5px] text-slate-500 mb-6">Selected job: <b className="text-slate-900">{trade}</b></p>
+            <p className="text-[12.5px] text-slate-500 mb-6">{t("Selected job:")} <b className="text-slate-900">{t(trade)}</b></p>
             </fieldset>
 
             <div className="mb-4" id="field-jobTitle">
-              <label className={LABEL} htmlFor="jobTitle">Job title / primary task details *</label>
+              <label className={LABEL} htmlFor="jobTitle">{t("Job title / primary task details *")}</label>
               <div className="relative">
-                <input id="jobTitle" disabled={locked} className={`${INPUT} pr-10${fe("jobTitle")} disabled:bg-slate-50 disabled:text-slate-500`} value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="e.g. Site helpers for shuttering & concrete pouring" maxLength={150} />
+                <input id="jobTitle" disabled={locked} className={`${INPUT} pr-10${fe("jobTitle")} disabled:bg-slate-50 disabled:text-slate-500`} value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder={t("e.g. Site helpers for shuttering & concrete pouring")} maxLength={150} />
                 <FiEdit2 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
               </div>
               <FieldError message={errors.jobTitle} />
-              <p className="mt-2 text-[12px] text-blue-600 flex items-center gap-1.5"><FiInfo /> Add the specific task for faster acceptances.</p>
+              <p className="mt-2 text-[12px] text-blue-600 flex items-center gap-1.5"><FiInfo /> {t("Add the specific task for faster acceptances.")}</p>
             </div>
 
-            <label className={LABEL} htmlFor="company">Hiring entity / contractor name</label>
-            <input id="company" className={`${INPUT}${fe("companyName")}`} value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Company or contractor name" />
+            <label className={LABEL} htmlFor="company">{t("Hiring entity / contractor name")}</label>
+            <input id="company" className={`${INPUT}${fe("companyName")}`} value={company} onChange={(e) => setCompany(e.target.value)} placeholder={t("Company or contractor name")} />
             <FieldError message={errors.companyName} />
 
             <div className="grid sm:grid-cols-2 gap-4 mt-4">
               <div>
-                <label className={LABEL} htmlFor="category">Job category</label>
+                <label className={LABEL} htmlFor="category">{t("Job category")}</label>
                 <select id="category" disabled={locked} value={category} onChange={(e) => setCategory(e.target.value)} className={`${INPUT} cursor-pointer disabled:bg-slate-50 disabled:text-slate-500`}>
-                  {[...JOB_GROUPS.map((g) => g.label), "Other"].map((c) => <option key={c} value={c}>{c}</option>)}
+                  {[...JOB_GROUPS.map((g) => g.label), "Other"].map((c) => <option key={c} value={c}>{t(c)}</option>)}
                 </select>
               </div>
               <div>
-                <label className={LABEL} htmlFor="extraSkills">Required skills (besides the selected trade)</label>
-                <input id="extraSkills" className={INPUT} value={extraSkills} onChange={(e) => setExtraSkills(e.target.value)} placeholder="e.g. Concrete mixing, reading drawings" maxLength={200} />
+                <label className={LABEL} htmlFor="extraSkills">{t("Required skills (besides the selected trade)")}</label>
+                <input id="extraSkills" className={INPUT} value={extraSkills} onChange={(e) => setExtraSkills(e.target.value)} placeholder={t("e.g. Concrete mixing, reading drawings")} maxLength={200} />
               </div>
             </div>
             <div className="mt-4">
-              <label className={LABEL} htmlFor="experience">Experience requirements</label>
-              <input id="experience" className={INPUT} value={experience} onChange={(e) => setExperience(e.target.value)} placeholder="e.g. 1+ year on construction sites" maxLength={200} />
+              <label className={LABEL} htmlFor="experience">{t("Experience requirements")}</label>
+              <input id="experience" className={INPUT} value={experience} onChange={(e) => setExperience(e.target.value)} placeholder={t("e.g. 1+ year on construction sites")} maxLength={200} />
             </div>
             <div className="mt-4" id="field-summary">
-              <label className={LABEL} htmlFor="summary">Job description</label>
-              <textarea id="summary" value={summary} onChange={(e) => setSummary(e.target.value)} rows={3} placeholder="Describe the work, the site and what workers should expect." className={`w-full rounded-lg border border-slate-200 p-3.5 text-[14px] placeholder:text-slate-400 outline-none resize-none focus:border-red-400 focus:ring-2 focus:ring-red-100${fe("summary")}`} />
+              <label className={LABEL} htmlFor="summary">{t("Job description")}</label>
+              <textarea id="summary" value={summary} onChange={(e) => setSummary(e.target.value)} rows={3} placeholder={t("Describe the work, the site and what workers should expect.")} className={`w-full rounded-lg border border-slate-200 p-3.5 text-[14px] placeholder:text-slate-400 outline-none resize-none focus:border-red-400 focus:ring-2 focus:ring-red-100${fe("summary")}`} />
               <FieldError message={errors.summary} />
             </div>
           </SectionCard>
 
           {/* 4 · Wage */}
-          <SectionCard n={2} title="Payment Information" subtitle="Clear pricing attracts more workers">
+          <SectionCard n={2} title={t("Payment Information")} subtitle={t("Clear pricing attracts more workers")}>
             <fieldset disabled={locked} className="contents">
               <div className="grid sm:grid-cols-3 gap-4 mb-5">
                 <div id="field-salary">
-                  <label className={LABEL} htmlFor="wage">Pay amount per worker (₹) *</label>
+                  <label className={LABEL} htmlFor="wage">{t("Pay amount per worker (₹) *")}</label>
                   <div className={`flex h-12 items-center rounded-lg border border-slate-200 px-3.5 focus-within:border-red-400 focus-within:ring-2 focus-within:ring-red-100${fe("salary")}`}>
                     <span className="text-slate-500 mr-2">₹</span>
                     <input
@@ -846,34 +848,34 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
                       onChange={(e) => setWage(e.target.value.replace(/\D/g, ""))}
                       className="flex-1 min-w-0 text-[18px] font-bold outline-none bg-transparent" placeholder="850"
                     />
-                    <span className="text-[12px] text-slate-400">/ {PAY_UNITS.find((u) => u.value === salaryUnit)?.short}</span>
+                    <span className="text-[12px] text-slate-400">/ {t(PAY_UNITS.find((u) => u.value === salaryUnit)?.short ?? "")}</span>
                   </div>
                   <FieldError message={errors.salary} />
                 </div>
                 <div>
-                  <label className={LABEL} htmlFor="salaryUnit">Payment type *</label>
+                  <label className={LABEL} htmlFor="salaryUnit">{t("Payment type *")}</label>
                   <select id="salaryUnit" value={salaryUnit} onChange={(e) => setSalaryUnit(e.target.value as typeof salaryUnit)} className={`${INPUT} h-12 cursor-pointer`}>
-                    {PAY_UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
+                    {PAY_UNITS.map((u) => <option key={u.value} value={u.value}>{t(u.label)}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className={LABEL} htmlFor="settle">Worker settlement method *</label>
+                  <label className={LABEL} htmlFor="settle">{t("Worker settlement method *")}</label>
                   <select
                     id="settle" value={settlement} onChange={(e) => setSettlement(e.target.value)}
                     className={`${INPUT} h-12 cursor-pointer`}
                   >
-                    {SETTLEMENTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    {SETTLEMENTS.map((s) => <option key={s.value} value={s.value}>{t(s.label)}</option>)}
                   </select>
                 </div>
               </div>
             </fieldset>
 
             <div className="mb-5">
-              <label className={LABEL} htmlFor="paymentDetails">Payment details</label>
-              <textarea id="paymentDetails" value={paymentDetails} onChange={(e) => setPaymentDetails(e.target.value)} rows={2} maxLength={500} placeholder="e.g. Paid by 7 PM at the site office. Bring a bank passbook for UPI payments." className="w-full rounded-lg border border-slate-200 p-3.5 text-[14px] placeholder:text-slate-400 outline-none resize-none focus:border-red-400 focus:ring-2 focus:ring-red-100" />
+              <label className={LABEL} htmlFor="paymentDetails">{t("Payment details")}</label>
+              <textarea id="paymentDetails" value={paymentDetails} onChange={(e) => setPaymentDetails(e.target.value)} rows={2} maxLength={500} placeholder={t("e.g. Paid by 7 PM at the site office. Bring a bank passbook for UPI payments.")} className="w-full rounded-lg border border-slate-200 p-3.5 text-[14px] placeholder:text-slate-400 outline-none resize-none focus:border-red-400 focus:ring-2 focus:ring-red-100" />
             </div>
 
-            <span className={LABEL}>On-site amenities &amp; perks provided</span>
+            <span className={LABEL}>{t("On-site amenities & perks provided")}</span>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {PERKS.map((p) => (
                 <div key={p} className="rounded-lg border border-slate-200 px-3 py-3">
@@ -881,7 +883,7 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
                     checked={perks.includes(p)}
                     onChange={(v) => setPerks((cur) => (v ? [...cur, p] : cur.filter((x) => x !== p)))}
                   >
-                    {p}
+                    {t(p)}
                   </Check>
                 </div>
               ))}
@@ -889,43 +891,43 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
           </SectionCard>
 
           {/* 3 · Shift */}
-          <SectionCard n={3} title="Work Information" subtitle="Type of work, how many workers, date, shift and instructions">
+          <SectionCard n={3} title={t("Work Information")} subtitle={t("Type of work, how many workers, date, shift and instructions")}>
             <div className="grid sm:grid-cols-2 gap-4 mb-5">
               <div>
-                <label className={LABEL} htmlFor="jobType">Job type</label>
+                <label className={LABEL} htmlFor="jobType">{t("Job type")}</label>
                 <select id="jobType" disabled={locked} value={jobType} onChange={(e) => { setJobType(e.target.value as JobType); touch("jobType"); }} className={`${INPUT} cursor-pointer disabled:bg-slate-50 disabled:text-slate-500`}>
-                  {JOB_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  {JOB_TYPES.map((jt) => <option key={jt.value} value={jt.value}>{t(jt.label)}</option>)}
                 </select>
               </div>
               <div id="field-vacancies">
-                <span className={LABEL}>Number of workers required *</span>
+                <span className={LABEL}>{t("Number of workers required *")}</span>
                 <div className={`flex h-11 rounded-lg border border-slate-200 overflow-hidden${fe("vacancies")}`}>
-                  <button type="button" onClick={() => setWorkers((w) => Math.max(Math.max(1, heldWorkers), w - 1))} className="w-11 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold cursor-pointer" aria-label="Fewer workers">-</button>
+                  <button type="button" onClick={() => setWorkers((w) => Math.max(Math.max(1, heldWorkers), w - 1))} className="w-11 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold cursor-pointer" aria-label={t("Fewer workers")}>-</button>
                   <input
                     type="number" min={Math.max(1, heldWorkers)} max={500} value={workers}
                     onChange={(e) => setWorkers(Math.max(1, Math.min(500, Number(e.target.value) || 1)))}
                     className="flex-1 min-w-0 text-center font-bold text-[15px] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-                    aria-label="Workers needed"
+                    aria-label={t("Workers needed")}
                   />
-                  <button type="button" onClick={() => setWorkers((w) => Math.min(500, w + 1))} className="w-11 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold cursor-pointer" aria-label="More workers">+</button>
+                  <button type="button" onClick={() => setWorkers((w) => Math.min(500, w + 1))} className="w-11 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold cursor-pointer" aria-label={t("More workers")}>+</button>
                 </div>
                 <FieldError message={errors.vacancies} />
-                {isEdit && heldWorkers > 0 && <p className="mt-1.5 text-[12px] text-slate-500">{heldWorkers} already accepted or confirmed.</p>}
+                {isEdit && heldWorkers > 0 && <p className="mt-1.5 text-[12px] text-slate-500">{tl(`${heldWorkers} already accepted or confirmed.`, `${heldWorkers} पहले ही स्वीकार या पक्के हो चुके हैं।`, `${heldWorkers} आधीच स्वीकारले किंवा निश्चित झाले आहेत.`)}</p>}
               </div>
             </div>
 
-            <span className={LABEL} id="field-startDate">Start date</span>
+            <span className={LABEL} id="field-startDate">{t("Start date")}</span>
             <fieldset disabled={locked} className="contents">
             <div className="grid grid-cols-3 gap-3 mb-3">
               {DATES.map((d) => (
                 <Tile key={d.key} active={dateMode === d.key} onClick={() => setDateMode(d.key)} className="py-3 px-2 text-center">
-                  <span className="block text-[13px] font-bold text-slate-900">{d.title}</span>
-                  <span className="block text-[11.5px] text-slate-500 mt-0.5">{d.sub}</span>
+                  <span className="block text-[13px] font-bold text-slate-900">{t(d.title)}</span>
+                  <span className="block text-[11.5px] text-slate-500 mt-0.5">{t(d.sub)}</span>
                 </Tile>
               ))}
             </div>
             {dateMode === "custom" && (
-              <input type="date" value={customDate} onChange={(e) => setCustomDate(e.target.value)} className={`${INPUT} max-w-[240px] mb-1${fe("startDate")}`} aria-label="Custom work date" />
+              <input type="date" value={customDate} onChange={(e) => setCustomDate(e.target.value)} className={`${INPUT} max-w-[240px] mb-1${fe("startDate")}`} aria-label={t("Custom work date")} />
             )}
             <FieldError message={errors.startDate} />
 
@@ -933,11 +935,11 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
               {SHIFTS.map((s) => (
                 <Tile key={s.key} active={shift === s.key} onClick={() => { setShift(s.key); touch("shift"); }} className="p-3.5">
                   <span className="flex items-start justify-between">
-                    <span className="text-[13px] font-bold text-slate-900">{s.title}</span>
+                    <span className="text-[13px] font-bold text-slate-900">{t(s.title)}</span>
                     <span className={shift === s.key ? "text-amber-500" : "text-blue-500"}>{s.icon}</span>
                   </span>
-                  <span className="block text-[12.5px] text-slate-700 mt-2">{s.time}</span>
-                  <span className="block text-[11.5px] text-slate-400 mt-1">{s.note}</span>
+                  <span className="block text-[12.5px] text-slate-700 mt-2">{t(s.time)}</span>
+                  <span className="block text-[11.5px] text-slate-400 mt-1">{t(s.note)}</span>
                 </Tile>
               ))}
             </div>
@@ -945,30 +947,30 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
             </fieldset>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Check checked={overtime} onChange={setOvertime}>Overtime paid extra beyond shift hours</Check>
+              <Check checked={overtime} onChange={setOvertime}>{t("Overtime paid extra beyond shift hours")}</Check>
               {overtime && (
                 <span className="flex items-center gap-1 text-[13px] text-slate-700">
-                  at ₹
+                  {tl("at ₹", "₹", "₹")}
                   <input
                     inputMode="numeric" value={otRate} onChange={(e) => setOtRate(e.target.value.replace(/\D/g, ""))}
-                    className="w-16 h-8 rounded-md border border-slate-200 px-2 text-[13px] outline-none focus:border-red-400" aria-label="Overtime rate per hour"
+                    className="w-16 h-8 rounded-md border border-slate-200 px-2 text-[13px] outline-none focus:border-red-400" aria-label={t("Overtime rate per hour")}
                   />
-                  / hour
+                  {tl("/ hour", "/ घंटा", "/ तास")}
                 </span>
               )}
             </div>
 
             <div className="grid sm:grid-cols-2 gap-4 mt-5">
               <div>
-                <label className={LABEL} htmlFor="duration">Duration</label>
-                <input id="duration" className={INPUT} value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="e.g. 3 days, 2 weeks, ongoing" maxLength={100} />
+                <label className={LABEL} htmlFor="duration">{t("Duration")}</label>
+                <input id="duration" className={INPUT} value={duration} onChange={(e) => setDuration(e.target.value)} placeholder={t("e.g. 3 days, 2 weeks, ongoing")} maxLength={100} />
               </div>
             </div>
             <div className="mt-4" id="field-workInstructions">
-              <label className={LABEL} htmlFor="note">Work instructions (optional)</label>
+              <label className={LABEL} htmlFor="note">{t("Work instructions (optional)")}</label>
               <textarea
                 id="note" value={note} onChange={(e) => setNote(e.target.value)} rows={3}
-                placeholder="e.g. Please bring your own steel measuring tape if possible. Must carry a valid Aadhaar card."
+                placeholder={t("e.g. Please bring your own steel measuring tape if possible. Must carry a valid Aadhaar card.")}
                 className={`w-full rounded-lg border border-slate-200 p-3.5 text-[14px] placeholder:text-slate-400 outline-none resize-none focus:border-red-400 focus:ring-2 focus:ring-red-100${fe("workInstructions")}`}
               />
               <FieldError message={errors.workInstructions} />
@@ -976,8 +978,8 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
           </SectionCard>
 
           {/* 2 · Site & map */}
-          <SectionCard n={4} title="Location Information" subtitle="Workers navigate straight to the gate you mark" badge={<span className="hidden sm:flex items-center gap-1.5 text-[12px] font-semibold text-blue-600 bg-blue-50 rounded px-2.5 py-1"><FiCrosshair /> GPS Precision Pin</span>}>
-            <span className={LABEL} id="field-location">Site address / chowk / landmark *</span>
+          <SectionCard n={4} title={t("Location Information")} subtitle={t("Workers navigate straight to the gate you mark")} badge={<span className="hidden sm:flex items-center gap-1.5 text-[12px] font-semibold text-blue-600 bg-blue-50 rounded px-2.5 py-1"><FiCrosshair /> {t("GPS Precision Pin")}</span>}>
+            <span className={LABEL} id="field-location">{t("Site address / chowk / landmark *")}</span>
             <div className="flex gap-2 mb-3">
               <div className="relative flex-1 min-w-0">
                 <FiMapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 text-red-500" />
@@ -988,7 +990,7 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
                   onChange={(e) => onLocationInput(e.target.value)}
                   onFocus={() => location.length >= 2 && setShowDropdown(true)}
                   onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-                  placeholder="Type area, street, landmark, chowk…"
+                  placeholder={t("Type area, street, landmark, chowk…")}
                   autoComplete="off"
                 />
                 {searching && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px]">⏳</span>}
@@ -1023,8 +1025,8 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
                 )}
                 {showDropdown && !searching && location.length >= 2 && suggestions.length === 0 && (
                   <div className="absolute top-[calc(100%+4px)] left-0 right-0 z-[1000] bg-white border border-slate-200 rounded-xl shadow-lg p-4 text-center">
-                    <div className="text-[13px] text-slate-600 font-semibold">No results found</div>
-                    <div className="text-[12px] text-slate-500 mt-1">Try adding the city, e.g. <b>&quot;Sambhaji Chowk Nashik&quot;</b></div>
+                    <div className="text-[13px] text-slate-600 font-semibold">{t("No results found")}</div>
+                    <div className="text-[12px] text-slate-500 mt-1">{t("Try adding the city, e.g.")} <b>&quot;Sambhaji Chowk Nashik&quot;</b></div>
                   </div>
                 )}
               </div>
@@ -1032,14 +1034,14 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
                 type="button" onClick={detectGps} disabled={detecting || locked}
                 className="h-11 shrink-0 rounded-lg bg-[#0B1228] text-white text-[13px] font-semibold px-4 flex items-center gap-2 cursor-pointer disabled:opacity-60"
               >
-                <FiNavigation /> {detecting ? "Detecting…" : "Detect GPS"}
+                <FiNavigation /> {detecting ? t("Detecting…") : t("Detect GPS")}
               </button>
             </div>
 
             <FieldError message={errors.location} />
-            {locked && <p className="rounded-lg border border-slate-200 bg-slate-50 text-slate-600 text-[12px] px-3 py-2 mb-3">The address and map pin cannot be changed while workers hold a position on this job.</p>}
+            {locked && <p className="rounded-lg border border-slate-200 bg-slate-50 text-slate-600 text-[12px] px-3 py-2 mb-3">{t("The address and map pin cannot be changed while workers hold a position on this job.")}</p>}
             <p className="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-[12px] px-3 py-2 mb-4">
-              <b>Pro Tip:</b> Always include the local chowk or labor naka name so workers recognise the meeting spot immediately.
+              <b>{t("Pro Tip:")}</b> {t("Always include the local chowk or labor naka name so workers recognise the meeting spot immediately.")}
             </p>
 
             {/* Map */}
@@ -1072,14 +1074,14 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
                       },
                     }}
                   >
-                    <Tooltip permanent direction="bottom" offset={[0, 4]}>Drag to move gate pin</Tooltip>
+                    <Tooltip permanent direction="bottom" offset={[0, 4]}>{t("Drag to move gate pin")}</Tooltip>
                   </Marker>
                 )}
               </MapContainer>
 
               {!pinPos && (
                 <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[500] rounded-full bg-white/95 shadow px-3.5 py-1.5 text-[12px] font-semibold text-slate-700 pointer-events-none">
-                  Tap the map to drop the gate pin
+                  {t("Tap the map to drop the gate pin")}
                 </div>
               )}
 
@@ -1087,26 +1089,26 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
                 <span className="flex items-center gap-2 text-slate-700 min-w-0">
                   <FiMapPin className="text-red-500 shrink-0" />
                   <span className="truncate">
-                    {pinPos ? `${pinPos.lat.toFixed(4)}° N, ${pinPos.lng.toFixed(4)}° E (exact entrance)` : "No pin yet"}
+                    {pinPos ? `${pinPos.lat.toFixed(4)}° N, ${pinPos.lng.toFixed(4)}° E ${t("(exact entrance)")}` : t("No pin yet")}
                   </span>
                 </span>
                 <button type="button" onClick={() => setSatellite((s) => !s)} className="shrink-0 flex items-center gap-1.5 text-red-600 font-bold cursor-pointer">
-                  {satellite ? <FiLayers /> : <FiMaximize2 />} {satellite ? "Map View" : "Full Satellite View"}
+                  {satellite ? <FiLayers /> : <FiMaximize2 />} {satellite ? t("Map View") : t("Full Satellite View")}
                 </button>
               </div>
             </div>
 
             <div className="grid sm:grid-cols-3 gap-4 mt-5">
               <div>
-                <label className={LABEL} htmlFor="city">City / area</label>
-                <input id="city" disabled={locked} className={`${INPUT} disabled:bg-slate-50 disabled:text-slate-500`} value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Nashik" maxLength={80} />
+                <label className={LABEL} htmlFor="city">{t("City / area")}</label>
+                <input id="city" disabled={locked} className={`${INPUT} disabled:bg-slate-50 disabled:text-slate-500`} value={city} onChange={(e) => setCity(e.target.value)} placeholder={t("e.g. Nashik")} maxLength={80} />
               </div>
               <div>
-                <label className={LABEL} htmlFor="stateName">State</label>
-                <input id="stateName" disabled={locked} className={`${INPUT} disabled:bg-slate-50 disabled:text-slate-500`} value={stateName} onChange={(e) => setStateName(e.target.value)} placeholder="e.g. Maharashtra" maxLength={80} />
+                <label className={LABEL} htmlFor="stateName">{t("State")}</label>
+                <input id="stateName" disabled={locked} className={`${INPUT} disabled:bg-slate-50 disabled:text-slate-500`} value={stateName} onChange={(e) => setStateName(e.target.value)} placeholder={t("e.g. Maharashtra")} maxLength={80} />
               </div>
               <div id="field-postalCode">
-                <label className={LABEL} htmlFor="postalCode">Postal code</label>
+                <label className={LABEL} htmlFor="postalCode">{t("Postal code")}</label>
                 <input id="postalCode" disabled={locked} inputMode="numeric" className={`${INPUT} disabled:bg-slate-50 disabled:text-slate-500${fe("postalCode")}`} value={postalCode} onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="422001" />
                 <FieldError message={errors.postalCode} />
               </div>
@@ -1114,11 +1116,11 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
 
             <div className="grid sm:grid-cols-2 gap-4 mt-5">
               <div>
-                <label className={LABEL} htmlFor="gate">Specific gate instructions / landmark note</label>
-                <input id="gate" className={INPUT} value={gateNote} onChange={(e) => setGateNote(e.target.value)} placeholder="e.g. Gate 3, opposite the metro pillar" />
+                <label className={LABEL} htmlFor="gate">{t("Specific gate instructions / landmark note")}</label>
+                <input id="gate" className={INPUT} value={gateNote} onChange={(e) => setGateNote(e.target.value)} placeholder={t("e.g. Gate 3, opposite the metro pillar")} />
               </div>
               <div id="field-contactInfo">
-                <label className={LABEL} htmlFor="phone">On-site gate contact &amp; WhatsApp *</label>
+                <label className={LABEL} htmlFor="phone">{t("On-site gate contact & WhatsApp *")}</label>
                 <div className="flex h-11 rounded-lg border border-slate-200 overflow-hidden focus-within:border-red-400 focus-within:ring-2 focus-within:ring-red-100">
                   <span className="flex items-center gap-1.5 px-3 bg-slate-50 border-r border-slate-200 text-[13px] text-slate-700"><FiPhone size={13} /> +91</span>
                   <input
@@ -1137,8 +1139,8 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
             <div className="rounded-xl border border-red-100 bg-red-50/70 p-4 flex items-start gap-4">
               <span className="w-11 h-11 shrink-0 rounded-lg bg-red-500 text-white flex items-center justify-center text-[20px]"><FiZap /></span>
               <div className="flex-1">
-                <h3 className="text-[15px] font-bold text-slate-900">Activate Urgent Hiring Priority</h3>
-                <p className="text-[12.5px] text-slate-600 mt-1">Marks the job as urgent and pins it to the top of the worker feed so it gets seen first.</p>
+                <h3 className="text-[15px] font-bold text-slate-900">{t("Activate Urgent Hiring Priority")}</h3>
+                <p className="text-[12.5px] text-slate-600 mt-1">{t("Marks the job as urgent and pins it to the top of the worker feed so it gets seen first.")}</p>
               </div>
               <button
                 type="button" role="switch" aria-checked={urgent} onClick={() => setUrgent((u) => !u)}
@@ -1156,56 +1158,56 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
           <div className="rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-[0_8px_30px_rgba(15,23,42,.08)]">
             <div className="bg-[#0B1228] text-white p-5">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold tracking-[0.1em] text-slate-300">ESTIMATED SUMMARY</span>
+                <span className="text-[11px] font-bold tracking-[0.1em] text-slate-300">{t("ESTIMATED SUMMARY")}</span>
                 <span className={`text-[10px] font-bold rounded px-2 py-0.5 ${urgent ? "bg-red-500/20 text-red-300" : "bg-emerald-500/15 text-emerald-300"}`}>
-                  {urgent ? "URGENT" : "STANDARD"}
+                  {urgent ? t("URGENT") : t("STANDARD")}
                 </span>
               </div>
-              <h3 className="text-[22px] font-extrabold mt-2">{isEdit ? "Job Budget" : "Daily Gig Budget"}</h3>
-              <p className="text-[12.5px] text-slate-400 mt-1">Live calculation for this booking</p>
+              <h3 className="text-[22px] font-extrabold mt-2">{isEdit ? t("Job Budget") : t("Daily Gig Budget")}</h3>
+              <p className="text-[12.5px] text-slate-400 mt-1">{t("Live calculation for this booking")}</p>
             </div>
 
             <div className="p-5">
               {locked && (
                 <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-[12.5px] p-3">
-                  {heldWorkers} worker{heldWorkers > 1 ? "s hold" : " holds"} a position on this job. The title, category, pay, location, date, schedule and job type are locked so existing offers stay valid. You can still change the description, instructions, contact and number of workers (not below {heldWorkers}).
+                  {tl(`${heldWorkers} worker${heldWorkers > 1 ? "s hold" : " holds"} a position on this job. The title, category, pay, location, date, schedule and job type are locked so existing offers stay valid. You can still change the description, instructions, contact and number of workers (not below ${heldWorkers}).`, `${heldWorkers} कामगार इस नौकरी पर नियुक्त हैं। शीर्षक, श्रेणी, भुगतान, स्थान, तारीख, शिफ्ट और नौकरी का प्रकार बदले नहीं जा सकते ताकि मौजूदा ऑफर वैध रहें। आप विवरण, निर्देश, संपर्क और कामगारों की संख्या (${heldWorkers} से कम नहीं) बदल सकते हैं।`, `${heldWorkers} कामगार या नोकरीवर नियुक्त आहेत. शीर्षक, श्रेणी, देयक, ठिकाण, तारीख, शिफ्ट आणि नोकरीचा प्रकार बदलता येत नाही जेणेकरून सध्याचे ऑफर वैध राहतील. तुम्ही वर्णन, सूचना, संपर्क आणि कामगारांची संख्या (${heldWorkers} पेक्षा कमी नाही) बदलू शकता.`)}
                 </div>
               )}
               {posted && (
                 <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 text-[13px] p-3">
-                  <b>{isEdit ? "Changes saved ✅" : "Job posted ✅"}</b>
+                  <b>{isEdit ? t("Changes saved ✅") : t("Job posted ✅")}</b>
                   <div className="mt-1">
-                    <Link href={isEdit && jobId ? `/employer-jobs/${jobId}` : "/employer-jobs"} className="text-emerald-700 font-semibold underline">{isEdit ? "View job details" : "View in My Jobs"}</Link>
+                    <Link href={isEdit && jobId ? `/employer-jobs/${jobId}` : "/employer-jobs"} className="text-emerald-700 font-semibold underline">{isEdit ? t("View job details") : t("View in My Jobs")}</Link>
                   </div>
                 </div>
               )}
 
               <dl className="text-[13.5px] text-slate-600 space-y-3">
                 <div className="flex justify-between gap-3">
-                  <dt>Worker pay (<b className="text-slate-800">{workers} worker{workers > 1 ? "s" : ""}</b> × ₹{wageNum.toLocaleString("en-IN")} / {PAY_UNITS.find((u) => u.value === salaryUnit)?.short.toLowerCase()})</dt>
+                  <dt>{t("Worker pay")} (<b className="text-slate-800">{workers} {workers > 1 ? t("workers") : t("worker")}</b> × ₹{wageNum.toLocaleString("en-IN")} / {t(PAY_UNITS.find((u) => u.value === salaryUnit)?.short ?? "").toLowerCase()})</dt>
                   <dd className="font-semibold text-slate-900 whitespace-nowrap">{fmt(total)}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt>Shift</dt>
-                  <dd className="text-slate-900 text-right">{shiftInfo.title}</dd>
+                  <dt>{t("Shift")}</dt>
+                  <dd className="text-slate-900 text-right">{t(shiftInfo.title)}</dd>
                 </div>
                 {overtime && Number(otRate) > 0 && (
                   <div className="flex justify-between gap-3">
-                    <dt>Overtime (per worker)</dt>
-                    <dd className="text-slate-900">₹{Number(otRate)} / hour</dd>
+                    <dt>{t("Overtime (per worker)")}</dt>
+                    <dd className="text-slate-900">₹{Number(otRate)} {tl("/ hour", "/ घंटा", "/ तास")}</dd>
                   </div>
                 )}
                 <div className="flex justify-between gap-3">
-                  <dt>Payment</dt>
-                  <dd className="text-slate-900 text-right">{SETTLEMENTS.find((s) => s.value === settlement)?.label}</dd>
+                  <dt>{t("Payment")}</dt>
+                  <dd className="text-slate-900 text-right">{t(SETTLEMENTS.find((s) => s.value === settlement)?.label ?? "")}</dd>
                 </div>
               </dl>
 
               <div className="border-t border-slate-100 mt-5 pt-5 flex items-end justify-between gap-3">
-                <span className="text-[15px] font-bold text-slate-900">Total wage budget</span>
+                <span className="text-[15px] font-bold text-slate-900">{t("Total wage budget")}</span>
                 <span className="text-[30px] font-extrabold tracking-tight leading-none">{fmt(total).replace(/\.00$/, "")}</span>
               </div>
-              <p className="text-right text-[11.5px] text-slate-400 mt-1.5">Excludes overtime and any perks you provide</p>
+              <p className="text-right text-[11.5px] text-slate-400 mt-1.5">{t("Excludes overtime and any perks you provide")}</p>
 
               {error && (
                 <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 text-red-700 text-[12.5px] p-3">{error}</div>
@@ -1215,13 +1217,13 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
                 type="submit" disabled={loading}
                 className="mt-5 w-full h-12 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-[14.5px] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
               >
-                <FiSend /> {isEdit ? (loading ? "Saving…" : "Save Changes") : loading ? "Publishing…" : urgent ? "Publish & Dispatch Urgently" : "Publish Job"}
+                <FiSend /> {isEdit ? (loading ? t("Saving…") : t("Save Changes")) : loading ? t("Publishing…") : urgent ? t("Publish & Dispatch Urgently") : t("Publish Job")}
               </button>
               <Link
                 href={isEdit && jobId ? `/employer-jobs/${jobId}` : "/employer-dashboard"}
                 className="mt-3 w-full h-11 rounded-lg border border-slate-200 text-slate-700 font-semibold text-[13.5px] flex items-center justify-center no-underline hover:bg-slate-50"
               >
-                Cancel
+                {t("Cancel")}
               </Link>
             </div>
           </div>
@@ -1231,7 +1233,7 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
       <footer className="border-t border-slate-200 bg-white">
         <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-5 flex items-center gap-3 text-[12.5px] text-slate-500">
           <span className="bg-red-500 text-white font-extrabold text-[10px] rounded px-1.5 py-1">HM</span>
-          <span><b className="text-slate-700">HireMate</b> — On-demand daily wage work</span>
+          <span><b className="text-slate-700">HireMate</b> — {t("On-demand daily wage work")}</span>
         </div>
       </footer>
     </div>
