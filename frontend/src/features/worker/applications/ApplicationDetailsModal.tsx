@@ -6,7 +6,7 @@ import { FiX } from "react-icons/fi";
 import ApplicationTimeline from "@/components/ui/ApplicationTimeline";
 import { Stars } from "@/components/worker/WorkerUi";
 import { useL } from "@/hooks/useL";
-import { GROUP_STYLE, dateOf, groupOf, inr, jobLocationOf, jobTitleOf, offerDateOf, salaryOf, statusLabel, timelineLabel, timelineOf } from "@/lib/workerApplications";
+import { GROUP_STYLE, completedAtOf, dateOf, groupOf, inr, jobLocationOf, jobTitleOf, offerDateOf, salaryOf, scheduleOf, statusLabel, timelineLabel, timelineOf, workDateOf } from "@/lib/workerApplications";
 import type { Application } from "@/types";
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -58,20 +58,26 @@ export default function ApplicationDetailsModal({ app, onClose }: { app: Applica
           {description && <Row label={L("Job description", "काम का विवरण", "कामाचे वर्णन")}>{description}</Row>}
           <Row label={L("Location", "स्थान", "ठिकाण")}>{jobLocationOf(app, language) || "—"}</Row>
           <Row label={L("Payment", "भुगतान", "पेमेंट")}>{inr(salaryOf(app))}{job?.paymentMethod ? ` • ${job.paymentMethod}` : ""}</Row>
-          {job?.dutyTimings && <Row label={L("Work schedule", "काम का समय", "कामाची वेळ")}>{job.dutyTimings}</Row>}
+          {workDateOf(app) && <Row label={L("Work date", "काम की तिथि", "कामाची तारीख")}>{workDateOf(app)}</Row>}
+          {scheduleOf(app) && <Row label={L("Work schedule", "काम का समय", "कामाची वेळ")}>{scheduleOf(app)}</Row>}
+          {completedAtOf(app) && <Row label={L("Completed on", "पूरा होने की तिथि", "पूर्ण झाल्याची तारीख")}>{new Date(completedAtOf(app)!).toLocaleString(language === "hi" ? "hi-IN" : language === "mr" ? "mr-IN" : "en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</Row>}
+          {app.cancellationReason && <Row label={L("Cancellation reason", "रद्द करने का कारण", "रद्द करण्याचे कारण")}>{app.cancellationReason}</Row>}
+          {app.completionRejection?.reason && app.status === "arrived" && !app.completionRequestedAt && <Row label={L("Employer did not accept completion", "नियोक्ता ने पूरा होना स्वीकार नहीं किया", "मालकाने पूर्णत्व स्वीकारले नाही")}>{app.completionRejection.reason}</Row>}
           {offerDate && <Row label={L("Offer received", "ऑफर मिली", "ऑफर मिळाली")}>{dateOf(offerDate)}</Row>}
           {typeof total === "number" && <Row label={L("Vacancies", "रिक्तियां", "जागा")}>{available ?? total} / {total} {L("available", "उपलब्ध", "उपलब्ध")}</Row>}
           <Row label={L("Applied on", "आवेदन तिथि", "अर्जाची तारीख")}>{dateOf(app.createdAt) || "—"}</Row>
           <Row label={L("Last updated", "अंतिम अपडेट", "शेवटचा बदल")}>{dateOf(app.updatedAt) || "—"}</Row>
           {app.message && <Row label={L("Your message", "आपका संदेश", "तुमचा संदेश")}>{app.message}</Row>}
-          {(app.rating ?? 0) > 0 && <Row label={L("Employer rating", "नियोक्ता रेटिंग", "मालक रेटिंग")}><Stars value={app.rating!} /></Row>}
-          {app.review && <Row label={L("Review", "समीक्षा", "पुनरावलोकन")}>{app.review}</Row>}
+          {(app.rating ?? 0) > 0 && <Row label={L("Rating you received", "आपको मिली रेटिंग", "तुम्हाला मिळालेले रेटिंग")}><Stars value={app.rating!} /></Row>}
+          {app.review && <Row label={L("Review you received", "आपको मिली समीक्षा", "तुम्हाला मिळालेले पुनरावलोकन")}>{app.review}</Row>}
+          {(app.employerRating ?? 0) > 0 && <Row label={L("Your rating of the employer", "नियोक्ता को आपकी रेटिंग", "मालकाला तुमचे रेटिंग")}><Stars value={app.employerRating!} /></Row>}
+          {app.employerReview && <Row label={L("Your review of the employer", "नियोक्ता पर आपकी समीक्षा", "मालकावर तुमचे पुनरावलोकन")}>{app.employerReview}</Row>}
         </dl>
 
         <h3 className="mb-3 mt-5 text-[12.5px] font-bold uppercase tracking-wider text-[#5b6a88]">{L("Application timeline", "आवेदन की समयरेखा", "अर्जाची टाइमलाइन")}</h3>
         <ApplicationTimeline
           locale={language === "hi" ? "hi-IN" : language === "mr" ? "mr-IN" : "en-GB"}
-          rows={timelineOf(app).map((t, i) => ({ key: `${t.event}-${i}`, label: timelineLabel(t.event, L), at: t.at, tone: t.event }))}
+          rows={timelineOf(app).map((t, i) => ({ key: `${t.event}-${i}`, label: `${timelineLabel(t.event, L)}${t.note ? `: ${t.note}` : ""}`, at: t.at, tone: t.event }))}
         />
 
         {!job?.contactInfo && (app.status ?? "pending") === "pending" && (

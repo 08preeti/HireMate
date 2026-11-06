@@ -113,7 +113,7 @@ function ApplicationsContent() {
 
   const decide = (id: string, decision: "accepted" | "declined") => runAction(id, () => decideApplication(id, decision), "failedDecision");
   const askDecide = (id: string, decision: "accepted" | "declined") => (decision === "declined" ? setDeclineId(id) : void decide(id, decision));
-  const cancel = (id: string) => runAction(id, () => cancelApplication(id), "failedCancel");
+  const cancel = (id: string, reason: string) => runAction(id, () => cancelApplication(id, reason), "failedCancel");
 
   const exportCsv = () => exportApplicationsCsv(applications, statusEnglish);
 
@@ -167,7 +167,7 @@ function ApplicationsContent() {
           error={actionError}
           onClose={closeDetails}
           onDecide={(decision) => askDecide(selected._id, decision)}
-          onCancel={() => void cancel(selected._id)}
+          onCancel={(reason) => void cancel(selected._id, reason)}
           onRated={() => void refresh({ force: true })}
         />
       )}

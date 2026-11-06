@@ -13,7 +13,11 @@ export type NotificationType =
   | "application_withdrawn"
   | "application_cancelled"
   | "job_closed"
-  | "job_updated";
+  | "job_updated"
+  | "completion_requested"
+  | "completion_approved"
+  | "completion_rejected"
+  | "review_received";
 
 export interface AppNotification {
   _id: string;

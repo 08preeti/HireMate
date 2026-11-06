@@ -27,7 +27,10 @@ export function targetFor(role: UserRole, n: AppNotification): string {
         return "/applications?tab=declined";
       case "worker_on_the_way":
       case "worker_arrived":
-        return "/applications?tab=active";
+      case "completion_requested":
+        return "/employer-active-work";
+      case "review_received":
+        return "/employer-completed-work";
       default:
         return "/applications";
     }
@@ -38,10 +41,13 @@ export function targetFor(role: UserRole, n: AppNotification): string {
     case "application_accepted":
       return "/job-offers";
     case "application_completed":
+    case "completion_approved":
+    case "review_received":
       return "/work-history";
     case "offer_confirmed":
     case "worker_on_the_way":
     case "worker_arrived":
+    case "completion_rejected":
       return "/active-work";
     default:
       return "/my-applications";

@@ -38,6 +38,8 @@ async function createMany(docs, label = "notification") {
   }
 }
 
+const reasonText = (application) => (application.cancellationReason ? ` Reason: ${application.cancellationReason}` : "");
+
 const text = (field) => field?.en || field?.hi || field?.mr || "";
 const jobName = (job) => text(job?.jobTitle) || "a job";
 
@@ -242,7 +244,7 @@ export async function notifyApplicationEnded(application, job, status) {
         role: ROLES.EMPLOYER,
         type: "application_withdrawn",
         title: "Application withdrawn",
-        message: `${application.applicantName || "A worker"} withdrew from ${jobName(job)}.`,
+        message: `${application.applicantName || "A worker"} withdrew from ${jobName(job)}.${reasonText(application)}`,
         job: job?._id,
         application: application._id,
         dedupeKey: `application_withdrawn:${application._id}`,
@@ -258,7 +260,7 @@ export async function notifyApplicationEnded(application, job, status) {
       role: ROLES.WORKER,
       type: "application_cancelled",
       title: "Job cancelled",
-      message: `The employer cancelled your work for ${jobName(job)}.`,
+      message: `The employer cancelled your work for ${jobName(job)}.${reasonText(application)}`,
       job: job?._id,
       application: application._id,
       dedupeKey: `application_cancelled:${application._id}`,
@@ -269,7 +271,6 @@ export async function notifyApplicationEnded(application, job, status) {
 const WORKER_STATUS_EVENTS = {
   on_the_way: { type: "worker_on_the_way", title: "Worker is on the way", verb: "is on the way for" },
   arrived: { type: "worker_arrived", title: "Worker has arrived", verb: "has arrived for" },
-  completed: { type: "worker_completed", title: "Job completed by worker", verb: "marked as completed:" },
 };
 
 export async function notifyWorkerStatusChange(application, status) {
@@ -290,26 +291,66 @@ export async function notifyWorkerStatusChange(application, status) {
   ], event.type);
 }
 
-// Employer rating is what completes an application from the employer's side.
-export async function notifyApplicationRated(application) {
-  const workerId = await workerIdOf(application);
-  if (!workerId) {
-    console.warn(`[notifications] application_completed skipped: no worker for application ${application._id}`);
-    return;
-  }
+// Worker asks the employer to verify the work as finished. A new request after a rejection notifies again.
+export async function notifyCompletionRequested(application) {
   const populated = await application.populate("job", "jobTitle");
+  await createMany([
+    {
+      recipient: application.employer,
+      role: ROLES.EMPLOYER,
+      type: "completion_requested",
+      title: "Completion requested",
+      message: `${application.applicantName || "A worker"} says the work for ${jobName(populated.job)} is finished. Please review and confirm.`,
+      job: populated.job?._id,
+      application: application._id,
+      dedupeKey: `completion_requested:${application._id}:${new Date(application.completionRequestedAt).getTime()}`,
+    },
+  ], "completion_requested");
+}
+
+// Employer verified or rejected the worker's completion request.
+export async function notifyCompletionDecision(application, decision) {
+  const workerId = await workerIdOf(application);
+  if (!workerId) return;
+  const populated = await application.populate("job", "jobTitle");
+  const approved = decision === "approved";
   await createMany([
     {
       recipient: workerId,
       role: ROLES.WORKER,
-      type: "application_completed",
-      title: "Job completed",
-      message: `${jobName(populated.job)} is complete. You were rated ${application.rating}/5.`,
+      type: approved ? "completion_approved" : "completion_rejected",
+      title: approved ? "Work completed" : "Completion not accepted",
+      message: approved
+        ? `The employer confirmed that ${jobName(populated.job)} is complete.`
+        : `The employer did not accept completion of ${jobName(populated.job)}. Reason: ${application.completionRejection?.reason || "not given"}`,
       job: populated.job?._id,
       application: application._id,
-      dedupeKey: `application_completed:${application._id}`,
+      dedupeKey: approved ? `completion_approved:${application._id}` : `completion_rejected:${application._id}:${new Date(application.completionRejection?.at || Date.now()).getTime()}`,
     },
-  ], "application_completed");
+  ], approved ? "completion_approved" : "completion_rejected");
+}
+
+// A rating was submitted by one side; tells the other side. One notification per reviewer per booking.
+export async function notifyReviewReceived(application, by) {
+  const populated = await application.populate("job", "jobTitle");
+  const toEmployer = by === "worker";
+  const recipient = toEmployer ? application.employer : await workerIdOf(application);
+  if (!recipient) return;
+  const stars = toEmployer ? application.employerRating : application.rating;
+  await createMany([
+    {
+      recipient,
+      role: toEmployer ? ROLES.EMPLOYER : ROLES.WORKER,
+      type: "review_received",
+      title: "New review received",
+      message: toEmployer
+        ? `${application.applicantName || "The worker"} rated you ${stars}/5 for ${jobName(populated.job)}.`
+        : `You were rated ${stars}/5 for ${jobName(populated.job)}.`,
+      job: populated.job?._id,
+      application: application._id,
+      dedupeKey: `review_received:${application._id}:${by}`,
+    },
+  ], "review_received");
 }
 
 const STOP_COPY = {

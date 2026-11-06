@@ -16,6 +16,10 @@ export const NOTIFICATION_TYPES = [
   "application_cancelled",
   "job_closed",
   "job_updated",
+  "completion_requested",
+  "completion_approved",
+  "completion_rejected",
+  "review_received",
 ];
 
 const notificationSchema = new mongoose.Schema(

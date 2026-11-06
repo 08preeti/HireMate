@@ -3,7 +3,7 @@ import type { Application, Language, TimelineEntry, TimelineEventName } from "@/
 export type ApplicationGroup = "pending" | "offers" | "confirmed" | "declined" | "withdrawn" | "completed";
 
 export const ACTIVE_STATUSES = ["confirmed", "on_the_way", "arrived"] as const;
-const WITHDRAWABLE = ["pending", "accepted", "confirmed"];
+const WITHDRAWABLE = ["pending", "accepted", "confirmed", "on_the_way"];
 
 export const isCompleted = (a: Application): boolean => !!a.isCompleted || a.status === "completed";
 
@@ -31,8 +31,23 @@ export const isActiveWork = (a: Application): boolean => groupOf(a) === "confirm
 export const isOffer = (a: Application): boolean => groupOf(a) === "offers";
 export const isPending = (a: Application): boolean => groupOf(a) === "pending";
 
-/** Mirrors the server rule: only a pending application, an offer or a confirmed job not yet started can be withdrawn. */
-export const canWithdraw = (a: Application): boolean => !isCompleted(a) && WITHDRAWABLE.includes(a.status ?? "pending");
+export const isCompletionPending = (a: Application): boolean => a.status === "arrived" && !!a.completionRequestedAt;
+
+/** Mirrors the server rule: a pending application, an offer or a hire that has not arrived yet can be withdrawn. */
+export const canWithdraw = (a: Application): boolean => !isCompleted(a) && WITHDRAWABLE.includes(a.status ?? "pending") && !a.completionRequestedAt;
+
+export const reasonNeeded = (a: Application): boolean => ["confirmed", "on_the_way"].includes(a.status ?? "");
+
+export const scheduleOf = (a: Application): string => a.job?.workSchedule || a.job?.dutyTimings || "";
+
+export const eventAt = (a: Application, event: TimelineEventName): string | undefined => [...timelineOf(a)].reverse().find((t) => t.event === event)?.at;
+
+export const completedAtOf = (a: Application): string | undefined => a.completedAt || eventAt(a, "completed");
+
+export const workDateOf = (a: Application): string => dateOf(a.job?.startDate) || dateOf(eventAt(a, "arrived")) || dateOf(eventAt(a, "confirmed"));
+
+export const mapsUrlOf = (a: Application): string | null =>
+  typeof a.job?.latitude === "number" && typeof a.job?.longitude === "number" ? `https://www.google.com/maps/search/?api=1&query=${a.job.latitude},${a.job.longitude}` : null;
 
 export const salaryOf = (a: Application): number => {
   const n = Number(String(a.job?.salary ?? "").replace(/[^\d.]/g, ""));
@@ -78,7 +93,7 @@ export function statusLabel(a: Application, L: LFn): string {
     case "on_the_way":
       return L("On the way", "रास्ते में", "मार्गावर");
     case "arrived":
-      return L("Arrived on site", "पहुँच गए", "पोहोचला");
+      return a.completionRequestedAt ? L("Waiting for employer to confirm", "नियोक्ता की पुष्टि का इंतज़ार", "मालकाच्या पुष्टीची प्रतीक्षा") : L("Arrived on site", "पहुँच गए", "पोहोचला");
     case "declined":
       return L("Declined by employer", "नियोक्ता ने अस्वीकार किया", "मालकाने नाकारले");
     case "rejected":
@@ -129,7 +144,11 @@ export function timelineLabel(event: TimelineEventName, L: LFn): string {
       return L("You marked on the way", "आपने रास्ते में बताया", "तुम्ही मार्गावर असल्याचे नोंदवले");
     case "arrived":
       return L("You marked arrived", "आपने पहुंचना बताया", "तुम्ही पोहोचल्याचे नोंदवले");
+    case "completion_requested":
+      return L("You said the work is finished", "आपने बताया कि काम पूरा हो गया", "तुम्ही काम पूर्ण झाल्याचे सांगितले");
+    case "completion_rejected":
+      return L("Employer did not accept completion", "नियोक्ता ने पूरा होना स्वीकार नहीं किया", "मालकाने पूर्णत्व स्वीकारले नाही");
     default:
-      return L("Job completed", "काम पूरा हुआ", "काम पूर्ण झाले");
+      return L("Employer confirmed - work completed", "नियोक्ता ने पुष्टि की - काम पूरा हुआ", "मालकाने पुष्टी केली - काम पूर्ण झाले");
   }
 }

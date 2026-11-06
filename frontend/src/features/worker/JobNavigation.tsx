@@ -15,7 +15,7 @@ import { fixLeafletIcons } from "@/lib/leaflet";
 import { haversine } from "@/lib/geo";
 import { speak } from "@/lib/speech";
 import { useAuth } from "@/context/AuthContext";
-import { setLocationConsent, updateApplicationStatus } from "@/services/applications";
+import { requestCompletion, setLocationConsent, updateApplicationStatus } from "@/services/applications";
 import { updateWorkerLocation } from "@/services/workers";
 import type { ApplicationStatus, LatLng, RouteResult } from "@/types";
 
@@ -165,6 +165,7 @@ export default function JobNavigation() {
   const [nextStep, setNextStep] = useState("");
   const [tracking, setTracking] = useState(false);
   const [status, setStatus] = useState<ApplicationStatus>("accepted");
+  const [finishSent, setFinishSent] = useState(false);
   const [arrived, setArrived] = useState(false);
   const [eta, setEta] = useState<string | null>(null); // HH:MM string
   const [routeLoading, setRouteLoading] = useState(false);
@@ -257,18 +258,29 @@ export default function JobNavigation() {
   // ─── UPDATE JOB STATUS ───────────────────────────────────────────────
   const updateStatus = async (newStatus: ApplicationStatus) => {
     setStatus(newStatus);
-    if (newStatus === "completed") {
-      speak("Job completed. Great work!");
-      shareLocationRef.current = false; // the server also stops sharing on completion
-      if (watchIdRef.current) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-        setTracking(false);
-      }
-    }
     if (appId) {
       try {
         await updateApplicationStatus(appId, newStatus);
       } catch {}
+    }
+  };
+
+  // The worker only asks; the employer must confirm before the job counts as completed.
+  const requestFinish = async () => {
+    if (!appId) return;
+    try {
+      await requestCompletion(appId);
+    } catch (err) {
+      alert(err instanceof Error && err.message ? err.message : "Could not send the request. Please try again.");
+      return;
+    }
+    setFinishSent(true);
+    speak("Sent to the employer for confirmation.");
+    shareLocationRef.current = false;
+    void setLocationConsent(appId, false).catch(() => {});
+    if (watchIdRef.current) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      setTracking(false);
     }
   };
 
@@ -481,23 +493,23 @@ export default function JobNavigation() {
           </div>
         )}
 
-        {status === "arrived" && (
+        {status === "arrived" && !finishSent && (
           <button
-            onClick={() => updateStatus("completed")}
+            onClick={requestFinish}
             className="w-full py-4 px-0 bg-violet-500 text-white rounded-[14px] text-[16px] font-bold cursor-pointer shadow-[0_4px_16px_rgba(139,92,246,0.35)]"
           >
-            🎉 Mark Job as Completed
+            ✅ Work is finished
           </button>
         )}
 
-        {status === "completed" && (
+        {finishSent && (
           <div className="text-center py-4 px-0 bg-green-50 rounded-[14px] border-2 border-emerald-500">
-            <div className="text-[28px]">🎉</div>
+            <div className="text-[28px]">⏳</div>
             <div className="font-bold text-emerald-800 text-[16px]">
-              Job Completed!
+              Waiting for the employer to confirm
             </div>
             <div className="text-[13px] text-gray-500 mt-1">
-              The employer will rate your work shortly.
+              The job is completed once the employer confirms it.
             </div>
           </div>
         )}
