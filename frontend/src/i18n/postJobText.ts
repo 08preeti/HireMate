@@ -360,7 +360,86 @@ const DICT: Record<string, Entry> = {
   "Videographer": ["वीडियोग्राफर", "व्हिडिओग्राफर"],
   "Pharmacy Helper": ["फार्मेसी हेल्पर", "फार्मसी मदतनीस"],
   "Salon Helper": ["सैलून हेल्पर", "सलून मदतनीस"],
+
+  // ── Shared with the worker Find Jobs page ───────────────────────────────
+  "Cash": ["नकद", "रोख"],
+  "UPI": ["UPI", "UPI"],
+  "After Work": ["काम के बाद", "काम झाल्यावर"],
+  "Electrical & Welding": ["बिजली और वेल्डिंग", "इलेक्ट्रिकल आणि वेल्डिंग"],
+  "Plumbing": ["प्लंबिंग", "प्लंबिंग"],
+  "Cleaning & Housekeeping": ["सफाई और हाउसकीपिंग", "साफसफाई आणि घरकाम"],
+  "Food & Hospitality": ["खाना और आतिथ्य", "खाद्य आणि आतिथ्य"],
+  "Security": ["सुरक्षा", "सुरक्षा"],
+  "Construction & Repair": ["निर्माण और मरम्मत", "बांधकाम आणि दुरुस्ती"],
+  "Mechanic": ["मैकेनिक", "मेकॅनिक"],
+  "Gardening": ["बागवानी", "बागकाम"],
+  "Driver": ["ड्राइवर", "चालक"],
 };
+
+// Cities / states that appear in saved job addresses. Street and area names stay as typed.
+const PLACES: Record<string, Entry> = {
+  "Nashik": ["नाशिक", "नाशिक"],
+  "Nasik": ["नाशिक", "नाशिक"],
+  "Maharashtra": ["महाराष्ट्र", "महाराष्ट्र"],
+  "Pune": ["पुणे", "पुणे"],
+  "Mumbai": ["मुंबई", "मुंबई"],
+  "Thane": ["ठाणे", "ठाणे"],
+  "Nagpur": ["नागपूर", "नागपूर"],
+  "Aurangabad": ["औरंगाबाद", "औरंगाबाद"],
+  "Chhatrapati Sambhajinagar": ["छत्रपति संभाजीनगर", "छत्रपती संभाजीनगर"],
+  "Kolhapur": ["कोल्हापुर", "कोल्हापूर"],
+  "Solapur": ["सोलापुर", "सोलापूर"],
+  "Jalgaon": ["जलगांव", "जळगाव"],
+  "Dhule": ["धुले", "धुळे"],
+  "Ahmednagar": ["अहमदनगर", "अहमदनगर"],
+  "Nanded": ["नांदेड़", "नांदेड"],
+  "Amravati": ["अमरावती", "अमरावती"],
+  "India": ["भारत", "भारत"],
+};
+
+type Lang = "en" | "hi" | "mr";
+type Localized = { en?: string; hi?: string; mr?: string } | undefined;
+
+/** Translates a known label (job name, category, payment method). Unknown text is returned unchanged. */
+export function translateKnown(text: string, language: Lang): string {
+  if (language === "en" || !text) return text;
+  const entry = DICT[text.trim()];
+  return entry ? entry[language === "hi" ? 0 : 1] : text;
+}
+
+/** "Concrete Worker, Concrete mixing" -> each comma-separated part translated when it is known. */
+export function translateList(text: string, language: Lang): string {
+  if (language === "en" || !text) return text;
+  return text.split(",").map((x) => translateKnown(x.trim(), language)).filter(Boolean).join(", ");
+}
+
+/** "Parijat Nagar, Nashik, Maharashtra" -> known cities / states translated, the rest kept. */
+export function translatePlace(text: string, language: Lang): string {
+  if (language === "en" || !text) return text;
+  return text
+    .split(",")
+    .map((part) => {
+      const k = part.trim();
+      const entry = PLACES[k];
+      return entry ? entry[language === "hi" ? 0 : 1] : k;
+    })
+    .filter(Boolean)
+    .join(", ");
+}
+
+/**
+ * Text saved with a job as { en, hi, mr }. The server stores what the employer typed in all three
+ * languages, so when hi / mr are just a copy of the English text, fall back to the dictionary.
+ */
+export function pickText(value: Localized, language: Lang, kind: "text" | "list" | "place" = "text"): string {
+  if (!value) return "";
+  const en = value.en || "";
+  if (language === "en") return en || value[language] || "";
+  const own = value[language];
+  if (own && own !== en) return own;
+  const base = en || own || "";
+  return kind === "list" ? translateList(base, language) : kind === "place" ? translatePlace(base, language) : translateKnown(base, language);
+}
 
 /**
  * Translation helpers for the Post a Job page.
