@@ -1,5 +1,5 @@
-import Applications from "@/features/employer/Applications";
+import ApplicationsPage from "@/features/employer/applications/ApplicationsPage";
 
 export default function Page() {
-  return <Applications />;
+  return <ApplicationsPage />;
 }

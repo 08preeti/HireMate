@@ -46,7 +46,8 @@ import { fixLeafletIcons } from "@/lib/leaflet";
 import { haversine } from "@/lib/geo";
 import { getSeenCount } from "@/lib/seenApplications";
 import { useEmployerT, type EmployerKey } from "@/i18n/employerText";
-import type { Application, ApplicationStatus, Job } from "@/types";
+import type { Application, ApplicationStatus, EmployerJob, EmployerJobsSummary, LiveApplication } from "@/types";
+import { STATUS_LABEL, STATUS_TONE, jobStatusOf } from "./jobs/jobHelpers";
 
 fixLeafletIcons();
 
@@ -292,15 +293,16 @@ export default function EmployerDashboard() {
   trRef.current = tr;
   const locRef = useRef(loc);
   locRef.current = loc;
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs] = useState<EmployerJob[]>([]);
+  const [stats, setStats] = useState<EmployerJobsSummary | null>(null);
   const [totalApps, setTotalApps] = useState(0);
   // null until read from the browser, so the badge never flashes the full total.
   const [seenApps, setSeenApps] = useState<number | null>(null);
-  const [liveApps, setLiveApps] = useState<Application[]>([]);
+  const [liveApps, setLiveApps] = useState<LiveApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifs] = useState<NotificationItem[]>([]);
-  const [ratingApp, setRatingApp] = useState<Application | null>(null);
-  const [selectedApp, setSelectedApp] = useState<Application | null>(null);
+  const [ratingApp, setRatingApp] = useState<LiveApplication | null>(null);
+  const [selectedApp, setSelectedApp] = useState<LiveApplication | null>(null);
   const [tab, setTab] = useState<JobTab>("all");
   const [query, setQuery] = useState("");
   const prevStatuses = useRef<Record<string, ApplicationStatus | undefined>>(
@@ -320,6 +322,7 @@ export default function EmployerDashboard() {
       const data = await getEmployerDashboard();
       setJobs(data.jobs || []);
       setTotalApps(data.totalApplications || 0);
+      setStats(data.stats ?? null);
     } catch {
       // keep the empty state; an expired session is handled centrally
     } finally {
@@ -372,8 +375,8 @@ export default function EmployerDashboard() {
     return () => clearInterval(iv);
   }, [fetchDashboard, fetchLive]);
 
-  const activeJobs = jobs.filter((j) => j.status === "active").length;
-  const closedJobs = jobs.length - activeJobs;
+  const activeJobs = stats?.activeJobs ?? jobs.filter((j) => j.status === "active").length;
+  const closedJobs = stats?.closedJobs ?? 0;
   const onSite = liveApps.filter(
     (a) => a.status === "arrived" || a.status === "completed",
   ).length;
@@ -674,6 +677,27 @@ export default function EmployerDashboard() {
             />
           </div>
 
+          {stats && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
+              {(
+                [
+                  { label: "kpi_activeJobs", value: stats.activeJobs, href: "/employer-jobs" },
+                  { label: "ds_filledJobs", value: stats.filledJobs, href: "/employer-jobs" },
+                  { label: "ds_completedJobs", value: stats.completedJobs, href: "/employer-jobs" },
+                  { label: "kpi_totalApplicants", value: stats.totalApplications, href: "/applications" },
+                  { label: "ds_pending", value: stats.pendingApplications, href: "/applications?tab=new" },
+                  { label: "ds_confirmed", value: stats.confirmedWorkers, href: "/applications?tab=confirmed" },
+                  { label: "ds_available", value: stats.availableVacancies, href: "/employer-jobs" },
+                ] as { label: EmployerKey; value: number; href: string }[]
+              ).map((t) => (
+                <Link key={t.label} href={t.href} className="bg-white rounded-xl border border-slate-100 shadow-[0_2px_12px_rgba(15,23,42,.05)] px-4 py-3 no-underline">
+                  <span className="block text-[22px] font-extrabold text-[#0F1F4B] leading-none">{t.value}</span>
+                  <span className="mt-1 block text-[12px] text-slate-500">{tr(t.label)}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+
           {/* Quick worker request */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_12px_rgba(15,23,42,.05)] px-5 py-4 flex flex-col lg:flex-row lg:items-center gap-4">
             <div className="flex items-center gap-3 shrink-0">
@@ -731,7 +755,7 @@ export default function EmployerDashboard() {
                       {tr("filter_active", { n: activeJobs })}
                     </option>
                     <option value="closed">
-                      {tr("filter_closed", { n: closedJobs })}
+                      {tr("filter_closed", { n: jobs.length - activeJobs })}
                     </option>
                   </select>
                 </label>
@@ -759,7 +783,6 @@ export default function EmployerDashboard() {
                 </div>
               ) : (
                 visibleJobs.map((job) => {
-                  const active = job.status === "active";
                   return (
                     <div
                       key={job._id}
@@ -768,9 +791,9 @@ export default function EmployerDashboard() {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold">
                           <span
-                            className={`rounded-md px-2.5 py-1 ${active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}
+                            className={`rounded-md px-2.5 py-1 ${STATUS_TONE[jobStatusOf(job.status)]}`}
                           >
-                            {active ? tr("tag_active") : tr("tag_closed")}
+                            {tr(STATUS_LABEL[jobStatusOf(job.status)])}
                           </span>
                           {job.isUrgent && (
                             <span className="rounded-md px-2.5 py-1 bg-amber-50 text-amber-700">
@@ -804,14 +827,25 @@ export default function EmployerDashboard() {
                             <FiUsers />{" "}
                             {trp("applicants", job.applicationCount || 0)}
                           </span>
+                          <span className="flex items-center gap-1.5 text-slate-600 font-semibold">
+                            {tr("jm_total")}: {job.stats.totalVacancies} · {tr("jm_confirmedW")}: {job.stats.confirmedWorkers} · {tr("jm_available")}: {job.stats.availableVacancies}
+                          </span>
                         </div>
                       </div>
-                      <Link
-                        href="/applications"
-                        className="shrink-0 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white no-underline rounded-xl px-5 py-2.5 font-bold text-[13px]"
-                      >
-                        {tr("viewApplicants")} <FiArrowRight />
-                      </Link>
+                      <div className="shrink-0 flex flex-col gap-2">
+                        <Link
+                          href={`/applications?job=${job._id}`}
+                          className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white no-underline rounded-xl px-5 py-2.5 font-bold text-[13px]"
+                        >
+                          {tr("viewApplicants")} <FiArrowRight />
+                        </Link>
+                        <Link
+                          href={`/employer-jobs/${job._id}`}
+                          className="flex items-center justify-center border border-slate-300 text-slate-700 no-underline rounded-xl px-5 py-2 font-semibold text-[13px] hover:bg-slate-50"
+                        >
+                          {tr("jm_view")}
+                        </Link>
+                      </div>
                     </div>
                   );
                 })

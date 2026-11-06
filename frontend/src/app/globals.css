@@ -9,71 +9,28 @@
 }
 
 /* ── Worker walk-in character (employer › Workers) ── */
-.hm-leg-a,
-.hm-leg-b,
-.hm-arm-a,
-.hm-arm-b,
-.hm-wave {
-  transform-box: fill-box;
-  transform-origin: 50% 8%;
+/* Limb/hair/cloth motion is driven per-frame in WorkerCharacter; this is the arrival ring. */
+.hm-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.75);
+  box-shadow: 0 0 14px rgba(253, 230, 138, 0.7);
+  transform: translate(-50%, -50%) scale(0.2);
+  opacity: 0;
+  animation: hm-ring 0.75s ease-out forwards;
 }
-.hm-leg-a {
-  animation: hm-swing-a 0.5s ease-in-out infinite alternate;
-}
-.hm-leg-b {
-  animation: hm-swing-b 0.5s ease-in-out infinite alternate;
-}
-.hm-arm-a {
-  animation: hm-swing-b 0.5s ease-in-out infinite alternate;
-}
-.hm-arm-b {
-  animation: hm-swing-a 0.5s ease-in-out infinite alternate;
-}
-.hm-wave {
-  animation: hm-wave 0.55s ease-in-out infinite alternate;
-}
-.hm-bob {
-  animation: hm-bob 0.25s ease-in-out infinite alternate;
-}
-@keyframes hm-swing-a {
-  from {
-    transform: rotate(-26deg);
+@keyframes hm-ring {
+  0% {
+    transform: translate(-50%, -50%) scale(0.2);
+    opacity: 0.9;
   }
-  to {
-    transform: rotate(26deg);
-  }
-}
-@keyframes hm-swing-b {
-  from {
-    transform: rotate(26deg);
-  }
-  to {
-    transform: rotate(-26deg);
-  }
-}
-@keyframes hm-wave {
-  from {
-    transform: rotate(-155deg);
-  }
-  to {
-    transform: rotate(-118deg);
-  }
-}
-@keyframes hm-bob {
-  from {
-    transform: translateY(0);
-  }
-  to {
-    transform: translateY(-2.5px);
+  100% {
+    transform: translate(-50%, -50%) scale(1.7);
+    opacity: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hm-leg-a,
-  .hm-leg-b,
-  .hm-arm-a,
-  .hm-arm-b,
-  .hm-wave,
-  .hm-bob {
+  .hm-ring {
     animation: none;
   }
 }

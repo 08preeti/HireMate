@@ -6,3 +6,4 @@ import Loader from "@/components/ui/Loader";
 // Leaflet touches `window` when it is imported, so these screens are client-only.
 export const EmployerDashboardLazy = dynamic(() => import("./EmployerDashboard"), { ssr: false, loading: () => <Loader /> });
 export const PostJobLazy = dynamic(() => import("./PostJobs"), { ssr: false, loading: () => <Loader /> });
+export const EditJobLazy = dynamic(() => import("./EditJob"), { ssr: false, loading: () => <Loader /> });

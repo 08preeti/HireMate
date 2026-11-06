@@ -20,3 +20,28 @@ export function markApplicationsSeen(employerId: string | undefined, total: numb
     /* storage unavailable — ignore */
   }
 }
+
+const viewedKey = (employerId?: string) => `hm_viewed_application_ids_${employerId || "employer"}`;
+
+/** Ids of the applications the employer has opened in the details view. */
+export function getViewedIds(employerId?: string): string[] {
+  try {
+    const raw = window.localStorage.getItem(viewedKey(employerId));
+    const list: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export function markApplicationViewed(employerId: string | undefined, id: string): string[] {
+  const ids = getViewedIds(employerId);
+  if (ids.includes(id)) return ids;
+  const next = [...ids, id];
+  try {
+    window.localStorage.setItem(viewedKey(employerId), JSON.stringify(next));
+  } catch {
+    /* storage unavailable — ignore */
+  }
+  return next;
+}

@@ -1,5 +1,5 @@
 import api from "./api";
-import type { AcceptJobResponse, Application, Job, Worker } from "@/types";
+import type { AcceptJobResponse, Application, Job, Worker, WorkerAvailability } from "@/types";
 
 // Every call here is worker-only; the backend rejects any other role.
 export const getWorkerProfile = (id: string): Promise<Worker> =>
@@ -12,6 +12,11 @@ export const updateWorkerProfile = (
     skills?: string;
     location?: string;
     gender?: "male" | "female" | "";
+    about?: string;
+    experienceYears?: number | null;
+    experienceDetails?: string;
+    serviceAreas?: string[];
+    availability?: WorkerAvailability;
   },
   /** Pass a token only right after sign-in, before the session is stored. */
   token?: string,

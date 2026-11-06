@@ -1,5 +1,5 @@
-import { WorkerDashboardLazy } from "@/features/worker/lazy";
+import WorkerDashboard from "@/features/worker/WorkerDashboard";
 
 export default function Page() {
-  return <WorkerDashboardLazy />;
+  return <WorkerDashboard />;
 }

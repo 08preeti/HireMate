@@ -1,9 +1,10 @@
 // Throw from services; controllers translate it into a JSON response.
 export class HttpError extends Error {
-  constructor(status, message) {
+  constructor(status, message, extra = {}) {
     super(message);
     this.name = "HttpError";
     this.status = status;
+    this.extra = extra;
   }
 }
 
@@ -14,7 +15,7 @@ export class HttpError extends Error {
  */
 export function sendError(res, err, fallbackMessage, key = "message") {
   if (err instanceof HttpError) {
-    return res.status(err.status).json({ [key]: err.message });
+    return res.status(err.status).json({ [key]: err.message, ...err.extra });
   }
   console.error(fallbackMessage, err);
   return res.status(500).json({ [key]: fallbackMessage });

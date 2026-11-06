@@ -9,11 +9,12 @@ import {
   FiMapPin, FiMaximize2, FiMoon, FiNavigation, FiPhone, FiSend, FiStar, FiSun, FiTool,
   FiTruck, FiZap, FiEdit3, FiSearch, FiPlus, FiCoffee, FiShield, FiDroplet, FiScissors,
 } from "react-icons/fi";
-import { postJob } from "@/services/jobs";
+import { getMyJob, postJob, updateJob, type NewJobPayload } from "@/services/jobs";
+import { ApiError } from "@/services/api";
 import { fixLeafletIcons } from "@/lib/leaflet";
 import { useAuth } from "@/context/AuthContext";
-import EmployerTopNav from "@/components/layout/EmployerTopNav";
-import type { LatLng } from "@/types";
+import EmployerShell from "@/components/layout/EmployerShell";
+import type { EmployerJobDetail, JobType, LatLng } from "@/types";
 
 // ── Location search types ──────────────────────────────────────────────────
 interface LocationSuggestion {
@@ -221,6 +222,33 @@ const DATES: { key: DateMode; title: string; sub: string }[] = [
   { key: "custom", title: "Custom Date", sub: "Multi-day booking" },
 ];
 
+const JOB_TYPES: { value: JobType; label: string }[] = [
+  { value: "one_day", label: "One day" },
+  { value: "multi_day", label: "Multi-day" },
+  { value: "part_time", label: "Part time" },
+  { value: "full_time", label: "Full time" },
+  { value: "contract", label: "Contract" },
+];
+
+const PAY_UNITS: { value: "hour" | "day" | "week" | "month"; label: string; short: string }[] = [
+  { value: "hour", label: "Hourly", short: "Hour" },
+  { value: "day", label: "Daily", short: "Day" },
+  { value: "week", label: "Weekly", short: "Week" },
+  { value: "month", label: "Monthly", short: "Month" },
+];
+
+const isoDay = (offset: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+type FormErrors = Record<string, string>;
+
+function FieldError({ message }: { message?: string }) {
+  return message ? <p role="alert" className="mt-1.5 text-[12px] font-medium text-red-600">{message}</p> : null;
+}
+
 const PERKS = ["Free Lunch / Chai", "Safety Helmets", "Travel Allowance", "Filtered Water & Shade"];
 
 // Values stay compatible with what the backend / AI scoring already expects.
@@ -282,8 +310,9 @@ function Check({ checked, onChange, children, className = "" }: { checked: boole
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // ══════════════════════════════════════════════════════════════════════════
-export default function PostJobs() {
+export default function PostJobs({ jobId }: { jobId?: string } = {}) {
   const { employer } = useAuth();
+  const isEdit = Boolean(jobId);
 
   // 1 · Role
   const [trade, setTrade] = useState("Construction Helper");
@@ -329,6 +358,36 @@ export default function PostJobs() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [posted, setPosted] = useState(false);
+  const [errors, setErrors] = useState<FormErrors>({});
+
+  // Basic information (new structured fields)
+  const [category, setCategory] = useState(JOB_GROUPS[0].label);
+  const [extraSkills, setExtraSkills] = useState("");
+  const [experience, setExperience] = useState("");
+  const [summary, setSummary] = useState("");
+
+  // Payment
+  const [salaryUnit, setSalaryUnit] = useState<"hour" | "day" | "week" | "month">("day");
+  const [paymentDetails, setPaymentDetails] = useState("");
+
+  // Work
+  const [jobType, setJobType] = useState<JobType>("one_day");
+  const [duration, setDuration] = useState("");
+
+  // Location
+  const [city, setCity] = useState("");
+  const [stateName, setStateName] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+
+  // Edit mode
+  const [original, setOriginal] = useState<EmployerJobDetail | null>(null);
+  const [loadingJob, setLoadingJob] = useState(isEdit);
+  const [loadError, setLoadError] = useState("");
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const touch = (name: string) => setTouched((t) => new Set(t).add(name));
+  const heldWorkers = original?.filledPositions ?? 0;
+  const locked = heldWorkers > 0;
+  const legacyDescription = original !== null && original.summary === undefined;
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -366,6 +425,8 @@ export default function PostJobs() {
   // Selecting a job also fills the title, unless the employer already typed their own.
   const pickJob = (label: string) => {
     setTrade(label);
+    const group = ALL_JOBS.find((j) => j.label === label)?.group;
+    setCategory(JOB_GROUPS.find((g) => g.key === group)?.label || "Other");
     if (!jobTitle.trim() || jobTitle === lastAutoTitle.current) {
       setJobTitle(label);
       lastAutoTitle.current = label;
@@ -401,6 +462,70 @@ export default function PostJobs() {
   const shiftInfo = SHIFTS.find((s) => s.key === shift)!;
 
 
+  // ── Edit mode: load the real job ─────────────────────────────────────────
+  const fillFrom = (j: EmployerJobDetail) => {
+    const parts = (j.skills?.en || "").split(",").map((x) => x.trim()).filter(Boolean);
+    const main = parts[0] || "";
+    const hit = ALL_JOBS.find((x) => x.label.toLowerCase() === main.toLowerCase());
+    if (main) setTrade(main);
+    setGroupKey(hit ? hit.group : "custom");
+    setExtraSkills(parts.slice(1).join(", "));
+    setCategory((typeof j.category === "string" && j.category) || (hit ? JOB_GROUPS.find((g) => g.key === hit.group)?.label : "") || "Other");
+    setJobTitle(j.jobTitle?.en || "");
+    setCompany(j.companyName || "");
+    setWorkers(j.vacancies);
+    setExperience(j.experience || "");
+    setSummary(j.summary !== undefined ? j.summary : j.description?.en || "");
+    setWage(String(j.salary ?? ""));
+    setSalaryUnit(j.salaryUnit || "day");
+    setSettlement(j.paymentMethod || "Cash");
+    setPaymentDetails(j.paymentDetails || "");
+    setPerks(j.perkItems || []);
+    setJobType(j.jobType || "one_day");
+    if (j.startDate) {
+      setDateMode("custom");
+      setCustomDate(j.startDate.slice(0, 10));
+    } else {
+      setDateMode("custom");
+      setCustomDate("");
+    }
+    setShift(j.shift || "day");
+    setOvertime((j.overtimeRate ?? 0) > 0);
+    setOtRate(j.overtimeRate ? String(j.overtimeRate) : "120");
+    setDuration(j.duration || "");
+    setNote(j.workInstructions || "");
+    setUrgent(Boolean(j.isUrgent));
+    setLocation(j.location?.en || "");
+    if (typeof j.latitude === "number" && typeof j.longitude === "number") {
+      setPinPos({ lat: j.latitude, lng: j.longitude });
+      setMapCenter([j.latitude, j.longitude]);
+    }
+    setCity(j.city || "");
+    setStateName(j.state || "");
+    setPostalCode(j.postalCode || "");
+    setGateNote(j.gateNote || "");
+    setPhone((j.contactInfo || "").replace(/\D/g, "").slice(-10));
+  };
+
+  useEffect(() => {
+    if (!jobId) return;
+    let alive = true;
+    getMyJob(jobId)
+      .then((j) => {
+        if (!alive) return;
+        setOriginal(j);
+        fillFrom(j);
+      })
+      .catch((err) => {
+        if (alive) setLoadError(err instanceof ApiError && err.status !== 500 ? err.message : "Could not load this job. Please try again.");
+      })
+      .finally(() => alive && setLoadingJob(false));
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId]);
+
   // ── Location handlers ────────────────────────────────────────────────────
   const onLocationInput = (value: string) => {
     setLocation(value);
@@ -426,6 +551,7 @@ export default function PostJobs() {
 
   // Click on the map or drag of the pin: move the pin and refresh the address.
   const movePin = async (lat: number, lng: number) => {
+    if (locked) return;
     setPinPos({ lat, lng });
     const addr = await reverseGeocode(lat, lng);
     setLocation(addr);
@@ -447,63 +573,110 @@ export default function PostJobs() {
   };
 
   // ── Submit ───────────────────────────────────────────────────────────────
+  const validate = (): FormErrors => {
+    const e: FormErrors = {};
+    const digits = phone.replace(/\D/g, "");
+    if (!jobTitle.trim()) e.jobTitle = "Please enter a job title.";
+    else if (jobTitle.trim().length > 150) e.jobTitle = "Job title must be 150 characters or fewer.";
+    if (!company.trim()) e.companyName = "Please enter the hiring entity / contractor name.";
+    if (workers < 1 || workers > 500) e.vacancies = "Workers required must be between 1 and 500.";
+    else if (workers < heldWorkers) e.vacancies = `${heldWorkers} worker${heldWorkers > 1 ? "s are" : " is"} already accepted or confirmed, so this cannot be lower than ${heldWorkers}.`;
+    if (!location.trim() || !pinPos) e.location = "Please search the site address or tap the map to pin the exact gate location.";
+    if (postalCode.trim() && !/^\d{6}$/.test(postalCode.trim())) e.postalCode = "Postal code must be 6 digits.";
+    if (digits.length !== 10) e.contactInfo = "Enter a valid 10-digit on-site contact number.";
+    if (dateMode === "custom" && !customDate && !isEdit) e.startDate = "Please choose the work date.";
+    if (!isEdit && dateMode === "custom" && customDate && customDate < isoDay(0)) e.startDate = "Work date cannot be in the past.";
+    if (wageNum <= 0) e.salary = "Please enter the pay amount per worker.";
+    if (summary.length > 3000) e.summary = "Job description must be 3000 characters or fewer.";
+    if (note.length > 1500) e.workInstructions = "Work instructions must be 1500 characters or fewer.";
+    return e;
+  };
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
+    setPosted(false);
+    const found = validate();
+    setErrors(found);
+    const first = Object.keys(found)[0];
+    if (first) {
+      setError(found[first]);
+      document.getElementById(`field-${first}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
 
     const digits = phone.replace(/\D/g, "");
-    if (!jobTitle.trim()) return setError("Please enter a job title.");
-    if (!company.trim()) return setError("Please enter the hiring entity / contractor name.");
-    if (workers < 1) return setError("At least 1 worker is needed.");
-    if (!location.trim() || !pinPos) return setError("Please search the site address or tap the map to pin the exact gate location.");
-    if (digits.length !== 10) return setError("Enter a valid 10-digit on-site contact number.");
-    if (dateMode === "custom" && !customDate) return setError("Please choose the work date.");
-    if (wageNum <= 0) return setError("Please enter the daily wage per worker.");
-
-    const dateLabel =
-      dateMode === "today" ? "Today (immediate start)"
-      : dateMode === "tomorrow" ? "Tomorrow, 08:00 AM"
-      : customDate;
-
-    // The backend stores one description text, so the extra details travel inside it.
-    const description = [
-      `${trade} — ${workers} worker${workers > 1 ? "s" : ""} needed.`,
-      `Work date: ${dateLabel}.`,
-      `Shift: ${shiftInfo.title} (${shiftInfo.time}).`,
-      overtime && Number(otRate) > 0 ? `Overtime paid extra at ₹${Number(otRate)}/hour beyond shift hours.` : "",
-      perks.length ? `Provided: ${perks.join(", ")}.` : "",
-      gateNote.trim() ? `Gate instructions: ${gateNote.trim()}` : "",
-      note.trim() ? `Note: ${note.trim()}` : "",
-    ].filter(Boolean).join(" ");
+    const startDate = dateMode === "today" ? isoDay(0) : dateMode === "tomorrow" ? isoDay(1) : customDate;
+    const payload: NewJobPayload = {
+      jobTitle: jobTitle.trim(),
+      companyName: company.trim(),
+      location: location.trim(),
+      latitude: pinPos?.lat,
+      longitude: pinPos?.lng,
+      salary: wageNum,
+      salaryUnit,
+      skills: [trade, extraSkills.trim()].filter(Boolean).join(", "),
+      category,
+      experience: experience.trim(),
+      paymentMethod: settlement,
+      paymentDetails: paymentDetails.trim(),
+      duration: duration.trim(),
+      workInstructions: note.trim(),
+      gateNote: gateNote.trim(),
+      perkItems: perks,
+      overtimeRate: overtime ? Number(otRate) || 0 : 0,
+      city: city.trim(),
+      state: stateName.trim(),
+      postalCode: postalCode.trim(),
+      isUrgent: urgent,
+      vacancies: workers,
+      ...(!isEdit || startDate ? { startDate: startDate || undefined } : {}),
+      ...(!isEdit || original?.jobType || touched.has("jobType") ? { jobType } : {}),
+      ...(!isEdit || original?.shift || touched.has("shift") ? { shift, workSchedule: `${shiftInfo.title} (${shiftInfo.time})` } : {}),
+      ...(legacyDescription ? { description: summary.trim() } : { summary: summary.trim() }),
+    };
+    const originalDigits = (original?.contactInfo || "").replace(/\D/g, "").slice(-10);
+    if (!isEdit || digits !== originalDigits) payload.contactInfo = `+91${digits}`;
 
     setLoading(true);
     try {
-      await postJob({
-        jobTitle: jobTitle.trim(),
-        companyName: company.trim(),
-        location: location.trim(),
-        latitude: pinPos.lat,
-        longitude: pinPos.lng,
-        salary: wageNum,
-        skills: trade,
-        description,
-        contactInfo: `+91${digits}`,
-        paymentMethod: settlement,
-        isUrgent: urgent,
-      });
+      if (jobId) setOriginal(await updateJob(jobId, payload));
+      else await postJob(payload);
       setPosted(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       console.error(err);
-      setError("Failed to post job. Make sure you are logged in.");
+      if (err instanceof ApiError && err.fieldErrors) setErrors(err.fieldErrors);
+      setError(err instanceof ApiError && err.message ? err.message : isEdit ? "Failed to save the job. Please try again." : "Failed to post job. Make sure you are logged in.");
     } finally {
       setLoading(false);
     }
   };
 
+  if (isEdit && (loadingJob || loadError || (original && !original.actions.canEdit))) {
+    return (
+      <EmployerShell>
+        <div className="max-w-[720px] mx-auto px-4 py-12 text-center font-app">
+          {loadingJob ? (
+            <p role="status" className="text-[14px] text-slate-500">Loading job…</p>
+          ) : (
+            <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-6 text-[14px] text-red-800">
+              {loadError || "A completed job cannot be edited."}
+              <div className="mt-4">
+                <Link href="/employer-jobs" className="font-semibold text-red-700 underline">Back to My Jobs</Link>
+              </div>
+            </div>
+          )}
+        </div>
+      </EmployerShell>
+    );
+  }
+
+  const fe = (name: string) => (errors[name] ? " !border-red-400" : "");
+
   return (
-    <div className="min-h-screen flex flex-col bg-[#F4F6FA] font-app text-slate-900">
-      <EmployerTopNav />
+    <EmployerShell>
+    <div className="flex flex-col bg-[#F4F6FA] font-app text-slate-900">
 
       {/* ── Title area ──────────────────────────────────────────────── */}
       <div className="bg-white border-b border-slate-200">
@@ -511,11 +684,11 @@ export default function PostJobs() {
           <div className="flex items-center gap-1.5 text-[12px] text-slate-500 mb-3">
             <Link href="/employer-dashboard" className="no-underline text-slate-500 hover:text-slate-800">Dashboard</Link>
             <FiChevronRight size={12} />
-            <span className="text-slate-900 font-semibold">Post a Job &amp; Request Workers</span>
+            <span className="text-slate-900 font-semibold">{isEdit ? "Edit Job" : "Post a Job & Request Workers"}</span>
           </div>
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h1 className="text-[28px] sm:text-[32px] font-extrabold tracking-tight leading-tight">Post a Job &amp; Request Workers</h1>
+              <h1 className="text-[28px] sm:text-[32px] font-extrabold tracking-tight leading-tight">{isEdit ? "Edit Job" : "Post a Job & Request Workers"}</h1>
               <p className="text-[14px] text-slate-600 mt-1.5 max-w-[620px]">
                 Find daily-wage helpers, skilled tradesmen and loaders. Pin your site gate so workers can navigate straight to you.
               </p>
@@ -545,7 +718,8 @@ export default function PostJobs() {
         <div className="flex flex-col gap-6 min-w-0">
 
           {/* 1 · Role & requirements */}
-          <SectionCard n={1} title="Job Role & Worker Requirements" subtitle="Select the worker trade or describe the site task" badge={<span className="text-[12px] font-semibold text-red-600 bg-red-50 rounded px-2.5 py-1">Required</span>}>
+          <SectionCard n={1} title="Basic Information" subtitle="What kind of work is it and who do you need?" badge={<span className="text-[12px] font-semibold text-red-600 bg-red-50 rounded px-2.5 py-1">Required</span>}>
+            <fieldset disabled={locked} className="contents">
             <span className={LABEL}>Select worker trade / category</span>
 
             {/* Search all jobs */}
@@ -620,43 +794,196 @@ export default function PostJobs() {
             )}
 
             <p className="text-[12.5px] text-slate-500 mb-6">Selected job: <b className="text-slate-900">{trade}</b></p>
+            </fieldset>
 
-            <div className="grid sm:grid-cols-[1fr_200px] gap-4 mb-4">
+            <div className="mb-4" id="field-jobTitle">
+              <label className={LABEL} htmlFor="jobTitle">Job title / primary task details *</label>
+              <div className="relative">
+                <input id="jobTitle" disabled={locked} className={`${INPUT} pr-10${fe("jobTitle")} disabled:bg-slate-50 disabled:text-slate-500`} value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="e.g. Site helpers for shuttering & concrete pouring" maxLength={150} />
+                <FiEdit2 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              </div>
+              <FieldError message={errors.jobTitle} />
+              <p className="mt-2 text-[12px] text-blue-600 flex items-center gap-1.5"><FiInfo /> Add the specific task for faster acceptances.</p>
+            </div>
+
+            <label className={LABEL} htmlFor="company">Hiring entity / contractor name</label>
+            <input id="company" className={`${INPUT}${fe("companyName")}`} value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Company or contractor name" />
+            <FieldError message={errors.companyName} />
+
+            <div className="grid sm:grid-cols-2 gap-4 mt-4">
               <div>
-                <label className={LABEL} htmlFor="jobTitle">Job title / primary task details *</label>
-                <div className="relative">
-                  <input id="jobTitle" className={`${INPUT} pr-10`} value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="e.g. Site helpers for shuttering & concrete pouring" />
-                  <FiEdit2 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                </div>
-                <p className="mt-2 text-[12px] text-blue-600 flex items-center gap-1.5"><FiInfo /> Add the specific task for faster acceptances.</p>
+                <label className={LABEL} htmlFor="category">Job category</label>
+                <select id="category" disabled={locked} value={category} onChange={(e) => setCategory(e.target.value)} className={`${INPUT} cursor-pointer disabled:bg-slate-50 disabled:text-slate-500`}>
+                  {[...JOB_GROUPS.map((g) => g.label), "Other"].map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
               </div>
               <div>
-                <span className={LABEL}>Workers needed *</span>
-                <div className="flex h-11 rounded-lg border border-slate-200 overflow-hidden">
-                  <button type="button" onClick={() => setWorkers((w) => Math.max(1, w - 1))} className="w-11 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold cursor-pointer" aria-label="Fewer workers">-</button>
+                <label className={LABEL} htmlFor="extraSkills">Required skills (besides the selected trade)</label>
+                <input id="extraSkills" className={INPUT} value={extraSkills} onChange={(e) => setExtraSkills(e.target.value)} placeholder="e.g. Concrete mixing, reading drawings" maxLength={200} />
+              </div>
+            </div>
+            <div className="mt-4">
+              <label className={LABEL} htmlFor="experience">Experience requirements</label>
+              <input id="experience" className={INPUT} value={experience} onChange={(e) => setExperience(e.target.value)} placeholder="e.g. 1+ year on construction sites" maxLength={200} />
+            </div>
+            <div className="mt-4" id="field-summary">
+              <label className={LABEL} htmlFor="summary">Job description</label>
+              <textarea id="summary" value={summary} onChange={(e) => setSummary(e.target.value)} rows={3} placeholder="Describe the work, the site and what workers should expect." className={`w-full rounded-lg border border-slate-200 p-3.5 text-[14px] placeholder:text-slate-400 outline-none resize-none focus:border-red-400 focus:ring-2 focus:ring-red-100${fe("summary")}`} />
+              <FieldError message={errors.summary} />
+            </div>
+          </SectionCard>
+
+          {/* 4 · Wage */}
+          <SectionCard n={2} title="Payment Information" subtitle="Clear pricing attracts more workers">
+            <fieldset disabled={locked} className="contents">
+              <div className="grid sm:grid-cols-3 gap-4 mb-5">
+                <div id="field-salary">
+                  <label className={LABEL} htmlFor="wage">Pay amount per worker (₹) *</label>
+                  <div className={`flex h-12 items-center rounded-lg border border-slate-200 px-3.5 focus-within:border-red-400 focus-within:ring-2 focus-within:ring-red-100${fe("salary")}`}>
+                    <span className="text-slate-500 mr-2">₹</span>
+                    <input
+                      id="wage" inputMode="numeric" value={wage}
+                      onChange={(e) => setWage(e.target.value.replace(/\D/g, ""))}
+                      className="flex-1 min-w-0 text-[18px] font-bold outline-none bg-transparent" placeholder="850"
+                    />
+                    <span className="text-[12px] text-slate-400">/ {PAY_UNITS.find((u) => u.value === salaryUnit)?.short}</span>
+                  </div>
+                  <FieldError message={errors.salary} />
+                </div>
+                <div>
+                  <label className={LABEL} htmlFor="salaryUnit">Payment type *</label>
+                  <select id="salaryUnit" value={salaryUnit} onChange={(e) => setSalaryUnit(e.target.value as typeof salaryUnit)} className={`${INPUT} h-12 cursor-pointer`}>
+                    {PAY_UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={LABEL} htmlFor="settle">Worker settlement method *</label>
+                  <select
+                    id="settle" value={settlement} onChange={(e) => setSettlement(e.target.value)}
+                    className={`${INPUT} h-12 cursor-pointer`}
+                  >
+                    {SETTLEMENTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                </div>
+              </div>
+            </fieldset>
+
+            <div className="mb-5">
+              <label className={LABEL} htmlFor="paymentDetails">Payment details</label>
+              <textarea id="paymentDetails" value={paymentDetails} onChange={(e) => setPaymentDetails(e.target.value)} rows={2} maxLength={500} placeholder="e.g. Paid by 7 PM at the site office. Bring a bank passbook for UPI payments." className="w-full rounded-lg border border-slate-200 p-3.5 text-[14px] placeholder:text-slate-400 outline-none resize-none focus:border-red-400 focus:ring-2 focus:ring-red-100" />
+            </div>
+
+            <span className={LABEL}>On-site amenities &amp; perks provided</span>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {PERKS.map((p) => (
+                <div key={p} className="rounded-lg border border-slate-200 px-3 py-3">
+                  <Check
+                    checked={perks.includes(p)}
+                    onChange={(v) => setPerks((cur) => (v ? [...cur, p] : cur.filter((x) => x !== p)))}
+                  >
+                    {p}
+                  </Check>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+
+          {/* 3 · Shift */}
+          <SectionCard n={3} title="Work Information" subtitle="Type of work, how many workers, date, shift and instructions">
+            <div className="grid sm:grid-cols-2 gap-4 mb-5">
+              <div>
+                <label className={LABEL} htmlFor="jobType">Job type</label>
+                <select id="jobType" disabled={locked} value={jobType} onChange={(e) => { setJobType(e.target.value as JobType); touch("jobType"); }} className={`${INPUT} cursor-pointer disabled:bg-slate-50 disabled:text-slate-500`}>
+                  {JOB_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </div>
+              <div id="field-vacancies">
+                <span className={LABEL}>Number of workers required *</span>
+                <div className={`flex h-11 rounded-lg border border-slate-200 overflow-hidden${fe("vacancies")}`}>
+                  <button type="button" onClick={() => setWorkers((w) => Math.max(Math.max(1, heldWorkers), w - 1))} className="w-11 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold cursor-pointer" aria-label="Fewer workers">-</button>
                   <input
-                    type="number" min={1} max={500} value={workers}
+                    type="number" min={Math.max(1, heldWorkers)} max={500} value={workers}
                     onChange={(e) => setWorkers(Math.max(1, Math.min(500, Number(e.target.value) || 1)))}
                     className="flex-1 min-w-0 text-center font-bold text-[15px] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                     aria-label="Workers needed"
                   />
                   <button type="button" onClick={() => setWorkers((w) => Math.min(500, w + 1))} className="w-11 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold cursor-pointer" aria-label="More workers">+</button>
                 </div>
+                <FieldError message={errors.vacancies} />
+                {isEdit && heldWorkers > 0 && <p className="mt-1.5 text-[12px] text-slate-500">{heldWorkers} already accepted or confirmed.</p>}
               </div>
             </div>
 
-            <label className={LABEL} htmlFor="company">Hiring entity / contractor name</label>
-            <input id="company" className={INPUT} value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Company or contractor name" />
+            <span className={LABEL} id="field-startDate">Start date</span>
+            <fieldset disabled={locked} className="contents">
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              {DATES.map((d) => (
+                <Tile key={d.key} active={dateMode === d.key} onClick={() => setDateMode(d.key)} className="py-3 px-2 text-center">
+                  <span className="block text-[13px] font-bold text-slate-900">{d.title}</span>
+                  <span className="block text-[11.5px] text-slate-500 mt-0.5">{d.sub}</span>
+                </Tile>
+              ))}
+            </div>
+            {dateMode === "custom" && (
+              <input type="date" value={customDate} onChange={(e) => setCustomDate(e.target.value)} className={`${INPUT} max-w-[240px] mb-1${fe("startDate")}`} aria-label="Custom work date" />
+            )}
+            <FieldError message={errors.startDate} />
+
+            <div className="grid sm:grid-cols-3 gap-3 mt-3 mb-4">
+              {SHIFTS.map((s) => (
+                <Tile key={s.key} active={shift === s.key} onClick={() => { setShift(s.key); touch("shift"); }} className="p-3.5">
+                  <span className="flex items-start justify-between">
+                    <span className="text-[13px] font-bold text-slate-900">{s.title}</span>
+                    <span className={shift === s.key ? "text-amber-500" : "text-blue-500"}>{s.icon}</span>
+                  </span>
+                  <span className="block text-[12.5px] text-slate-700 mt-2">{s.time}</span>
+                  <span className="block text-[11.5px] text-slate-400 mt-1">{s.note}</span>
+                </Tile>
+              ))}
+            </div>
+
+            </fieldset>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Check checked={overtime} onChange={setOvertime}>Overtime paid extra beyond shift hours</Check>
+              {overtime && (
+                <span className="flex items-center gap-1 text-[13px] text-slate-700">
+                  at ₹
+                  <input
+                    inputMode="numeric" value={otRate} onChange={(e) => setOtRate(e.target.value.replace(/\D/g, ""))}
+                    className="w-16 h-8 rounded-md border border-slate-200 px-2 text-[13px] outline-none focus:border-red-400" aria-label="Overtime rate per hour"
+                  />
+                  / hour
+                </span>
+              )}
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4 mt-5">
+              <div>
+                <label className={LABEL} htmlFor="duration">Duration</label>
+                <input id="duration" className={INPUT} value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="e.g. 3 days, 2 weeks, ongoing" maxLength={100} />
+              </div>
+            </div>
+            <div className="mt-4" id="field-workInstructions">
+              <label className={LABEL} htmlFor="note">Work instructions (optional)</label>
+              <textarea
+                id="note" value={note} onChange={(e) => setNote(e.target.value)} rows={3}
+                placeholder="e.g. Please bring your own steel measuring tape if possible. Must carry a valid Aadhaar card."
+                className={`w-full rounded-lg border border-slate-200 p-3.5 text-[14px] placeholder:text-slate-400 outline-none resize-none focus:border-red-400 focus:ring-2 focus:ring-red-100${fe("workInstructions")}`}
+              />
+              <FieldError message={errors.workInstructions} />
+            </div>
           </SectionCard>
 
           {/* 2 · Site & map */}
-          <SectionCard n={2} title="Job Site Navigation & Exact Map Pin" subtitle="Workers navigate straight to the gate you mark" badge={<span className="hidden sm:flex items-center gap-1.5 text-[12px] font-semibold text-blue-600 bg-blue-50 rounded px-2.5 py-1"><FiCrosshair /> GPS Precision Pin</span>}>
-            <span className={LABEL}>Site address / chowk / landmark *</span>
+          <SectionCard n={4} title="Location Information" subtitle="Workers navigate straight to the gate you mark" badge={<span className="hidden sm:flex items-center gap-1.5 text-[12px] font-semibold text-blue-600 bg-blue-50 rounded px-2.5 py-1"><FiCrosshair /> GPS Precision Pin</span>}>
+            <span className={LABEL} id="field-location">Site address / chowk / landmark *</span>
             <div className="flex gap-2 mb-3">
               <div className="relative flex-1 min-w-0">
                 <FiMapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 text-red-500" />
                 <input
-                  className={`${INPUT} pl-10 pr-9`}
+                  disabled={locked}
+                  className={`${INPUT} pl-10 pr-9 disabled:bg-slate-50 disabled:text-slate-500${fe("location")}`}
                   value={location}
                   onChange={(e) => onLocationInput(e.target.value)}
                   onFocus={() => location.length >= 2 && setShowDropdown(true)}
@@ -702,13 +1029,15 @@ export default function PostJobs() {
                 )}
               </div>
               <button
-                type="button" onClick={detectGps} disabled={detecting}
+                type="button" onClick={detectGps} disabled={detecting || locked}
                 className="h-11 shrink-0 rounded-lg bg-[#0B1228] text-white text-[13px] font-semibold px-4 flex items-center gap-2 cursor-pointer disabled:opacity-60"
               >
                 <FiNavigation /> {detecting ? "Detecting…" : "Detect GPS"}
               </button>
             </div>
 
+            <FieldError message={errors.location} />
+            {locked && <p className="rounded-lg border border-slate-200 bg-slate-50 text-slate-600 text-[12px] px-3 py-2 mb-3">The address and map pin cannot be changed while workers hold a position on this job.</p>}
             <p className="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-[12px] px-3 py-2 mb-4">
               <b>Pro Tip:</b> Always include the local chowk or labor naka name so workers recognise the meeting spot immediately.
             </p>
@@ -767,12 +1096,28 @@ export default function PostJobs() {
               </div>
             </div>
 
+            <div className="grid sm:grid-cols-3 gap-4 mt-5">
+              <div>
+                <label className={LABEL} htmlFor="city">City / area</label>
+                <input id="city" disabled={locked} className={`${INPUT} disabled:bg-slate-50 disabled:text-slate-500`} value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Nashik" maxLength={80} />
+              </div>
+              <div>
+                <label className={LABEL} htmlFor="stateName">State</label>
+                <input id="stateName" disabled={locked} className={`${INPUT} disabled:bg-slate-50 disabled:text-slate-500`} value={stateName} onChange={(e) => setStateName(e.target.value)} placeholder="e.g. Maharashtra" maxLength={80} />
+              </div>
+              <div id="field-postalCode">
+                <label className={LABEL} htmlFor="postalCode">Postal code</label>
+                <input id="postalCode" disabled={locked} inputMode="numeric" className={`${INPUT} disabled:bg-slate-50 disabled:text-slate-500${fe("postalCode")}`} value={postalCode} onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="422001" />
+                <FieldError message={errors.postalCode} />
+              </div>
+            </div>
+
             <div className="grid sm:grid-cols-2 gap-4 mt-5">
               <div>
                 <label className={LABEL} htmlFor="gate">Specific gate instructions / landmark note</label>
                 <input id="gate" className={INPUT} value={gateNote} onChange={(e) => setGateNote(e.target.value)} placeholder="e.g. Gate 3, opposite the metro pillar" />
               </div>
-              <div>
+              <div id="field-contactInfo">
                 <label className={LABEL} htmlFor="phone">On-site gate contact &amp; WhatsApp *</label>
                 <div className="flex h-11 rounded-lg border border-slate-200 overflow-hidden focus-within:border-red-400 focus-within:ring-2 focus-within:ring-red-100">
                   <span className="flex items-center gap-1.5 px-3 bg-slate-50 border-r border-slate-200 text-[13px] text-slate-700"><FiPhone size={13} /> +91</span>
@@ -782,91 +1127,8 @@ export default function PostJobs() {
                     className="flex-1 min-w-0 px-3.5 text-[14px] outline-none" placeholder="98230 44192"
                   />
                 </div>
+                <FieldError message={errors.contactInfo} />
               </div>
-            </div>
-          </SectionCard>
-
-          {/* 3 · Shift */}
-          <SectionCard n={3} title="Shift Timings & Reporting Schedule" subtitle="Specify the date and shift so workers can plan their turnup">
-            <span className={LABEL}>Work date</span>
-            <div className="grid grid-cols-3 gap-3 mb-3">
-              {DATES.map((d) => (
-                <Tile key={d.key} active={dateMode === d.key} onClick={() => setDateMode(d.key)} className="py-3 px-2 text-center">
-                  <span className="block text-[13px] font-bold text-slate-900">{d.title}</span>
-                  <span className="block text-[11.5px] text-slate-500 mt-0.5">{d.sub}</span>
-                </Tile>
-              ))}
-            </div>
-            {dateMode === "custom" && (
-              <input type="date" value={customDate} onChange={(e) => setCustomDate(e.target.value)} className={`${INPUT} max-w-[240px] mb-3`} aria-label="Custom work date" />
-            )}
-
-            <div className="grid sm:grid-cols-3 gap-3 mt-3 mb-4">
-              {SHIFTS.map((s) => (
-                <Tile key={s.key} active={shift === s.key} onClick={() => setShift(s.key)} className="p-3.5">
-                  <span className="flex items-start justify-between">
-                    <span className="text-[13px] font-bold text-slate-900">{s.title}</span>
-                    <span className={shift === s.key ? "text-amber-500" : "text-blue-500"}>{s.icon}</span>
-                  </span>
-                  <span className="block text-[12.5px] text-slate-700 mt-2">{s.time}</span>
-                  <span className="block text-[11.5px] text-slate-400 mt-1">{s.note}</span>
-                </Tile>
-              ))}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Check checked={overtime} onChange={setOvertime}>Overtime paid extra beyond shift hours</Check>
-              {overtime && (
-                <span className="flex items-center gap-1 text-[13px] text-slate-700">
-                  at ₹
-                  <input
-                    inputMode="numeric" value={otRate} onChange={(e) => setOtRate(e.target.value.replace(/\D/g, ""))}
-                    className="w-16 h-8 rounded-md border border-slate-200 px-2 text-[13px] outline-none focus:border-red-400" aria-label="Overtime rate per hour"
-                  />
-                  / hour
-                </span>
-              )}
-            </div>
-          </SectionCard>
-
-          {/* 4 · Wage */}
-          <SectionCard n={4} title="Daily Wage, Perks & Payment Mode" subtitle="Clear pricing attracts more workers">
-            <div className="grid sm:grid-cols-2 gap-4 mb-5">
-              <div>
-                <label className={LABEL} htmlFor="wage">Daily wage rate per worker (₹ / day) *</label>
-                <div className="flex h-12 items-center rounded-lg border border-slate-200 px-3.5 focus-within:border-red-400 focus-within:ring-2 focus-within:ring-red-100">
-                  <span className="text-slate-500 mr-2">₹</span>
-                  <input
-                    id="wage" inputMode="numeric" value={wage}
-                    onChange={(e) => setWage(e.target.value.replace(/\D/g, ""))}
-                    className="flex-1 min-w-0 text-[18px] font-bold outline-none" placeholder="850"
-                  />
-                  <span className="text-[12px] text-slate-400">/ Day</span>
-                </div>
-              </div>
-              <div>
-                <label className={LABEL} htmlFor="settle">Worker settlement method *</label>
-                <select
-                  id="settle" value={settlement} onChange={(e) => setSettlement(e.target.value)}
-                  className={`${INPUT} h-12 cursor-pointer`}
-                >
-                  {SETTLEMENTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <span className={LABEL}>On-site amenities &amp; perks provided</span>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {PERKS.map((p) => (
-                <div key={p} className="rounded-lg border border-slate-200 px-3 py-3">
-                  <Check
-                    checked={perks.includes(p)}
-                    onChange={(v) => setPerks((cur) => (v ? [...cur, p] : cur.filter((x) => x !== p)))}
-                  >
-                    {p}
-                  </Check>
-                </div>
-              ))}
             </div>
           </SectionCard>
 
@@ -886,12 +1148,6 @@ export default function PostJobs() {
               </button>
             </div>
 
-            <label className={`${LABEL} mt-6`} htmlFor="note">Specific instructions / worker note (optional)</label>
-            <textarea
-              id="note" value={note} onChange={(e) => setNote(e.target.value)} rows={3}
-              placeholder="e.g. Please bring your own steel measuring tape if possible. Must carry a valid Aadhaar card."
-              className="w-full rounded-lg border border-slate-200 p-3.5 text-[14px] placeholder:text-slate-400 outline-none resize-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
-            />
           </section>
         </div>
 
@@ -905,23 +1161,28 @@ export default function PostJobs() {
                   {urgent ? "URGENT" : "STANDARD"}
                 </span>
               </div>
-              <h3 className="text-[22px] font-extrabold mt-2">Daily Gig Budget</h3>
+              <h3 className="text-[22px] font-extrabold mt-2">{isEdit ? "Job Budget" : "Daily Gig Budget"}</h3>
               <p className="text-[12.5px] text-slate-400 mt-1">Live calculation for this booking</p>
             </div>
 
             <div className="p-5">
+              {locked && (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-[12.5px] p-3">
+                  {heldWorkers} worker{heldWorkers > 1 ? "s hold" : " holds"} a position on this job. The title, category, pay, location, date, schedule and job type are locked so existing offers stay valid. You can still change the description, instructions, contact and number of workers (not below {heldWorkers}).
+                </div>
+              )}
               {posted && (
                 <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 text-[13px] p-3">
-                  <b>Job posted ✅</b>
+                  <b>{isEdit ? "Changes saved ✅" : "Job posted ✅"}</b>
                   <div className="mt-1">
-                    <Link href="/employer-dashboard" className="text-emerald-700 font-semibold underline">View on dashboard</Link>
+                    <Link href={isEdit && jobId ? `/employer-jobs/${jobId}` : "/employer-jobs"} className="text-emerald-700 font-semibold underline">{isEdit ? "View job details" : "View in My Jobs"}</Link>
                   </div>
                 </div>
               )}
 
               <dl className="text-[13.5px] text-slate-600 space-y-3">
                 <div className="flex justify-between gap-3">
-                  <dt>Worker wage (<b className="text-slate-800">{workers} worker{workers > 1 ? "s" : ""}</b> × ₹{wageNum.toLocaleString("en-IN")})</dt>
+                  <dt>Worker pay (<b className="text-slate-800">{workers} worker{workers > 1 ? "s" : ""}</b> × ₹{wageNum.toLocaleString("en-IN")} / {PAY_UNITS.find((u) => u.value === salaryUnit)?.short.toLowerCase()})</dt>
                   <dd className="font-semibold text-slate-900 whitespace-nowrap">{fmt(total)}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
@@ -954,10 +1215,10 @@ export default function PostJobs() {
                 type="submit" disabled={loading}
                 className="mt-5 w-full h-12 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-[14.5px] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
               >
-                <FiSend /> {loading ? "Publishing…" : urgent ? "Publish & Dispatch Urgently" : "Publish Job"}
+                <FiSend /> {isEdit ? (loading ? "Saving…" : "Save Changes") : loading ? "Publishing…" : urgent ? "Publish & Dispatch Urgently" : "Publish Job"}
               </button>
               <Link
-                href="/employer-dashboard"
+                href={isEdit && jobId ? `/employer-jobs/${jobId}` : "/employer-dashboard"}
                 className="mt-3 w-full h-11 rounded-lg border border-slate-200 text-slate-700 font-semibold text-[13.5px] flex items-center justify-center no-underline hover:bg-slate-50"
               >
                 Cancel
@@ -974,5 +1235,6 @@ export default function PostJobs() {
         </div>
       </footer>
     </div>
+    </EmployerShell>
   );
 }

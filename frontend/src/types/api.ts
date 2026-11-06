@@ -1,9 +1,13 @@
-import type { Application, Job } from "./domain";
+import type { Application, EmployerJob, EmployerJobDetail, EmployerJobsSummary, Job } from "./domain";
 import type { Employer, Worker } from "./auth";
 
 export interface ApiErrorBody {
   message?: string;
   error?: string;
+  /** Set by job validation: the input the message is about, and every failing input. */
+  field?: string;
+  errors?: Record<string, string>;
+  lockedFields?: string[];
 }
 
 export interface EmployerLoginResponse extends ApiErrorBody {
@@ -35,9 +39,20 @@ export interface SendOtpResponse extends ApiErrorBody {
 }
 
 export interface EmployerDashboardResponse {
-  jobs?: Job[];
+  jobs?: EmployerJob[];
   totalJobs?: number;
   totalApplications?: number;
+  stats?: EmployerJobsSummary;
+}
+
+export interface EmployerJobsResponse {
+  jobs: EmployerJob[];
+  summary: EmployerJobsSummary;
+}
+
+export interface JobChangeResponse {
+  job: EmployerJobDetail;
+  declined: number;
 }
 
 export interface ApplicationsResponse {

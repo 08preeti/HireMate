@@ -15,7 +15,7 @@ import { fixLeafletIcons } from "@/lib/leaflet";
 import { haversine } from "@/lib/geo";
 import { speak } from "@/lib/speech";
 import { useAuth } from "@/context/AuthContext";
-import { updateApplicationStatus } from "@/services/applications";
+import { setLocationConsent, updateApplicationStatus } from "@/services/applications";
 import { updateWorkerLocation } from "@/services/workers";
 import type { ApplicationStatus, LatLng, RouteResult } from "@/types";
 
@@ -170,6 +170,7 @@ export default function JobNavigation() {
   const [routeLoading, setRouteLoading] = useState(false);
   const [mapReady, setMapReady] = useState(false); // eslint-disable-line no-unused-vars
   const watchIdRef = useRef<number | null>(null);
+  const shareLocationRef = useRef(false); // worker consented to share live location
   const lastRouteFetch = useRef(0);
   const prevStepRef = useRef("");
 
@@ -215,10 +216,18 @@ export default function JobNavigation() {
   );
 
   // ─── START GPS TRACKING ──────────────────────────────────────────────
-  const startTracking = () => {
+  const startTracking = async () => {
     if (!navigator.geolocation) {
       alert("Geolocation not supported by your browser");
       return;
+    }
+    // Live location is shared with the employer only if the worker explicitly agrees.
+    shareLocationRef.current = false;
+    if (appId && window.confirm("Share your live location with the employer for this job? You can stop at any time.")) {
+      try {
+        await setLocationConsent(appId, true);
+        shareLocationRef.current = true;
+      } catch {}
     }
     setTracking(true);
     setStatus("on_the_way");
@@ -231,7 +240,7 @@ export default function JobNavigation() {
 
         // Send location to backend
         try {
-          if (worker)
+          if (worker && shareLocationRef.current)
             await updateWorkerLocation(worker._id, newPos.lat, newPos.lng);
         } catch {}
 
@@ -250,6 +259,7 @@ export default function JobNavigation() {
     setStatus(newStatus);
     if (newStatus === "completed") {
       speak("Job completed. Great work!");
+      shareLocationRef.current = false; // the server also stops sharing on completion
       if (watchIdRef.current) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         setTracking(false);
@@ -267,9 +277,11 @@ export default function JobNavigation() {
     return () => {
       if (watchIdRef.current)
         navigator.geolocation.clearWatch(watchIdRef.current);
+      // Leaving the screen stops tracking, so withdraw the location consent too.
+      if (shareLocationRef.current && appId) void setLocationConsent(appId, false).catch(() => {});
       window.speechSynthesis?.cancel();
     };
-  }, []);
+  }, [appId]);
 
   // ─── INVALID PARAMS CHECK ─────────────────────────────────────────────
   if (isNaN(destLat) || isNaN(destLng)) {
