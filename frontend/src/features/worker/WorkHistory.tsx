@@ -1,28 +1,70 @@
 "use client";
 
-import { useMemo } from "react";
-import { FiCalendar, FiCheckCircle, FiCreditCard, FiMapPin, FiUser } from "react-icons/fi";
+import { useMemo, useState } from "react";
+import { FiCalendar, FiCheckCircle, FiClock, FiCreditCard, FiMapPin, FiUser, FiXCircle } from "react-icons/fi";
+import ReviewDialog from "@/components/ui/ReviewDialog";
+import { toast } from "@/components/ui/Toast";
 import { EmptyPanel, ErrorPanel, LoadingCards, PageContainer, PageHeader, Stars } from "@/components/worker/WorkerUi";
 import { useL } from "@/hooks/useL";
-import { byLatest, dateOf, inr, isCompleted, jobLocationOf, jobTitleOf, salaryOf } from "@/lib/workerApplications";
+import { byLatest, completedAtOf, eventAt, inr, isCompleted, jobLocationOf, jobTitleOf, salaryOf, statusLabel, workDateOf } from "@/lib/workerApplications";
+import { ApiError } from "@/services/api";
+import { rateEmployer } from "@/services/applications";
+import type { Application } from "@/types";
+import ApplicationDetailsModal from "./applications/ApplicationDetailsModal";
 import { useWorkerApplications } from "./useApplicationActions";
+
+type Filter = "all" | "completed" | "cancelled";
+
+const wasHired = (a: Application) => !!eventAt(a, "confirmed");
+const isEndedAfterHire = (a: Application) => (a.status === "cancelled" || a.status === "withdrawn") && wasHired(a);
 
 export default function WorkHistory() {
   const { L, language } = useL();
   const state = useWorkerApplications();
-  const done = useMemo(() => state.apps.filter(isCompleted).sort(byLatest), [state.apps]);
+  const [filter, setFilter] = useState<Filter>("all");
+  const [open, setOpen] = useState<Application | null>(null);
+  const [reviewing, setReviewing] = useState<Application | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [reviewError, setReviewError] = useState("");
+
+  const records = useMemo(() => state.apps.filter((a) => isCompleted(a) || isEndedAfterHire(a)).sort(byLatest), [state.apps]);
+  const visible = records.filter((a) => (filter === "all" ? true : filter === "completed" ? isCompleted(a) : !isCompleted(a)));
+  const openApp = open ? (state.apps.find((a) => a._id === open._id) ?? open) : null;
+  const locale = language === "hi" ? "hi-IN" : language === "mr" ? "mr-IN" : "en-GB";
+
+  const submitReview = async (rating: number, review: string) => {
+    if (!reviewing) return;
+    setSaving(true);
+    setReviewError("");
+    try {
+      await rateEmployer(reviewing._id, { rating, review });
+      toast(L("Thank you! Your review was saved.", "धन्यवाद! आपकी समीक्षा सहेजी गई।", "धन्यवाद! तुमचे पुनरावलोकन जतन झाले."), "success");
+      setReviewing(null);
+      state.reload();
+    } catch (err) {
+      setReviewError(err instanceof ApiError && err.message ? err.message : L("Could not save your review.", "समीक्षा सहेजी नहीं जा सकी।", "पुनरावलोकन जतन करता आले नाही."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const filters: { key: Filter; label: string }[] = [
+    { key: "all", label: L("All", "सभी", "सर्व") },
+    { key: "completed", label: L("Completed", "पूर्ण", "पूर्ण") },
+    { key: "cancelled", label: L("Cancelled", "रद्द", "रद्द") },
+  ];
 
   return (
     <PageContainer>
       <PageHeader
         title={L("Work History", "कार्य इतिहास", "कामाचा इतिहास")}
-        subtitle={L("Jobs you have completed, with payment and employer reviews.", "आपके पूरे किए गए काम, भुगतान और नियोक्ता समीक्षा।", "तुम्ही पूर्ण केलेली कामे, पेमेंट आणि मालकांचे पुनरावलोकन.")}
+        subtitle={L("Work you have finished or that was cancelled, with payment and reviews.", "आपका पूरा या रद्द हुआ काम, भुगतान और समीक्षा।", "तुमचे पूर्ण किंवा रद्द झालेले काम, पेमेंट आणि पुनरावलोकन.")}
       />
       {state.loading ? (
         <LoadingCards count={2} />
       ) : state.error ? (
         <ErrorPanel message={L("Could not load your work history.", "कार्य इतिहास लोड नहीं हो सका।", "कामाचा इतिहास लोड करता आला नाही.")} onRetry={state.reload} />
-      ) : done.length === 0 ? (
+      ) : records.length === 0 ? (
         <EmptyPanel
           message={L("No completed jobs yet.", "अभी तक कोई काम पूरा नहीं हुआ।", "अजून कोणतेही काम पूर्ण झालेले नाही.")}
           hint={L("Finished jobs and their reviews will appear here.", "पूरे किए काम और उनकी समीक्षा यहाँ दिखेगी।", "पूर्ण झालेली कामे आणि त्यांचे पुनरावलोकन येथे दिसेल.")}
@@ -30,43 +72,98 @@ export default function WorkHistory() {
           actionLabel={L("Go to active work", "सक्रिय काम देखें", "सक्रिय कामे पहा")}
         />
       ) : (
-        <div className="space-y-4">
-          {done.map((a) => (
-            <article key={a._id} className="rounded-2xl border border-[#e6ecf5] bg-white p-5 shadow-[0_2px_10px_rgba(20,50,110,0.05)] sm:p-6">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="m-0 text-[19px] font-semibold text-[#0b1b3d]">{jobTitleOf(a, language)}</h3>
-                  <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[#a7e8c8] bg-[#ecfdf5] px-3 py-1 text-[12.5px] font-medium text-[#047857]">
-                    <FiCheckCircle size={13} aria-hidden="true" /> {L("Completed", "पूर्ण", "पूर्ण")}
-                  </span>
-                </div>
-                <div className="text-right">
-                  <div className="text-[24px] font-bold leading-none text-[#0b1b3d]">{inr(salaryOf(a))}</div>
-                  {a.job?.paymentMethod && <div className="mt-1.5 text-[12.5px] text-[#5b6a88]">{a.job.paymentMethod}</div>}
-                </div>
-              </div>
+        <>
+          <div className="mb-4 flex flex-wrap gap-2" role="tablist">
+            {filters.map((f) => (
+              <button key={f.key} type="button" role="tab" aria-selected={filter === f.key} onClick={() => setFilter(f.key)} className={`cursor-pointer rounded-full border px-4 py-2 text-[13.5px] font-medium ${filter === f.key ? "border-[#1f6bff] bg-[#1f6bff] text-white" : "border-[#dde4f0] bg-white text-[#33415f] hover:bg-[#f6f8fc]"}`}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+          {visible.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-[#d5dbe8] bg-white px-6 py-10 text-center text-[14.5px] text-[#5b6a88]">{L("No records in this group.", "इस समूह में कोई रिकॉर्ड नहीं।", "या गटात कोणतीही नोंद नाही.")}</div>
+          ) : (
+            <div className="space-y-4">
+              {visible.map((a) => {
+                const done = isCompleted(a);
+                const finishedAt = completedAtOf(a);
+                return (
+                  <article key={a._id} className="rounded-2xl border border-[#e6ecf5] bg-white p-5 shadow-[0_2px_10px_rgba(20,50,110,0.05)] sm:p-6">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="m-0 text-[19px] font-semibold text-[#0b1b3d]">{jobTitleOf(a, language)}</h3>
+                        <span className={`mt-2 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12.5px] font-medium ${done ? "border-[#a7e8c8] bg-[#ecfdf5] text-[#047857]" : "border-[#d5dbe8] bg-[#f3f5f9] text-[#5b6a88]"}`}>
+                          {done ? <FiCheckCircle size={13} aria-hidden="true" /> : <FiXCircle size={13} aria-hidden="true" />} {statusLabel(a, L)}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[24px] font-bold leading-none text-[#0b1b3d]">{inr(salaryOf(a))}</div>
+                        {a.job?.paymentMethod && <div className="mt-1.5 text-[12.5px] text-[#5b6a88]">{a.job.paymentMethod}</div>}
+                      </div>
+                    </div>
 
-              <div className="mt-4 grid gap-x-6 gap-y-2 text-[14px] text-[#33415f] sm:grid-cols-2">
-                <div className="flex items-center gap-2"><FiUser size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><span className="truncate">{a.job?.companyName || "—"}</span></div>
-                <div className="flex items-center gap-2"><FiMapPin size={15} className="shrink-0 text-[#e11d48]" aria-hidden="true" /><span className="truncate">{jobLocationOf(a, language) || "—"}</span></div>
-                <div className="flex items-center gap-2"><FiCalendar size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><span>{L("Work date", "काम की तिथि", "कामाची तारीख")}: {dateOf(a.updatedAt || a.createdAt) || "—"}</span></div>
-                <div className="flex items-center gap-2"><FiCreditCard size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><span>{L("Payment", "भुगतान", "पेमेंट")}: {inr(salaryOf(a))}</span></div>
-              </div>
+                    <div className="mt-4 grid gap-x-6 gap-y-2 text-[14px] text-[#33415f] sm:grid-cols-2">
+                      <div className="flex items-center gap-2"><FiUser size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><span className="truncate">{a.job?.companyName || "—"}</span></div>
+                      <div className="flex items-center gap-2"><FiMapPin size={15} className="shrink-0 text-[#e11d48]" aria-hidden="true" /><span className="truncate">{jobLocationOf(a, language) || "—"}</span></div>
+                      <div className="flex items-center gap-2"><FiCalendar size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><span>{L("Work date", "काम की तिथि", "कामाची तारीख")}: {workDateOf(a) || "—"}</span></div>
+                      <div className="flex items-center gap-2"><FiCreditCard size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><span>{L("Payment", "भुगतान", "पेमेंट")}: {inr(salaryOf(a))}</span></div>
+                      {done && finishedAt && <div className="flex items-center gap-2"><FiClock size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><span>{L("Completed", "पूरा हुआ", "पूर्ण झाले")}: {new Date(finishedAt).toLocaleString(locale, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span></div>}
+                    </div>
 
-              <div className="mt-4 rounded-xl border border-[#edf1f7] bg-[#f8fafd] px-5 py-4">
-                {(a.rating ?? 0) > 0 ? (
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Stars value={a.rating!} size={18} />
-                    {a.review && <p className="m-0 min-w-0 flex-1 text-[14.5px] italic text-[#1f2a44]">&ldquo;{a.review}&rdquo;</p>}
-                  </div>
-                ) : (
-                  <span className="text-[13.5px] text-[#8a96ae]">{L("No rating or review yet", "अभी कोई रेटिंग या समीक्षा नहीं", "अजून रेटिंग किंवा पुनरावलोकन नाही")}</span>
-                )}
-              </div>
-            </article>
-          ))}
-        </div>
+                    {done ? (
+                      <div className="mt-4 grid gap-3 rounded-xl border border-[#edf1f7] bg-[#f8fafd] px-5 py-4 sm:grid-cols-2">
+                        <div>
+                          <div className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-[#5b6a88]">{L("Rating you received", "आपको मिली रेटिंग", "तुम्हाला मिळालेले रेटिंग")}</div>
+                          {(a.rating ?? 0) > 0 ? (
+                            <>
+                              <Stars value={a.rating!} size={18} />
+                              {a.review && <p className="m-0 mt-1.5 text-[14px] italic text-[#1f2a44]">&ldquo;{a.review}&rdquo;</p>}
+                            </>
+                          ) : (
+                            <span className="text-[13.5px] text-[#8a96ae]">{L("Not rated yet", "अभी रेटिंग नहीं", "अजून रेटिंग नाही")}</span>
+                          )}
+                        </div>
+                        <div>
+                          <div className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-[#5b6a88]">{L("Your rating of the employer", "नियोक्ता को आपकी रेटिंग", "मालकाला तुमचे रेटिंग")}</div>
+                          {(a.employerRating ?? 0) > 0 ? (
+                            <>
+                              <Stars value={a.employerRating!} size={18} />
+                              {a.employerReview && <p className="m-0 mt-1.5 text-[14px] italic text-[#1f2a44]">&ldquo;{a.employerReview}&rdquo;</p>}
+                            </>
+                          ) : (
+                            <button type="button" onClick={() => { setReviewError(""); setReviewing(a); }} className="cursor-pointer rounded-lg bg-[#1f6bff] px-3.5 py-2 text-[13.5px] font-semibold text-white hover:bg-[#1859d6]">{L("Rate the employer", "नियोक्ता को रेट करें", "मालकाला रेट करा")}</button>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      a.cancellationReason && <p className="m-0 mt-4 rounded-xl border border-[#edf1f7] bg-[#f8fafd] px-5 py-3 text-[14px] text-[#33415f]">{L("Reason", "कारण", "कारण")}: {a.cancellationReason}</p>
+                    )}
+
+                    <div className="mt-4 flex justify-end">
+                      <button type="button" onClick={() => setOpen(a)} className="cursor-pointer rounded-lg border border-[#dde4f0] bg-white px-4 py-2.5 text-[14px] font-medium text-[#0b1b3d] hover:bg-[#f6f8fc]">{L("View details", "विवरण देखें", "तपशील पहा")}</button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
+      <ApplicationDetailsModal app={openApp} onClose={() => setOpen(null)} />
+      <ReviewDialog
+        open={reviewing !== null}
+        title={L("Rate the employer", "नियोक्ता को रेट करें", "मालकाला रेट करा")}
+        subtitle={reviewing?.job?.companyName}
+        ratingLabel={L("How was your experience?", "आपका अनुभव कैसा रहा?", "तुमचा अनुभव कसा होता?")}
+        placeholder={L("Write a short review (optional)", "छोटी समीक्षा लिखें (वैकल्पिक)", "थोडक्यात पुनरावलोकन लिहा (ऐच्छिक)")}
+        submitLabel={L("Submit review", "समीक्षा भेजें", "पुनरावलोकन पाठवा")}
+        cancelLabel={L("Cancel", "रद्द करें", "रद्द करा")}
+        requiredMessage={L("Please choose a star rating.", "कृपया स्टार रेटिंग चुनें।", "कृपया स्टार रेटिंग निवडा.")}
+        busy={saving}
+        error={reviewError}
+        onSubmit={(r, text) => void submitReview(r, text)}
+        onCancel={() => setReviewing(null)}
+      />
       {state.dialog}
     </PageContainer>
   );

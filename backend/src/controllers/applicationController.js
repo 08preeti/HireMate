@@ -1,5 +1,4 @@
 import {
-  rateApplication,
   listEmployerApplications,
   listLiveApplications,
   applyToJob,
@@ -12,14 +11,14 @@ import {
   markReviewed,
   getRatingByName,
 } from "../services/applicationService.js";
-import { validateApplyBody, validateDecision, validateLocationConsent, validateOfferResponse, validateRating, validateStatus } from "../validators/applicationValidators.js";
+import { rateApplication, rateEmployer, requestCompletion, decideCompletion } from "../services/workLifecycleService.js";
+import { validateApplyBody, validateCompletionDecision, validateDecision, validateLocationConsent, validateOfferResponse, validateReview, validateStatus } from "../validators/applicationValidators.js";
 import { sendError } from "../utils/httpError.js";
 
 // ── Employer ────────────────────────────────────────────────────────────────
 export async function rate(req, res) {
   try {
-    validateRating(req.body.rating);
-    await rateApplication(req.auth.id, req.params.id, req.body);
+    await rateApplication(req.auth.id, req.params.id, validateReview(req.body));
     res.json({ success: true });
   } catch (err) {
     sendError(res, err, "Server error");
@@ -108,7 +107,7 @@ export async function locationConsent(req, res) {
 
 export async function withdraw(req, res) {
   try {
-    const application = await withdrawApplication(req.auth, req.params.id);
+    const application = await withdrawApplication(req.auth, req.params.id, req.body?.reason);
     res.json({ success: true, status: application.status });
   } catch (err) {
     sendError(res, err, "Server error");
@@ -117,7 +116,7 @@ export async function withdraw(req, res) {
 
 export async function cancel(req, res) {
   try {
-    const application = await cancelApplication(req.auth.id, req.params.id);
+    const application = await cancelApplication(req.auth.id, req.params.id, req.body?.reason);
     res.json({ success: true, status: application.status });
   } catch (err) {
     sendError(res, err, "Server error");
@@ -130,5 +129,33 @@ export async function ratingByName(req, res) {
     res.json(await getRatingByName(req.params.name));
   } catch (err) {
     sendError(res, err, "Error");
+  }
+}
+
+// ── Work lifecycle ──────────────────────────────────────────────────────────
+export async function completionRequest(req, res) {
+  try {
+    const application = await requestCompletion(req.auth, req.params.id);
+    res.json({ success: true, status: application.status, completionRequestedAt: application.completionRequestedAt });
+  } catch (err) {
+    sendError(res, err, "Server error");
+  }
+}
+
+export async function completionDecision(req, res) {
+  try {
+    const application = await decideCompletion(req.auth.id, req.params.id, validateCompletionDecision(req.body));
+    res.json({ success: true, status: application.status });
+  } catch (err) {
+    sendError(res, err, "Server error");
+  }
+}
+
+export async function reviewEmployer(req, res) {
+  try {
+    await rateEmployer(req.auth, req.params.id, validateReview(req.body));
+    res.json({ success: true });
+  } catch (err) {
+    sendError(res, err, "Server error");
   }
 }

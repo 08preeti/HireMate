@@ -27,4 +27,4 @@ export const isStandalonePath = (pathname: string): boolean =>
 
 // Pages that draw their own sidebar + top bar (WorkerShell / EmployerShell).
 // The global Header and BottomNav stay hidden on these paths.
-export const SHELL_PATHS: string[] = ["/ai-suggestions", "/employer-dashboard", "/post-job", "/applications", "/workers", "/employer-jobs", "/employer-notifications", "/employer-profile"];
+export const SHELL_PATHS: string[] = ["/ai-suggestions", "/employer-dashboard", "/post-job", "/applications", "/workers", "/employer-jobs", "/employer-active-work", "/employer-completed-work", "/employer-notifications", "/employer-profile"];

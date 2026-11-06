@@ -72,12 +72,12 @@ test("rejecting an offer and withdrawing release the vacancy; counts never go ne
   assert.equal(d.status, "active");
   assert.equal(d.stats.availableVacancies, 1);
   await svc.respondToOffer({ id: String(workers[1]._id), phone: workers[1].phone }, String(b._id), "confirmed");
-  await svc.withdrawApplication({ id: String(workers[1]._id), phone: workers[1].phone }, String(b._id));
+  await svc.withdrawApplication({ id: String(workers[1]._id), phone: workers[1].phone }, String(b._id), "Changed my plans");
   d = await detail(employerId, jobId);
   assert.equal(d.filledPositions, 0);
   assert.equal(d.stats.availableVacancies, 2);
   assert.equal(d.stats.confirmedWorkers, 0);
-  await assert.rejects(svc.withdrawApplication({ id: String(workers[1]._id), phone: workers[1].phone }, String(b._id)), { status: 409 });
+  await assert.rejects(svc.withdrawApplication({ id: String(workers[1]._id), phone: workers[1].phone }, String(b._id), "Again"), { status: 409 });
   assert.equal((await detail(employerId, jobId)).filledPositions, 0);
 });
 

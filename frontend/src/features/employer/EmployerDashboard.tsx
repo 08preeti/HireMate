@@ -677,6 +677,13 @@ export default function EmployerDashboard() {
             />
           </div>
 
+          {liveApps.some((a) => a.status === "arrived" && a.completionRequestedAt) && (
+            <Link href="/employer-active-work" className="flex items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 no-underline">
+              <span className="text-[14px] font-semibold text-violet-800">{tr("aw_pendingBanner", { n: liveApps.filter((a) => a.status === "arrived" && a.completionRequestedAt).length })}</span>
+              <span className="shrink-0 text-[13px] font-semibold text-violet-700">{tr("aw_reviewBtn")} →</span>
+            </Link>
+          )}
+
           {stats && (
             <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
               {(

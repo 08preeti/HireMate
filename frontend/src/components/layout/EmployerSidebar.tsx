@@ -48,8 +48,8 @@ const GROUPS: NavItem[][] = [
       isActive: onApplications(["all", "new", "review", "declined"]),
     },
     { href: "/applications?tab=offers", icon: FiUserCheck, label: "nav_accepted", isActive: onApplications(["offers", "confirmed"]) },
-    { href: "/applications?tab=active", icon: FiActivity, label: "nav_active", badge: "active", isActive: onApplications(["active"]) },
-    { href: "/applications?tab=completed", icon: FiCheckCircle, label: "nav_completed", isActive: onApplications(["completed"]) },
+    { href: "/employer-active-work", icon: FiActivity, label: "nav_active", badge: "active", isActive: onPath("/employer-active-work") },
+    { href: "/employer-completed-work", icon: FiCheckCircle, label: "nav_completed", isActive: onPath("/employer-completed-work") },
   ],
   [
     { href: "/workers", icon: FiSearch, label: "nav_findWorkers", isActive: onPath("/workers") },
@@ -70,7 +70,7 @@ export default function EmployerSidebar({ onNavigate }: EmployerSidebarProps) {
 
   const badges: Record<BadgeKey, { count: number; tone: string }> = {
     pending: { count: pendingCount, tone: "bg-red-500" },
-    active: { count: stageCounts.active, tone: "bg-violet-500" },
+    active: { count: stageCounts.active + stageCounts.confirmed, tone: "bg-violet-500" },
     notifications: { count: unreadNotifications, tone: "bg-red-500" },
   };
 

@@ -4,6 +4,7 @@ import Job from "../models/Job.js";
 import { HttpError } from "../utils/httpError.js";
 import { notifyApplicationCreated } from "./notificationService.js";
 import { shapeForWorker } from "./applicationService.js";
+import { getEmployerSummaries } from "./workLifecycleService.js";
 import { assertJobOpen, healJobStatus } from "./vacancyService.js";
 import { distanceKm } from "../utils/geo.js";
 
@@ -16,6 +17,7 @@ export async function getProfile(workerId) {
   const reviews = await Application.find({
     worker: worker._id,
     isCompleted: true,
+    rating: { $gt: 0 },
   });
   const avgRating = reviews.length
     ? reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length
@@ -62,7 +64,8 @@ export async function listMyApplications(workerId, phone) {
   const applications = await Application.find({
     $or: [{ worker: workerId }, { applicantContact: phone }],
   }).populate("job");
-  return applications.map(shapeForWorker);
+  const summaries = await getEmployerSummaries(applications.map((a) => a.employer));
+  return applications.map((a) => ({ ...shapeForWorker(a), employerProfile: summaries.get(String(a.employer)) || { completedJobs: 0, totalReviews: 0, rating: 0 } }));
 }
 
 export async function listJobHistory(workerId) {

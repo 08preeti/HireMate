@@ -148,12 +148,19 @@ export type OfferResponse = "confirmed" | "rejected";
  */
 export type ApplicationRecordStatus = ApplicationStatus | OfferResponse | "pending" | "declined" | "withdrawn" | "cancelled";
 
-export type TimelineEventName = "submitted" | "reviewed" | "accepted" | "declined" | "confirmed" | "rejected" | "withdrawn" | "cancelled" | "on_the_way" | "arrived" | "completed";
+export type TimelineEventName = "submitted" | "reviewed" | "accepted" | "declined" | "confirmed" | "rejected" | "withdrawn" | "cancelled" | "on_the_way" | "arrived" | "completion_requested" | "completion_rejected" | "completed";
 
 export interface TimelineEntry {
   event: TimelineEventName;
   at: string;
   by: "worker" | "employer";
+  note?: string;
+}
+
+export interface EmployerProfileSummary {
+  completedJobs: number;
+  totalReviews: number;
+  rating: number;
 }
 
 export interface Application {
@@ -162,6 +169,15 @@ export interface Application {
   isCompleted?: boolean;
   rating?: number;
   review?: string;
+  ratedAt?: string;
+  employerRating?: number;
+  employerReview?: string;
+  employerRatedAt?: string;
+  completionRequestedAt?: string;
+  completionRejection?: { reason?: string; at?: string };
+  completedAt?: string;
+  cancellationReason?: string;
+  employerProfile?: EmployerProfileSummary;
   message?: string;
   applicantName?: string;
   applicantContact?: string;

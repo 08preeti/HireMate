@@ -5,7 +5,7 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { toast } from "@/components/ui/Toast";
 import { useAuth } from "@/context/AuthContext";
 import { useL } from "@/hooks/useL";
-import { jobTitleOf } from "@/lib/workerApplications";
+import { jobTitleOf, reasonNeeded } from "@/lib/workerApplications";
 import { ApiError } from "@/services/api";
 import { respondToOffer, withdrawApplication } from "@/services/applications";
 import { getMyJobs } from "@/services/workers";
@@ -37,6 +37,8 @@ export function useWorkerApplications(): WorkerApplications {
   const [error, setError] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending>(null);
+  const [reason, setReason] = useState("");
+  const [reasonError, setReasonError] = useState("");
 
   // silent = background refresh: no loading flash, and a failed refresh keeps what is on screen.
   const fetchApps = useCallback(
@@ -80,9 +82,14 @@ export function useWorkerApplications(): WorkerApplications {
   };
 
   const runWithdraw = async (a: Application) => {
+    const text = reason.trim();
+    if (reasonNeeded(a) && text.length < 3) {
+      setReasonError(L("Please write a short reason (at least 3 letters).", "कृपया छोटा कारण लिखें (कम से कम 3 अक्षर)।", "कृपया थोडक्यात कारण लिहा (किमान 3 अक्षरे)."));
+      return;
+    }
     setBusyId(a._id);
     try {
-      await withdrawApplication(a._id);
+      await withdrawApplication(a._id, text);
       fetchApps(true);
       toast(L("Application withdrawn.", "आवेदन वापस ले लिया गया।", "अर्ज मागे घेतला."), "info");
     } catch (err) {
@@ -90,6 +97,8 @@ export function useWorkerApplications(): WorkerApplications {
     } finally {
       setBusyId(null);
       setPending(null);
+      setReason("");
+      setReasonError("");
     }
   };
 
@@ -126,13 +135,37 @@ export function useWorkerApplications(): WorkerApplications {
       }
       confirmLabel={pending?.kind === "confirm" ? L("Accept offer", "ऑफर स्वीकार करें", "ऑफर स्वीकारा") : pending?.kind === "reject" ? L("Reject offer", "ऑफर अस्वीकार करें", "ऑफर नाकारा") : L("Withdraw", "वापस लें", "मागे घ्या")}
       cancelLabel={L("Keep it", "रहने दें", "तसेच ठेवा")}
-      onCancel={() => setPending(null)}
+      onCancel={() => {
+        setPending(null);
+        setReason("");
+        setReasonError("");
+      }}
       onConfirm={() => {
         if (!pending) return;
         if (pending.kind === "withdraw") void runWithdraw(pending.app);
         else void runRespond(pending.app, pending.kind === "confirm" ? "confirmed" : "rejected");
       }}
-    />
+    >
+      {pending?.kind === "withdraw" && (
+        <div className="mt-4">
+          <label htmlFor="withdraw-reason" className="block text-[13.5px] font-semibold text-[#33415f]">
+            {reasonNeeded(pending.app) ? L("Why are you cancelling?", "आप क्यों रद्द कर रहे हैं?", "तुम्ही का रद्द करत आहात?") : L("Reason (optional)", "कारण (वैकल्पिक)", "कारण (ऐच्छिक)")}
+          </label>
+          <textarea
+            id="withdraw-reason"
+            value={reason}
+            onChange={(e) => {
+              setReason(e.target.value);
+              setReasonError("");
+            }}
+            rows={3}
+            maxLength={300}
+            className="mt-1.5 w-full resize-none rounded-lg border border-[#dde4f0] p-3 text-[14px] outline-none focus:border-[#1f6bff]"
+          />
+          {reasonError && <p role="alert" className="m-0 mt-1 text-[13px] font-medium text-[#d6203a]">{reasonError}</p>}
+        </div>
+      )}
+    </ConfirmDialog>
   );
 
   return {

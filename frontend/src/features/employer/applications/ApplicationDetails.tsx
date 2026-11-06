@@ -17,7 +17,7 @@ interface ApplicationDetailsProps {
   error: string;
   onClose: () => void;
   onDecide: (decision: "accepted" | "declined") => void;
-  onCancel: () => void;
+  onCancel: (reason: string) => void;
   onRated: () => void;
 }
 

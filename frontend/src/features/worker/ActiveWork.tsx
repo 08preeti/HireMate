@@ -4,16 +4,21 @@ import { useMemo, useState } from "react";
 import { EmptyPanel, ErrorPanel, LoadingCards, PageContainer, PageHeader } from "@/components/worker/WorkerUi";
 import { useL } from "@/hooks/useL";
 import { byLatest, isActiveWork } from "@/lib/workerApplications";
-import ApplicationCard from "./applications/ApplicationCard";
 import ApplicationDetailsModal from "./applications/ApplicationDetailsModal";
 import { useWorkerApplications } from "./useApplicationActions";
+import EmployerDetailsDialog from "./work/EmployerDetailsDialog";
+import { useWorkActions } from "./work/useWorkActions";
+import WorkCard from "./work/WorkCard";
 import type { Application } from "@/types";
 
 export default function ActiveWork() {
   const { L } = useL();
   const state = useWorkerApplications();
+  const actions = useWorkActions(state.reload);
   const [open, setOpen] = useState<Application | null>(null);
+  const [employer, setEmployer] = useState<Application | null>(null);
   const active = useMemo(() => state.apps.filter(isActiveWork).sort(byLatest), [state.apps]);
+  const openApp = open ? (state.apps.find((a) => a._id === open._id) ?? open) : null;
 
   return (
     <PageContainer>
@@ -35,11 +40,13 @@ export default function ActiveWork() {
       ) : (
         <div className="space-y-4">
           {active.map((a) => (
-            <ApplicationCard key={a._id} app={a} actions={state} onOpen={setOpen} />
+            <WorkCard key={a._id} app={a} actions={actions} onOpen={setOpen} onEmployer={setEmployer} />
           ))}
         </div>
       )}
-      <ApplicationDetailsModal app={open} onClose={() => setOpen(null)} />
+      <ApplicationDetailsModal app={openApp} onClose={() => setOpen(null)} />
+      <EmployerDetailsDialog app={employer} onClose={() => setEmployer(null)} />
+      {actions.dialog}
       {state.dialog}
     </PageContainer>
   );

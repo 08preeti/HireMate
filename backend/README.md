@@ -52,3 +52,18 @@ All routes require an employer token; the employer id always comes from the toke
 | DELETE | `/api/jobs/:id` | Delete a job that has no applications |
 
 `GET /api/employer/dashboard` now also returns `stats`. Tests: `npm test` (set `MONGO_TEST_URI` to a disposable database to include the MongoDB tests).
+
+## Work lifecycle (Task 5)
+
+confirmed → on_the_way → arrived are worker actions (`PUT /api/applications/status/:id`). A worker can no longer complete work directly.
+
+| Method | Path | Who | Purpose |
+| --- | --- | --- | --- |
+| PUT | `/api/applications/completion-request/:id` | worker | Ask the employer to verify the work (only from `arrived`, once) |
+| PUT | `/api/applications/completion-decision/:id` | employer | `{ decision: "approved" | "rejected", reason }`; approving sets `completed` + `completedAt`, rejecting needs a reason |
+| POST | `/api/applications/rate/:id` | employer | Rate the worker (1-5) after completion, once |
+| POST | `/api/applications/employer-review/:id` | worker | Rate the employer (1-5) after completion, once |
+| PUT | `/api/applications/withdraw/:id` | worker | Cancel (pending/offer/confirmed/on the way); `{ reason }` required once confirmed |
+| PUT | `/api/applications/cancel/:id` | employer | Cancel a hire (offer/confirmed/on the way/arrived); `{ reason }` required once confirmed |
+
+New Application fields: `completionRequestedAt`, `completionRejection`, `completedAt`, `cancellationReason`, `ratedAt`, `employerRating`, `employerReview`, `employerRatedAt`; timeline events `completion_requested`, `completion_rejected` and an optional `note`.

@@ -1,7 +1,7 @@
 
 import mongoose from "mongoose";
 
-export const TIMELINE_EVENTS = ["submitted", "reviewed", "accepted", "declined", "confirmed", "rejected", "withdrawn", "cancelled", "on_the_way", "arrived", "completed"];
+export const TIMELINE_EVENTS = ["submitted", "reviewed", "accepted", "declined", "confirmed", "rejected", "withdrawn", "cancelled", "on_the_way", "arrived", "completion_requested", "completion_rejected", "completed"];
 
 const applicationSchema = new mongoose.Schema(
 {
@@ -27,13 +27,29 @@ const applicationSchema = new mongoose.Schema(
   applicantContact: String,
   message: String,
 
-  // ⭐ Rating System
+  // Employer's rating of the worker (set once, after the work is completed).
   rating: Number,
   review: String,
+  ratedAt: Date,
+
+  // Worker's rating of the employer (set once, after the work is completed).
+  employerRating: Number,
+  employerReview: String,
+  employerRatedAt: Date,
+
+  // Set when the worker asks the employer to verify the work as finished; cleared when the employer rejects it.
+  completionRequestedAt: Date,
+  completionRejection: {
+    _id: false,
+    reason: String,
+    at: Date,
+  },
+  completedAt: Date,
+  cancellationReason: String,
 
   // ⭐ Job Status Flow: pending → accepted | declined (employer decides; "accepted" = offer sent),
   // accepted → confirmed | rejected (worker answers the offer), then
-  // confirmed → on_the_way → arrived → completed (worker progresses the job).
+  // confirmed → on_the_way → arrived (worker), then arrived → completed once the employer verifies the worker's completion request.
   // withdrawn (worker) / cancelled (employer) end an application; they release its vacancy.
   status: {
     type: String,
@@ -54,6 +70,7 @@ const applicationSchema = new mongoose.Schema(
       event: { type: String, enum: TIMELINE_EVENTS, required: true },
       at: { type: Date, default: Date.now },
       by: { type: String, enum: ["worker", "employer"], required: true },
+      note: String,
     },
   ],
 
