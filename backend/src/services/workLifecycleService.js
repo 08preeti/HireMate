@@ -47,7 +47,7 @@ export async function decideCompletion(employerId, applicationId, { decision, re
   const filter = { _id: application._id, employer: employerId, status: "arrived", completionRequestedAt: { $ne: null } };
   const update =
     decision === "approved"
-      ? { $set: { status: "completed", isCompleted: true, completedAt: now, locationConsent: false }, $push: { timeline: entry("completed", "employer", now) } }
+      ? { $set: { status: "completed", isCompleted: true, completedAt: now, locationConsent: false }, $unset: { liveLocation: "", locationConsentAt: "" }, $push: { timeline: entry("completed", "employer", now) } }
       : { $set: { completionRejection: { reason, at: now } }, $unset: { completionRequestedAt: "" }, $push: { timeline: entry("completion_rejected", "employer", now, reason) } };
 
   const updated = await Application.findOneAndUpdate(filter, update, { new: true });

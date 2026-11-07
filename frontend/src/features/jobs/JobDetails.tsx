@@ -11,7 +11,9 @@ import { translations } from "@/i18n/translations";
 import { toast } from "@/components/ui/Toast";
 import { useAuth } from "@/context/AuthContext";
 import { ROLE_LOGIN } from "@/config/routes";
+import MapViewLazy from "@/components/maps/MapViewLazy";
 import { haversine } from "@/lib/geo";
+import { isValidLatLng } from "@/lib/maps";
 import { speakWithEnd, stopSpeaking } from "@/lib/speech";
 import { ApiError } from "@/services/api";
 import { getJob, reportJob } from "@/services/jobs";
@@ -401,6 +403,14 @@ export default function JobDetails() {
                 </div>
               )}
             </div>
+            {isValidLatLng(job.latitude, job.longitude) && (
+              <div className="mt-4 h-[280px] overflow-hidden rounded-xl border border-[#e6ecf5]">
+                <MapViewLazy
+                  center={[job.latitude as number, job.longitude as number]}
+                  markers={[{ id: "job", kind: "destination", position: [job.latitude as number, job.longitude as number], label: location || title }]}
+                />
+              </div>
+            )}
           </div>
 
           {/* Skills */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { FiClock, FiMapPin, FiPhone } from "react-icons/fi";
+import { FiClock, FiMapPin, FiNavigation, FiPhone } from "react-icons/fi";
 import { useEmployerT, type EmployerKey } from "@/i18n/employerText";
 import type { Application } from "@/types";
 import WorkerAvatar from "../applications/WorkerAvatar";
@@ -33,9 +33,10 @@ interface Props {
   app: Application;
   work: EmployerWork;
   onOpen: (a: Application) => void;
+  onTrack?: (a: Application) => void;
 }
 
-export default function EmployerWorkCard({ app, work, onOpen }: Props) {
+export default function EmployerWorkCard({ app, work, onOpen, onTrack }: Props) {
   const { tr, loc, locale } = useEmployerT();
   const name = nameOf(app);
   const phone = phoneOf(app);
@@ -99,6 +100,7 @@ export default function EmployerWorkCard({ app, work, onOpen }: Props) {
             <a href={waLink(phone)} target="_blank" rel="noopener noreferrer" className={BTN_LIGHT}>{tr("aw_whatsapp")}</a>
           </>
         )}
+        {active && onTrack && <button type="button" onClick={() => onTrack(app)} className={`${BTN} bg-blue-600 text-white hover:bg-blue-700`}><FiNavigation className="mr-1.5" /> {tr("lt_track")}</button>}
         <button type="button" onClick={() => onOpen(app)} className={BTN_LIGHT}>{tr("aw_details")}</button>
         {active && <button type="button" disabled={work.busy} onClick={() => work.askCancel(app)} className={`${BTN} border border-rose-200 bg-white text-rose-600 hover:bg-rose-50`}>{tr("cancelBtn")}</button>}
       </div>

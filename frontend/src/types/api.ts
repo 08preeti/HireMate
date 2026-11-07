@@ -100,7 +100,6 @@ export interface WorkerListItem {
   gender?: "male" | "female" | "";
   rating?: number;
   totalReviews?: number;
-  currentLocation?: { lat: number; lng: number };
   createdAt?: string;
   /** On the way / on site for a job right now. */
   busy: boolean;

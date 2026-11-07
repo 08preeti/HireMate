@@ -1,4 +1,5 @@
 import type { Worker } from "./auth";
+import type { LiveLocation } from "./maps";
 
 export type Language = "en" | "hi" | "mr";
 
@@ -186,6 +187,10 @@ export interface Application {
   timeline?: TimelineEntry[];
   job?: Job;
   worker?: Worker;
+  /** The worker's explicit choice to share live GPS for this job. */
+  locationConsent?: boolean;
+  /** Latest shared position; only present for the employer while the worker is sharing. */
+  liveLocation?: LiveLocation;
 }
 
 /** Live-tracking list: the server never includes pending or declined applications. */

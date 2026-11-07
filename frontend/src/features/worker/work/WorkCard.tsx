@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { FiAlertCircle, FiCalendar, FiClock, FiCreditCard, FiMapPin, FiUser } from "react-icons/fi";
 import { useL } from "@/hooks/useL";
+import LocationSharePanel from "@/components/maps/LocationSharePanel";
 import { GROUP_STYLE, groupOf, inr, isCompletionPending, jobLocationOf, jobTitleOf, mapsUrlOf, salaryOf, scheduleOf, statusLabel, workDateOf } from "@/lib/workerApplications";
 import type { Application } from "@/types";
 import type { WorkActions } from "./useWorkActions";
@@ -79,6 +81,8 @@ export default function WorkCard({ app, actions, onOpen, onEmployer }: Props) {
 
         <p className="m-0 mt-4 text-[14px] font-medium text-[#33415f]">{hint}</p>
 
+        <LocationSharePanel app={app} />
+
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {app.status === "confirmed" && (
             <button type="button" disabled={busy} onClick={() => actions.markOnTheWay(app)} className={PRIMARY}>{L("I am on the way", "मैं रास्ते में हूँ", "मी मार्गावर आहे")}</button>
@@ -96,6 +100,9 @@ export default function WorkCard({ app, actions, onOpen, onEmployer }: Props) {
             <button type="button" disabled={busy} onClick={() => actions.askCancel(app)} className="cursor-pointer bg-transparent px-2 py-2 text-[14px] font-medium text-[#33415f] hover:text-[#d6203a] disabled:opacity-50">
               {L("Cancel work", "काम रद्द करें", "काम रद्द करा")}
             </button>
+          )}
+          {mapsUrl && app.status !== "arrived" && (
+            <Link href={`/navigate?appId=${app._id}`} className={SECONDARY}>{L("Navigate to job", "काम तक रास्ता", "कामापर्यंत मार्ग")}</Link>
           )}
           {mapsUrl && (
             <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className={SECONDARY}>{L("View job location", "काम की जगह देखें", "कामाचे ठिकाण पहा")}</a>
