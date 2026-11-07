@@ -6,6 +6,7 @@ import { FiAlertCircle, FiCheckCircle } from "react-icons/fi";
 import EmployerShell from "@/components/layout/EmployerShell";
 import { useEmployerT } from "@/i18n/employerText";
 import CompletionReviewDialog from "./work/CompletionReviewDialog";
+import LiveTrackingPanel from "./work/LiveTrackingPanel";
 import EmployerWorkCard from "./work/EmployerWorkCard";
 import { useEmployerWork } from "./work/useEmployerWork";
 import WorkDetailsPanel from "./work/WorkDetailsPanel";
@@ -18,6 +19,7 @@ export default function EmployerWorkPage({ mode }: { mode: "active" | "history" 
   const { tr } = useEmployerT();
   const work = useEmployerWork();
   const [openId, setOpenId] = useState<string | null>(null);
+  const [trackId, setTrackId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
 
   const records = useMemo(
@@ -62,7 +64,7 @@ export default function EmployerWorkPage({ mode }: { mode: "active" | "history" 
     body = (
       <div className="grid gap-4 lg:grid-cols-2">
         {visible.map((a) => (
-          <EmployerWorkCard key={a._id} app={a} work={work} onOpen={(x) => setOpenId(x._id)} />
+          <EmployerWorkCard key={a._id} app={a} work={work} onOpen={(x) => setOpenId(x._id)} onTrack={mode === "active" ? (x) => setTrackId(x._id) : undefined} />
         ))}
       </div>
     );
@@ -97,6 +99,7 @@ export default function EmployerWorkPage({ mode }: { mode: "active" | "history" 
         {body}
       </div>
 
+      {trackId && mode === "active" && <LiveTrackingPanel apps={records} initialId={trackId} onClose={() => setTrackId(null)} />}
       {open && <WorkDetailsPanel app={open} work={work} onClose={() => setOpenId(null)} />}
       {work.reviewTarget && (
         <CompletionReviewDialog

@@ -1,5 +1,6 @@
 import { HttpError } from "../utils/httpError.js";
 import { JOB_TYPES, SALARY_UNITS, SHIFT_KEYS } from "../constants/jobRules.js";
+import { isValidCoordinate } from "../utils/geo.js";
 
 const isBlank = (v) => v === undefined || v === null || (typeof v === "string" && v.trim() === "");
 const todayUtc = () => {
@@ -130,7 +131,7 @@ export function parseJobInput(body = {}, { partial = false } = {}) {
   if (latGiven || lngGiven) {
     const lat = Number(body.latitude);
     const lng = Number(body.longitude);
-    if (!latGiven || !lngGiven || Number.isNaN(lat) || Number.isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    if (!latGiven || !lngGiven || !isValidCoordinate(lat, lng)) {
       fail("latitude", "Map location must have a valid latitude and longitude");
     } else {
       out.latitude = lat;

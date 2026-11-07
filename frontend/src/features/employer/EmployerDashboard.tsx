@@ -80,7 +80,7 @@ interface NotificationItem {
   cfg: StatusStyle;
   workerName?: string;
   status: ApplicationStatus;
-  app: LiveApplication;
+  app: Application;
 }
 
 const STATUS_CONFIG: Record<ApplicationStatus, StatusStyle> = {
@@ -460,13 +460,13 @@ export default function EmployerDashboard() {
                 >
                   {tr(STATUS_CONFIG[selectedApp.status].label)}
                 </span>
-                {selectedApp.worker?.currentLocation?.lat &&
+                {selectedApp.liveLocation?.lat &&
                   selectedApp.job?.latitude && (
                     <span className="text-slate-500 ml-auto">
                       {tr("kmAway", {
                         n: haversine(
-                          selectedApp.worker.currentLocation.lat,
-                          selectedApp.worker.currentLocation.lng,
+                          selectedApp.liveLocation.lat,
+                          selectedApp.liveLocation.lng,
                           selectedApp.job.latitude,
                           selectedApp.job.longitude ?? 0,
                         ).toFixed(1),
@@ -479,10 +479,10 @@ export default function EmployerDashboard() {
               {selectedApp.job?.latitude ? (
                 <MapContainer
                   center={
-                    selectedApp.worker?.currentLocation?.lat
+                    selectedApp.liveLocation?.lat
                       ? [
-                          selectedApp.worker.currentLocation.lat,
-                          selectedApp.worker.currentLocation.lng,
+                          selectedApp.liveLocation.lat,
+                          selectedApp.liveLocation.lng,
                         ]
                       : [
                           selectedApp.job.latitude,
@@ -506,15 +506,15 @@ export default function EmployerDashboard() {
                       {loc(selectedApp.job.location)}
                     </Popup>
                   </Marker>
-                  {selectedApp.worker?.currentLocation?.lat && (
+                  {selectedApp.liveLocation?.lat && (
                     <Marker
                       position={[
-                        selectedApp.worker.currentLocation.lat,
-                        selectedApp.worker.currentLocation.lng,
+                        selectedApp.liveLocation.lat,
+                        selectedApp.liveLocation.lng,
                       ]}
                       icon={workerMovingIcon}
                     >
-                      <Popup>🚗 {selectedApp.worker.name}</Popup>
+                      <Popup>🚗 {selectedApp.worker?.name}</Popup>
                     </Marker>
                   )}
                 </MapContainer>
@@ -907,7 +907,7 @@ export default function EmployerDashboard() {
                           ? app.status
                           : "accepted";
                       const sc = STATUS_CONFIG[st];
-                      const live = !!app.worker?.currentLocation?.lat;
+                      const live = !!app.liveLocation?.updatedAt && Date.now() - Date.parse(app.liveLocation.updatedAt) < 120_000;
                       const wname = app.worker?.name || app.applicantName;
                       return (
                         <button

@@ -124,7 +124,7 @@ export const waLink = (phone: string) => {
 };
 
 export const distanceOf = (a: Application): number | null => {
-  const c = a.worker?.currentLocation;
+  const c = a.liveLocation;
   if (!c || a.job?.latitude == null || a.job?.longitude == null) return null;
   return haversine(c.lat, c.lng, a.job.latitude, a.job.longitude);
 };

@@ -79,7 +79,20 @@ const applicationSchema = new mongoose.Schema(
   locationConsent: {
     type: Boolean,
     default: false
-  }
+  },
+
+  locationConsentAt: Date,
+
+  // Only the LATEST reported position is kept (overwritten on every update, never appended).
+  // Removed when sharing stops, the work ends, or consent expires.
+  liveLocation: {
+    _id: false,
+    lat: Number,
+    lng: Number,
+    accuracy: Number,
+    recordedAt: Date,
+    updatedAt: Date,
+  },
 
 },
 { timestamps: true }
@@ -91,6 +104,8 @@ applicationSchema.pre("validate", function () {
 
 // One application per worker per job, enforced by the database (the service check alone can race).
 applicationSchema.index({ job: 1, worker: 1 }, { unique: true, partialFilterExpression: { worker: { $exists: true } } });
+
+applicationSchema.index({ "liveLocation.updatedAt": 1 }, { sparse: true });
 
 const Application = mongoose.model("Application", applicationSchema);
 Application.on("index", (err) => {

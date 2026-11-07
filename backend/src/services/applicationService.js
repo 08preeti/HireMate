@@ -5,6 +5,7 @@ import Worker from "../models/Worker.js";
 import { HttpError } from "../utils/httpError.js";
 import { JOURNEY_TRANSITIONS, validateReason } from "../validators/applicationValidators.js";
 import { EMPLOYER_CANCELLABLE, WORKER_CANCELLABLE, reasonRequired } from "../constants/workRules.js";
+import { LOCATION_SHARING_STATUSES } from "../constants/locationRules.js";
 import { RESERVING_STATUSES, assertJobOpen, healJobStatus, reserveVacancy, releaseVacancy, runAtomic, withVacancyCountsFor } from "./vacancyService.js";
 import {
   notifyApplicationCreated,
@@ -21,7 +22,7 @@ const UNDECIDED = ["pending", "declined", "rejected", "withdrawn", "cancelled"];
 
 // Live GPS may only be shared for a hire the worker has confirmed and is still doing.
 // Any other (or future) status is excluded by default.
-const LOCATION_SHARING = ["confirmed", "on_the_way", "arrived"];
+const LOCATION_SHARING = LOCATION_SHARING_STATUSES;
 
 // One timeline entry, stamped by the server at the moment the status change is written.
 const entry = (event, by) => ({ event, by, at: new Date() });
@@ -33,7 +34,7 @@ export const ownsApplication = (auth, application) =>
 
 // ── Employer side ───────────────────────────────────────────────────────────
 // Only these worker fields ever reach an employer. OTP and everything else stay server-side.
-const WORKER_FIELDS_FOR_EMPLOYER = "name phone skills location gender rating totalReviews currentLocation";
+const WORKER_FIELDS_FOR_EMPLOYER = "name phone skills location gender rating totalReviews";
 
 // Applies the privacy rules to one (plain) application before it goes to the employer:
 //  - phone numbers only after the employer has accepted (status not pending/declined/rejected)
@@ -47,10 +48,8 @@ function shapeForEmployer(application) {
     LOCATION_SHARING.includes(application.status);
 
   if (!contactAllowed) delete application.applicantContact;
-  if (application.worker) {
-    if (!contactAllowed) delete application.worker.phone;
-    if (!locationAllowed) delete application.worker.currentLocation;
-  }
+  if (!locationAllowed) delete application.liveLocation;
+  if (application.worker && !contactAllowed) delete application.worker.phone;
   return application;
 }
 
@@ -228,6 +227,7 @@ async function endApplication(application, newStatus, by, reason = "", extraFilt
       { _id: application._id, status: previous, ...extraFilter },
       {
         $set: { status: newStatus, locationConsent: false, ...(reason && { cancellationReason: reason }) },
+        $unset: { liveLocation: "", locationConsentAt: "" },
         $push: { timeline: { ...entry(newStatus, by), ...(reason && { note: reason }) } },
       },
       { new: true, session },
@@ -321,14 +321,14 @@ export async function setLocationConsent(auth, applicationId, consent) {
   if (!ownsApplication(auth, application)) throw new HttpError(403, "Not authorized");
 
   if (!consent) {
-    await Application.updateOne({ _id: application._id }, { $set: { locationConsent: false } });
+    await Application.updateOne({ _id: application._id }, { $set: { locationConsent: false }, $unset: { liveLocation: "", locationConsentAt: "" } });
     return false;
   }
 
   // Atomic: the status must still allow sharing at the moment consent is stored.
   const updated = await Application.findOneAndUpdate(
     { _id: application._id, isCompleted: false, status: { $in: LOCATION_SHARING } },
-    { $set: { locationConsent: true } },
+    { $set: { locationConsent: true, locationConsentAt: new Date() }, $unset: { liveLocation: "" } },
     { new: true },
   );
   if (!updated) throw new HttpError(409, "Location can only be shared for a confirmed, active job");

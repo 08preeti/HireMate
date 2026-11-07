@@ -22,6 +22,12 @@ export const env = {
   mongoUri: process.env.MONGODB_URI,
   jwtSecret: process.env.JWT_SECRET,
   corsOrigins: frontendUrls ,
+  maps: {
+    nominatimUrl: (process.env.NOMINATIM_URL || "https://nominatim.openstreetmap.org").replace(/\/$/, ""),
+    photonUrl: (process.env.PHOTON_URL || "https://photon.komoot.io").replace(/\/$/, ""),
+    osrmUrl: (process.env.OSRM_URL || "https://router.project-osrm.org").replace(/\/$/, ""),
+    contactEmail: process.env.MAP_CONTACT_EMAIL || "",
+  },
   twilio: {
     accountSid: process.env.TWILIO_ACCOUNT_SID,
     authToken: process.env.TWILIO_AUTH_TOKEN,
