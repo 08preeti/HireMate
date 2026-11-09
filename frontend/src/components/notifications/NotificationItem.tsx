@@ -20,6 +20,7 @@ const ICONS: Record<NotificationType, { icon: ReactNode; tone: string }> = {
   application_cancelled: { icon: <FiXCircle />, tone: "bg-rose-50 text-rose-600" },
   job_closed: { icon: <FiXCircle />, tone: "bg-rose-50 text-rose-600" },
   job_updated: { icon: <FiBriefcase />, tone: "bg-amber-50 text-amber-600" },
+  job_filled: { icon: <FiCheckCircle />, tone: "bg-emerald-50 text-emerald-600" },
   completion_requested: { icon: <FiCheckCircle />, tone: "bg-violet-50 text-violet-600" },
   completion_approved: { icon: <FiCheckCircle />, tone: "bg-emerald-50 text-emerald-600" },
   completion_rejected: { icon: <FiAlertCircle />, tone: "bg-rose-50 text-rose-600" },

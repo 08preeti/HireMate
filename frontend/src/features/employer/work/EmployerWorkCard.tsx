@@ -50,7 +50,7 @@ export default function EmployerWorkCard({ app, work, onOpen, onTrack }: Props) 
   const doneAt = completedAtOf(app);
 
   return (
-    <article className="flex min-w-0 flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+    <article id={`app-${app._id}`} className="flex min-w-0 flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
       <div className="flex items-start gap-3">
         <WorkerAvatar name={name} />
         <div className="min-w-0 flex-1">

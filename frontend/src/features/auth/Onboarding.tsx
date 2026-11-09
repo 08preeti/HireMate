@@ -61,9 +61,17 @@ export default function Onboarding() {
   const screen = SCREENS[current];
   const isLast = current === SCREENS.length - 1;
 
+  const markDone = () => {
+    try {
+      localStorage.setItem("onboardingDone", "true");
+    } catch {
+      // storage can be unavailable (private mode); the user still continues
+    }
+  };
+
   const next = () => {
     if (isLast) {
-      localStorage.setItem("onboardingDone", "true");
+      markDone();
       router.push("/worker-login");
     } else {
       setCurrent(current + 1);
@@ -71,7 +79,7 @@ export default function Onboarding() {
   };
 
   const skip = () => {
-    localStorage.setItem("onboardingDone", "true");
+    markDone();
     router.push("/worker-login");
   };
 

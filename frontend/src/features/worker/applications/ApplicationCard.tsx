@@ -24,7 +24,7 @@ export default function ApplicationCard({ app, actions, onOpen }: Props) {
   const method = app.job?.paymentMethod;
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-[#e6ecf5] bg-white shadow-[0_2px_10px_rgba(20,50,110,0.05)]">
+    <article id={`app-${app._id}`} className="overflow-hidden rounded-2xl border border-[#e6ecf5] bg-white shadow-[0_2px_10px_rgba(20,50,110,0.05)]">
       <div className={`h-[4px] w-full ${style.bar}`} />
       <div className="p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">

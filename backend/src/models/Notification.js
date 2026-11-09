@@ -16,6 +16,7 @@ export const NOTIFICATION_TYPES = [
   "application_cancelled",
   "job_closed",
   "job_updated",
+  "job_filled",
   "completion_requested",
   "completion_approved",
   "completion_rejected",

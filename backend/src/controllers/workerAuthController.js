@@ -1,5 +1,5 @@
 import { sendWorkerOtp, verifyWorkerOtp, registerWorker } from "../services/workerAuthService.js";
-import { validatePhone, validateOtpVerify } from "../validators/authValidators.js";
+import { validatePhone, validateOtpVerify, validateWorkerRegister } from "../validators/authValidators.js";
 import { sendError } from "../utils/httpError.js";
 
 export async function sendOtp(req, res) {
@@ -22,6 +22,7 @@ export async function verifyOtp(req, res) {
 
 export async function register(req, res) {
   try {
+    validateWorkerRegister(req.body);
     res.json(await registerWorker(req.body));
   } catch (err) {
     sendError(res, err, "Worker registration failed");

@@ -78,6 +78,10 @@ const SAMPLE_JOBS = [
 ];
 
 async function seed() {
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_SEED !== "true") {
+    console.error("❌ Refusing to seed demo data (demo employer with a known password) in production. Set ALLOW_SEED=true to override.");
+    process.exit(1);
+  }
   try {
     await mongoose.connect(process.env.MONGODB_URI);
     console.log("✅ Connected to MongoDB");

@@ -5,6 +5,7 @@ import Application from "../models/Application.js";
 import { ROLES } from "../constants/roles.js";
 import { HttpError } from "../utils/httpError.js";
 import { distanceKm } from "../utils/geo.js";
+import { hasSubscribers, hubKey, publish } from "./notificationHub.js";
 
 const MAX_PAGE_SIZE = 50;
 const NEARBY_RADIUS_KM = 20;
@@ -27,6 +28,7 @@ async function createMany(docs, label = "notification") {
     const result = await Notification.bulkWrite(ops, { ordered: false });
     const created = result.upsertedCount ?? 0;
     console.log(`[notifications] ${label}: attempted=${docs.length} created=${created} existing=${docs.length - created}`);
+    if (created) await pushCreated(result.upsertedIds, docs);
     return { created, existing: docs.length - created };
   } catch (err) {
     // Duplicate-key races (E11000) just mean someone else created it first.
@@ -37,6 +39,23 @@ async function createMany(docs, label = "notification") {
     return { created: 0, existing: 0, error: err };
   }
 }
+
+// Live delivery is best-effort: the notification is already saved, so a failure here changes nothing.
+// Only rows that were actually inserted are pushed, so a retried request never re-announces anything.
+async function pushCreated(upsertedIds, docs) {
+  try {
+    const inserted = Object.entries(upsertedIds ?? {})
+      .map(([index, id]) => ({ id, key: hubKey(docs[Number(index)].role, docs[Number(index)].recipient) }))
+      .filter(({ key }) => hasSubscribers(key));
+    if (!inserted.length) return;
+    const saved = await Notification.find({ _id: { $in: inserted.map(({ id }) => id) } }).lean();
+    for (const n of saved) publish(hubKey(n.role, n.recipient), "notification", publicShape(n), String(n._id));
+  } catch (err) {
+    console.error("[notifications] live delivery failed:", err.message);
+  }
+}
+
+const publicShape = ({ _id, type, title, message, job, application, isRead, createdAt }) => ({ _id, type, title, message, job, application, isRead, createdAt });
 
 const reasonText = (application) => (application.cancellationReason ? ` Reason: ${application.cancellationReason}` : "");
 
@@ -115,9 +134,9 @@ export const workerMatchesJob = (worker, job) =>
 export async function notifyMatchingWorkers(job) {
   try {
     const workers = await Worker.find({ skills: { $exists: true, $nin: [null, ""] } })
-      .select("skills location currentLocation")
+      .select("skills location currentLocation notificationPrefs")
       .lean();
-    const matched = workers.filter((w) => workerMatchesJob(w, job));
+    const matched = workers.filter((w) => w.notificationPrefs?.jobMatches !== false && workerMatchesJob(w, job));
     console.log(`[notifications] job_match job=${job._id} candidates=${workers.length} matched=${matched.length}`);
 
     await createMany(
@@ -233,6 +252,22 @@ export async function notifyOfferResponse(application, job, response) {
         ]
       : []),
   ], event.type);
+}
+
+// The accept that took the last vacancy flipped the job to "filled" -> tells the employer. One per accepting event.
+export async function notifyJobFilled(job, application) {
+  await createMany([
+    {
+      recipient: job.employer,
+      role: ROLES.EMPLOYER,
+      type: "job_filled",
+      title: "Job filled",
+      message: `All positions for ${jobName(job)} are now filled. New applications are paused.`,
+      job: job._id,
+      application: application._id,
+      dedupeKey: `job_filled:${application._id}`,
+    },
+  ], "job_filled");
 }
 
 // Worker withdraws -> tells the employer. Employer cancels -> tells the worker.
@@ -435,7 +470,7 @@ function assertId(id) {
 export async function listNotifications(auth, { page, limit, filter }) {
   const p = Math.max(parseInt(page, 10) || 1, 1);
   const l = Math.min(Math.max(parseInt(limit, 10) || 20, 1), MAX_PAGE_SIZE);
-  const query = { ...scope(auth), ...(filter === "unread" && { isRead: false }) };
+  const query = { ...scope(auth), ...(filter === "unread" && { isRead: false }), ...(filter === "read" && { isRead: true }) };
 
   const [notifications, total, unreadCount] = await Promise.all([
     Notification.find(query).sort({ createdAt: -1 }).skip((p - 1) * l).limit(l).lean(),
@@ -466,6 +501,19 @@ export async function markAllRead(auth) {
     { $set: { isRead: true, readAt: new Date() } },
   );
   return { updated: modifiedCount };
+}
+
+export async function getPreferences(auth) {
+  const worker = await Worker.findById(auth.id).select("notificationPrefs").lean();
+  if (!worker) throw new HttpError(404, "Account not found");
+  return { jobMatches: worker.notificationPrefs?.jobMatches !== false };
+}
+
+export async function setPreferences(auth, body) {
+  if (typeof body?.jobMatches !== "boolean") throw new HttpError(400, "jobMatches must be true or false");
+  const worker = await Worker.findByIdAndUpdate(auth.id, { $set: { "notificationPrefs.jobMatches": body.jobMatches } }, { new: true }).select("notificationPrefs").lean();
+  if (!worker) throw new HttpError(404, "Account not found");
+  return { jobMatches: worker.notificationPrefs?.jobMatches !== false };
 }
 
 export async function deleteNotification(auth, id) {

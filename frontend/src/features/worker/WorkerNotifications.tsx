@@ -4,10 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FiCheck } from "react-icons/fi";
 import NotificationItem from "@/components/notifications/NotificationItem";
-import { targetFor } from "@/components/notifications/NotificationBell";
+import { openTarget } from "@/lib/notificationTargets";
+import { NOTIFICATION_EVENT, announceNotificationsChanged } from "@/lib/notificationEvents";
 import { CARD, EmptyPanel, ErrorPanel, LoadingCards, PageContainer, PageHeader } from "@/components/worker/WorkerUi";
 import { useL } from "@/hooks/useL";
-import { deleteNotification, getNotifications, markAllNotificationsRead, markNotificationRead } from "@/services/notifications";
+import { deleteNotification, getNotificationPreferences, getNotifications, markAllNotificationsRead, markNotificationRead, setNotificationPreferences } from "@/services/notifications";
 import type { AppNotification, NotificationFilter } from "@/types";
 
 export default function WorkerNotifications() {
@@ -21,6 +22,8 @@ export default function WorkerNotifications() {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const seq = useRef(0);
+  const filterRef = useRef(filter);
+  const [jobMatches, setJobMatches] = useState<boolean | null>(null);
 
   const load = useCallback(async (f: NotificationFilter, p: number) => {
     const id = ++seq.current;
@@ -41,13 +44,38 @@ export default function WorkerNotifications() {
   }, []);
 
   useEffect(() => {
+    filterRef.current = filter;
     void load(filter, 1);
   }, [filter, load]);
+
+  useEffect(() => {
+    const reload = () => void load(filterRef.current, 1);
+    window.addEventListener(NOTIFICATION_EVENT, reload);
+    return () => window.removeEventListener(NOTIFICATION_EVENT, reload);
+  }, [load]);
+
+  useEffect(() => {
+    getNotificationPreferences()
+      .then((p) => setJobMatches(p.jobMatches))
+      .catch(() => setJobMatches(null));
+  }, []);
+
+  const toggleJobMatches = () => {
+    if (jobMatches === null) return;
+    const next = !jobMatches;
+    setJobMatches(next);
+    setNotificationPreferences(next)
+      .then((p) => setJobMatches(p.jobMatches))
+      .catch(() => setJobMatches(!next));
+  };
 
   const write = (action: () => Promise<unknown>) => {
     action()
       .catch(() => {})
-      .finally(() => void load(filter, 1));
+      .finally(() => {
+        void load(filter, 1);
+        announceNotificationsChanged();
+      });
   };
 
   const markRead = (n: AppNotification) => {
@@ -58,7 +86,7 @@ export default function WorkerNotifications() {
 
   const open = (n: AppNotification) => {
     if (!n.isRead) markRead(n);
-    router.push(targetFor("worker", n));
+    openTarget(router, "worker", n);
   };
 
   const dismiss = (n: AppNotification) => {
@@ -75,6 +103,7 @@ export default function WorkerNotifications() {
   const tabs: { key: NotificationFilter; label: string }[] = [
     { key: "all", label: L("All", "सभी", "सर्व") },
     { key: "unread", label: L("Unread", "अपठित", "न वाचलेले") },
+    { key: "read", label: L("Read", "पढ़े गए", "वाचलेले") },
   ];
 
   return (
@@ -110,13 +139,38 @@ export default function WorkerNotifications() {
         </button>
       </div>
 
+      {jobMatches !== null && (
+        <div className={`${CARD} flex items-center justify-between gap-4 p-4`}>
+          <div className="min-w-0">
+            <div className="text-[14px] font-semibold text-[#0b1b3d]">{L("New job alerts", "नए काम की सूचना", "नवीन कामाच्या सूचना")}</div>
+            <p className="m-0 mt-0.5 text-[12.5px] text-[#5b6a88]">
+              {L(
+                "Get told when a job matching your skills is posted. Updates about your applications, offers and work are always on.",
+                "आपके हुनर से मिलता काम आने पर सूचना पाएं। आपके आवेदन, ऑफ़र और काम की जानकारी हमेशा चालू रहती है।",
+                "तुमच्या कौशल्याशी जुळणारे काम आल्यावर सूचना मिळवा. तुमचे अर्ज, ऑफर आणि कामाची माहिती नेहमी चालू असते.",
+              )}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={jobMatches}
+            aria-label={L("New job alerts", "नए काम की सूचना", "नवीन कामाच्या सूचना")}
+            onClick={toggleJobMatches}
+            className={`relative h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors ${jobMatches ? "bg-[#1f6bff]" : "bg-slate-300"}`}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${jobMatches ? "left-[22px]" : "left-0.5"}`} />
+          </button>
+        </div>
+      )}
+
       {failed && items.length === 0 ? (
         <ErrorPanel message={L("Could not load notifications.", "सूचनाएं लोड नहीं हो सकीं।", "सूचना लोड करता आल्या नाहीत.")} onRetry={() => void load(filter, 1)} />
       ) : loading && items.length === 0 ? (
         <LoadingCards count={3} />
       ) : items.length === 0 ? (
         <EmptyPanel
-          message={filter === "unread" ? L("No unread notifications.", "कोई अपठित सूचना नहीं।", "न वाचलेली सूचना नाही.") : L("No notifications yet.", "अभी कोई सूचना नहीं।", "अजून सूचना नाही.")}
+          message={filter === "read" ? L("No read notifications.", "कोई पढ़ी हुई सूचना नहीं।", "वाचलेली सूचना नाही.") : filter === "unread" ? L("No unread notifications.", "कोई अपठित सूचना नहीं।", "न वाचलेली सूचना नाही.") : L("No notifications yet.", "अभी कोई सूचना नहीं।", "अजून सूचना नाही.")}
           hint={L("New job matches and application updates will show up here.", "नए काम और आवेदन अपडेट यहाँ दिखेंगे।", "नवीन कामे आणि अर्जाचे अपडेट येथे दिसतील.")}
         />
       ) : (

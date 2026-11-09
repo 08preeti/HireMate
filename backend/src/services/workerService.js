@@ -23,7 +23,7 @@ export async function getProfile(workerId) {
     ? reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length
     : 0;
   // OTP fields are never sent to the client.
-  const { otp, otpExpires, ...safe } = worker._doc;
+  const { otp, otpExpires, otpAttempts, ...safe } = worker._doc;
   return {
     ...safe,
     rating: avgRating.toFixed(1),
@@ -54,7 +54,7 @@ export async function updateProfile(workerId, body) {
     if (from !== undefined) set["availability.from"] = from;
     if (to !== undefined) set["availability.to"] = to;
   }
-  const updated = await Worker.findByIdAndUpdate(workerId, { $set: set, ...(Object.keys(unset).length && { $unset: unset }) }, { new: true }).select("-otp -otpExpires");
+  const updated = await Worker.findByIdAndUpdate(workerId, { $set: set, ...(Object.keys(unset).length && { $unset: unset }) }, { new: true }).select("-otp -otpExpires -otpAttempts");
   if (!updated) throw new HttpError(404, "Worker not found");
   return updated;
 }

@@ -80,7 +80,7 @@ interface NotificationItem {
   cfg: StatusStyle;
   workerName?: string;
   status: ApplicationStatus;
-  app: Application;
+  app: LiveApplication;
 }
 
 const STATUS_CONFIG: Record<ApplicationStatus, StatusStyle> = {
@@ -353,13 +353,17 @@ export default function EmployerDashboard() {
             ].slice(0, 5),
           );
           if (curr === "completed") setRatingApp(app);
-          if (Notification.permission === "granted")
-            new Notification(
-              `HireMate — ${trRef.current(STATUS_CONFIG[curr].label)}`,
-              {
-                body: `${app.worker?.name || trRef.current("worker")} · ${locRef.current(app.job?.jobTitle)}`,
-              },
-            );
+          try {
+            if ("Notification" in window && Notification.permission === "granted")
+              new Notification(
+                `HireMate — ${trRef.current(STATUS_CONFIG[curr].label)}`,
+                {
+                  body: `${app.worker?.name || trRef.current("worker")} · ${locRef.current(app.job?.jobTitle)}`,
+                },
+              );
+          } catch {
+            // Some browsers (Android Chrome without a service worker, older iOS Safari) cannot show these.
+          }
         }
         prevStatuses.current[app._id] = curr;
       });

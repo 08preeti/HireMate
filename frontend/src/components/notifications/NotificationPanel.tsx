@@ -25,6 +25,7 @@ export default function NotificationPanel({
   const tabs: { key: NotificationFilter; label: string }[] = [
     { key: "all", label: L("All", "सभी", "सर्व") },
     { key: "unread", label: L("Unread", "अपठित", "न वाचलेले") },
+    { key: "read", label: L("Read", "पढ़े गए", "वाचलेले") },
   ];
 
   return (
@@ -77,7 +78,7 @@ export default function NotificationPanel({
           <div className="flex flex-col items-center px-6 py-10 text-center">
             <span className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-[22px] text-slate-400"><FiBell /></span>
             <p className="mt-3 text-[14px] font-semibold text-slate-700">
-              {filter === "unread" ? L("You're all caught up", "सब देख लिया", "सर्व पाहिले") : L("No notifications yet", "अभी कोई सूचना नहीं", "अद्याप सूचना नाही")}
+              {filter === "read" ? L("No read notifications", "कोई पढ़ी हुई सूचना नहीं", "वाचलेली सूचना नाही") : filter === "unread" ? L("You're all caught up", "सब देख लिया", "सर्व पाहिले") : L("No notifications yet", "अभी कोई सूचना नहीं", "अद्याप सूचना नाही")}
             </p>
             <p className="mt-1 text-[12.5px] text-slate-500">{L("We'll let you know when something happens.", "कुछ होने पर हम बताएंगे।", "काही घडल्यावर कळवू.")}</p>
           </div>

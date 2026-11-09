@@ -39,7 +39,7 @@ export async function getJobById(req, res) {
 
 export async function report(req, res) {
   try {
-    res.json(await reportJob(req.params.id, req.body));
+    res.json(await reportJob(req.params.id, req.auth.id, req.body?.reason));
   } catch (err) {
     sendError(res, err, "Could not submit report");
   }

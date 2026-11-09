@@ -5,6 +5,7 @@ import { withVacancyCounts, withVacancyCountsFor } from "./vacancyService.js";
 import { HttpError } from "../utils/httpError.js";
 import { notifyMatchingWorkers } from "./notificationService.js";
 import { composeDescription } from "../constants/jobRules.js";
+import { loggable } from "../utils/privacy.js";
 
 // Employers type a job in one language; it is stored for every supported language.
 const everyLanguage = (value) => ({ en: value, hi: value, mr: value });
@@ -62,9 +63,12 @@ export async function getJob(id) {
   return job;
 }
 
-export async function reportJob(id, { reason, reporterPhone }) {
+export async function reportJob(id, workerId, reasonInput) {
   await getJob(id);
-  // In production: store in a Reports collection. For now: log it.
-  console.log(`🚨 Job reported: ${id} | Reason: ${reason} | Reporter: ${reporterPhone}`);
+  if (reasonInput !== undefined && reasonInput !== null && typeof reasonInput !== "string") throw new HttpError(400, "Reason must be text");
+  const reason = loggable(reasonInput, 300);
+  if (reason.length < 3) throw new HttpError(400, "Please tell us why you are reporting this job");
+  // Reports are written to the server log with the verified reporter id; there is no reports collection yet.
+  console.log(`🚨 Job reported: ${id} | Reason: ${reason} | Reporter: ${workerId}`);
   return { success: true, message: "Report submitted. We will review this job." };
 }
