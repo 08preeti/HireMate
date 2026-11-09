@@ -9,6 +9,7 @@ import {
 } from "react-icons/fi";
 import type { IconType } from "react-icons";
 import NotificationBell from "@/components/notifications/NotificationBell";
+import { useFocusRecord } from "@/hooks/useFocusRecord";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
@@ -48,6 +49,7 @@ const TAB_PATHS = ["/worker-dashboard", "/jobs", "/my-applications", "/worker-no
 
 export default function WorkerShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  useFocusRecord();
   const router = useRouter();
   const { worker, logout } = useAuth();
   const { language, setLanguage } = useLanguage();

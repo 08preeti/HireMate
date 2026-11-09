@@ -13,3 +13,7 @@ export const markNotificationRead = (id: string): Promise<unknown> =>
 export const markAllNotificationsRead = (): Promise<unknown> => api.patch("/api/notifications/read-all", {}, true);
 
 export const deleteNotification = (id: string): Promise<unknown> => api.delete(`/api/notifications/${id}`, true);
+
+export const getNotificationPreferences = (): Promise<{ jobMatches: boolean }> => api.get("/api/notifications/preferences", true);
+
+export const setNotificationPreferences = (jobMatches: boolean): Promise<{ jobMatches: boolean }> => api.patch("/api/notifications/preferences", { jobMatches }, true);

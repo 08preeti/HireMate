@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { FiBell, FiCheck } from "react-icons/fi";
 import EmployerShell from "@/components/layout/EmployerShell";
 import NotificationItem from "@/components/notifications/NotificationItem";
-import { targetFor } from "@/components/notifications/NotificationBell";
+import { openTarget } from "@/lib/notificationTargets";
+import { NOTIFICATION_EVENT, announceNotificationsChanged } from "@/lib/notificationEvents";
 import { useEmployerData } from "@/context/EmployerDataContext";
 import { useEmployerT } from "@/i18n/employerText";
 import { deleteNotification, getNotifications, markAllNotificationsRead, markNotificationRead } from "@/services/notifications";
@@ -23,6 +24,7 @@ export default function EmployerNotifications() {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const loadSeq = useRef(0);
+  const filterRef = useRef(filter);
 
   const load = useCallback(
     async (nextFilter: NotificationFilter, nextPage: number) => {
@@ -48,13 +50,29 @@ export default function EmployerNotifications() {
   );
 
   useEffect(() => {
+    filterRef.current = filter;
     void load(filter, 1);
   }, [filter, load]);
+
+  useEffect(() => {
+    const reload = () => void load(filterRef.current, 1);
+    window.addEventListener(NOTIFICATION_EVENT, reload);
+    return () => window.removeEventListener(NOTIFICATION_EVENT, reload);
+  }, [load]);
 
   const write = (action: () => Promise<unknown>) => {
     action()
       .catch((err: unknown) => console.error(err))
-      .finally(() => void load(filter, 1));
+      .finally(() => {
+        void load(filter, 1);
+        announceNotificationsChanged();
+      });
+  };
+
+  const markRead = (n: AppNotification) => {
+    setItems((prev) => prev.map((x) => (x._id === n._id ? { ...x, isRead: true } : x)));
+    setUnread((count) => Math.max(0, count - 1));
+    write(() => markNotificationRead(n._id));
   };
 
   const open = (n: AppNotification) => {
@@ -62,7 +80,7 @@ export default function EmployerNotifications() {
       setItems((prev) => prev.map((x) => (x._id === n._id ? { ...x, isRead: true } : x)));
       write(() => markNotificationRead(n._id));
     }
-    router.push(targetFor("employer", n));
+    openTarget(router, "employer", n);
   };
 
   const dismiss = (n: AppNotification) => {
@@ -84,6 +102,7 @@ export default function EmployerNotifications() {
   const tabs: { key: NotificationFilter; label: string }[] = [
     { key: "all", label: tr("nt_all") },
     { key: "unread", label: tr("nt_unread") },
+    { key: "read", label: tr("nt_read") },
   ];
 
   return (
@@ -143,12 +162,12 @@ export default function EmployerNotifications() {
               <span className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-[22px]">
                 <FiBell />
               </span>
-              <p className="m-0 text-[14.5px]">{tr(filter === "unread" ? "nt_emptyUnread" : "nt_empty")}</p>
+              <p className="m-0 text-[14.5px]">{tr(filter === "read" ? "nt_emptyRead" : filter === "unread" ? "nt_emptyUnread" : "nt_empty")}</p>
             </div>
           ) : (
             <ul className="m-0 p-0 list-none divide-y divide-slate-100">
               {items.map((n) => (
-                <NotificationItem key={n._id} notification={n} dismissLabel={tr("nt_dismiss")} onOpen={open} onDismiss={dismiss} />
+                <NotificationItem key={n._id} notification={n} dismissLabel={tr("nt_dismiss")} onOpen={open} onDismiss={dismiss} onMarkRead={markRead} markReadLabel={tr("nt_markRead")} />
               ))}
             </ul>
           )}

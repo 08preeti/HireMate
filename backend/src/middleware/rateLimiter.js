@@ -31,3 +31,12 @@ export const perUserLimiter = ({ windowMs = 60 * 1000, max, message }) =>
     keyGenerator: (req) => `${req.auth?.role}:${req.auth?.id}`,
     message: { message },
   });
+
+// Broad per-IP ceiling for the whole API. Generous on purpose: the apps poll for notifications and tracking.
+export const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 3000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests. Please slow down and try again shortly." },
+});

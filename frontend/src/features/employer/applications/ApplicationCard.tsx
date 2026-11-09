@@ -20,7 +20,7 @@ export default function ApplicationCard({ application: a, stage, busy, onOpen, o
   const skills = skillsOf(a).slice(0, 2);
 
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col gap-3 hover:border-slate-300 transition-colors">
+    <article id={`app-${a._id}`} className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col gap-3 hover:border-slate-300 transition-colors">
       <div className="flex items-start gap-3">
         <WorkerAvatar name={nameOf(a)} />
         <div className="min-w-0 flex-1">

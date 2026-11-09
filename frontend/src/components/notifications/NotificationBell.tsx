@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FiBell } from "react-icons/fi";
 import NotificationPanel from "./NotificationPanel";
+import { toast } from "@/components/ui/Toast";
+import { FOCUS_RECORD_EVENT, NOTIFICATIONS_CHANGED, NOTIFICATION_EVENT } from "@/lib/notificationEvents";
+import { targetFor } from "@/lib/notificationTargets";
+import { openNotificationStream } from "@/services/notificationStream";
 import { useLanguage } from "@/context/LanguageContext";
 import {
   deleteNotification, getNotifications, getUnreadCount, markAllNotificationsRead, markNotificationRead,
@@ -12,47 +16,7 @@ import type { AppNotification, NotificationFilter, UserRole } from "@/types";
 
 const POLL_MS = 5_000;
 
-// Existing routes only.
-export function targetFor(role: UserRole, n: AppNotification): string {
-  if (role === "employer") {
-    switch (n.type) {
-      case "job_closed":
-        return "/employer-dashboard";
-      case "new_application":
-        return "/applications?tab=new";
-      case "offer_confirmed":
-        return "/applications?tab=confirmed";
-      case "offer_rejected":
-      case "application_withdrawn":
-        return "/applications?tab=declined";
-      case "worker_on_the_way":
-      case "worker_arrived":
-      case "completion_requested":
-        return "/employer-active-work";
-      case "review_received":
-        return "/employer-completed-work";
-      default:
-        return "/applications";
-    }
-  }
-  switch (n.type) {
-    case "job_match":
-      return n.job ? `/jobs/${n.job}` : "/jobs";
-    case "application_accepted":
-      return "/job-offers";
-    case "application_completed":
-    case "completion_approved":
-    case "review_received":
-      return "/work-history";
-    case "offer_confirmed":
-    case "worker_on_the_way":
-    case "worker_arrived":
-    case "completion_rejected":
-      return "/active-work";
-    default:
-      return "/my-applications";
-  }
-}
+export { targetFor };
 
 export default function NotificationBell({ role, onUnreadChange }: { role: UserRole; onUnreadChange?: (count: number) => void }) {
   const router = useRouter();
@@ -89,6 +53,9 @@ export default function NotificationBell({ role, onUnreadChange }: { role: UserR
   const writeVersion = useRef(0);
   const mounted = useRef(true);
   const failing = useRef(false);
+  const streamUp = useRef(false);
+  const skipTicks = useRef(0);
+  const seenIds = useRef(new Set<string>());
 
   const onUnreadChangeRef = useRef(onUnreadChange);
   useEffect(() => {
@@ -154,7 +121,7 @@ export default function NotificationBell({ role, onUnreadChange }: { role: UserR
   }, [loadList, setUnreadCount, reportFailure]);
 
   // One poll step: open panel on page 1 -> refresh the list (carries the count); otherwise the count only.
-  const tick = useCallback(() => {
+  const refreshNow = useCallback(() => {
     if (document.hidden || pendingWrites.current > 0) return;
     if (openRef.current && pageRef.current === 1) {
       if (!listBusy.current) void loadList(filterRef.current, 1);
@@ -163,23 +130,64 @@ export default function NotificationBell({ role, onUnreadChange }: { role: UserR
     }
   }, [loadList, fetchCount]);
 
+  // While the live stream is up, polling is only a slow safety net (every 6th tick).
+  const tick = useCallback(() => {
+    if (streamUp.current) {
+      skipTicks.current = (skipTicks.current + 1) % 6;
+      if (skipTicks.current !== 0) return;
+    }
+    refreshNow();
+  }, [refreshNow]);
+
   // Mount: fetch now, then poll every POLL_MS (one interval), and refresh when the tab/app comes back.
   useEffect(() => {
     mounted.current = true;
-    tick();
+    refreshNow();
     const timer = setInterval(tick, POLL_MS);
     const onVisible = () => {
-      if (!document.hidden) tick();
+      if (!document.hidden) refreshNow();
     };
     document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("focus", tick);
+    window.addEventListener("focus", refreshNow);
     return () => {
       mounted.current = false;
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("focus", tick);
+      window.removeEventListener("focus", refreshNow);
     };
-  }, [tick]);
+  }, [tick, refreshNow]);
+
+  // Live delivery. Anything missed while disconnected is caught up by the refetch on every (re)connect.
+  useEffect(() => {
+    const close = openNotificationStream({
+      onOpen: () => {
+        streamUp.current = true;
+        refreshNow();
+      },
+      onClose: () => {
+        streamUp.current = false;
+      },
+      onNotification: (n) => {
+        if (!mounted.current || seenIds.current.has(n._id)) return;
+        seenIds.current.add(n._id);
+        void fetchCount(true);
+        if (openRef.current) void loadList(filterRef.current, 1);
+        window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT, { detail: n }));
+        toast(n.message ? `${n.title}: ${n.message}` : n.title, "info", 5000);
+      },
+    });
+    return close;
+  }, [fetchCount, loadList, refreshNow]);
+
+  // Pages that read / delete notifications tell the bell, so the badge updates at once.
+  useEffect(() => {
+    const onChanged = () => {
+      void fetchCount(true);
+      if (openRef.current) void loadList(filterRef.current, 1);
+    };
+    window.addEventListener(NOTIFICATIONS_CHANGED, onChanged);
+    return () => window.removeEventListener(NOTIFICATIONS_CHANGED, onChanged);
+  }, [fetchCount, loadList]);
 
   // Opening the popup (or switching tabs) fetches the latest list and count immediately.
   useEffect(() => {
@@ -227,6 +235,7 @@ export default function NotificationBell({ role, onUnreadChange }: { role: UserR
     }
     setOpen(false);
     router.push(targetFor(role, n));
+    setTimeout(() => window.dispatchEvent(new Event(FOCUS_RECORD_EVENT)), 0);
   };
 
   const markAll = () => {

@@ -11,6 +11,7 @@ import {
   notifyApplicationCreated,
   notifyApplicationDecision,
   notifyApplicationEnded,
+  notifyJobFilled,
   notifyOfferResponse,
   notifyWorkerStatusChange,
 } from "./notificationService.js";
@@ -132,6 +133,10 @@ export async function decideApplication(employerId, applicationId, decision) {
   }
 
   await notifyApplicationDecision(decided, job, decision);
+  if (decision === "accepted" && job.status === "active") {
+    const after = await Job.findById(job._id).select("status employer jobTitle");
+    if (after?.status === "filled") await notifyJobFilled(after, decided);
+  }
   return decided;
 }
 

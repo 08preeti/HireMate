@@ -21,7 +21,7 @@ async function resolveIdentity(token) {
     return employer ? { auth: { id: employer._id.toString(), role }, user: employer } : null;
   }
   if (role === ROLES.WORKER) {
-    const worker = await Worker.findById(id).select("-otp -otpExpires");
+    const worker = await Worker.findById(id).select("-otp -otpExpires -otpAttempts");
     return worker ? { auth: { id: worker._id.toString(), role, phone: worker.phone }, user: worker } : null;
   }
   return null;

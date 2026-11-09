@@ -531,6 +531,9 @@ const TEXT = {
   lt_msgFailed: ["Could not load the location. Retrying…", "लोकेशन लोड नहीं हो सकी। फिर कोशिश हो रही है…", "ठिकाण लोड होऊ शकले नाही. पुन्हा प्रयत्न सुरू आहे…"],
   lt_msgForbidden: ["You are not allowed to track this worker.", "आपको इस वर्कर को ट्रैक करने की अनुमति नहीं है।", "तुम्हाला या कामगाराला ट्रॅक करण्याची परवानगी नाही."],
   lt_privacy: ["You can see this because {name} chose to share it for this job. It disappears when the work ends.", "आप यह इसलिए देख सकते हैं क्योंकि {name} ने इस काम के लिए इसे शेयर करना चुना है। काम खत्म होने पर यह हट जाती है।", "तुम्ही हे पाहू शकता कारण {name} यांनी या कामासाठी ते शेअर करणे निवडले आहे. काम संपल्यावर ते काढले जाते."],
+  nt_read: ["Read", "पढ़े गए", "वाचलेले"],
+  nt_emptyRead: ["No read notifications.", "कोई पढ़ी हुई सूचना नहीं।", "वाचलेली सूचना नाही."],
+  nt_markRead: ["Mark as read", "पढ़ा हुआ करें", "वाचले म्हणून चिन्हांकित करा"],
 } as const satisfies Record<string, Entry>;
 
 export type EmployerKey = keyof typeof TEXT;

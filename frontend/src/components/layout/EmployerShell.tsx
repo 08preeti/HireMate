@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
+import { useFocusRecord } from "@/hooks/useFocusRecord";
 import { FiX } from "react-icons/fi";
 import EmployerSidebar from "@/components/layout/EmployerSidebar";
 import EmployerTopNav from "@/components/layout/EmployerTopNav";
@@ -20,6 +21,7 @@ const SidebarFallback = () => <div className="h-40 animate-pulse rounded-xl bg-s
 
 export default function EmployerShell({ children, hasUnread }: EmployerShellProps) {
   const pathname = usePathname();
+  useFocusRecord();
   const { tr } = useEmployerT();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);

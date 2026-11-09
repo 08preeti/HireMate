@@ -14,6 +14,7 @@ export type NotificationType =
   | "application_cancelled"
   | "job_closed"
   | "job_updated"
+  | "job_filled"
   | "completion_requested"
   | "completion_approved"
   | "completion_rejected"
@@ -30,7 +31,7 @@ export interface AppNotification {
   createdAt: string;
 }
 
-export type NotificationFilter = "all" | "unread";
+export type NotificationFilter = "all" | "unread" | "read";
 
 export interface NotificationsResponse {
   notifications: AppNotification[];

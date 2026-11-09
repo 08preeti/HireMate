@@ -2,30 +2,38 @@ import bcrypt from "bcryptjs";
 import Employer from "../models/Employer.js";
 import { HttpError } from "../utils/httpError.js";
 import { signEmployerToken } from "../utils/token.js";
+import { normalizeEmail } from "../validators/authValidators.js";
 
-export async function registerEmployer({ companyName, email, password }) {
-  const existing = await Employer.findOne({ email });
-  if (existing) throw new HttpError(400, "Email already registered");
+// Older accounts may have been saved with mixed-case emails, so lookups ignore case.
+const CASE_INSENSITIVE = { locale: "en", strength: 2 };
+const findByEmail = (email) => Employer.findOne({ email }).collation(CASE_INSENSITIVE);
+
+const session = (employer) => ({
+  token: signEmployerToken(employer),
+  employer: { _id: employer._id, companyName: employer.companyName, email: employer.email },
+});
+
+export async function registerEmployer({ companyName, email: rawEmail, password }) {
+  const email = normalizeEmail(rawEmail);
+  if (await findByEmail(email)) throw new HttpError(400, "Email already registered");
 
   const hashedPassword = await bcrypt.hash(password, 10);
-  const employer = await Employer.create({ companyName, email, password: hashedPassword });
-
-  // Same session shape as login, so a new employer lands on the dashboard without a second sign-in.
-  return {
-    token: signEmployerToken(employer),
-    employer: { _id: employer._id, companyName: employer.companyName, email: employer.email },
-  };
+  let employer;
+  try {
+    employer = await Employer.create({ companyName: companyName.trim(), email, password: hashedPassword });
+  } catch (err) {
+    if (err.code === 11000) throw new HttpError(400, "Email already registered");
+    throw err;
+  }
+  return session(employer);
 }
 
-export async function loginEmployer({ email, password }) {
-  const employer = await Employer.findOne({ email });
+export async function loginEmployer({ email: rawEmail, password }) {
+  const employer = await findByEmail(normalizeEmail(rawEmail));
   if (!employer) throw new HttpError(401, "Invalid credentials");
 
   const isMatch = await bcrypt.compare(password, employer.password);
   if (!isMatch) throw new HttpError(401, "Invalid credentials");
 
-  return {
-    token: signEmployerToken(employer),
-    employer: { _id: employer._id, companyName: employer.companyName, email: employer.email },
-  };
+  return session(employer);
 }

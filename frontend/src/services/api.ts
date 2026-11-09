@@ -16,6 +16,8 @@ export class ApiError extends Error {
   }
 }
 
+const REQUEST_TIMEOUT_MS = 45_000;
+
 type UnauthorizedHandler = () => void;
 let onUnauthorized: UnauthorizedHandler | null = null;
 
@@ -40,12 +42,22 @@ async function request<T>(method: string, path: string, { body, auth = false }: 
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_URL}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const data = (await res.json().catch(() => ({}))) as T & ApiErrorBody;
+  // A sleeping backend can take most of a minute to wake; beyond that, fail instead of spinning forever.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  let data: T & ApiErrorBody;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
+    });
+    data = (await res.json().catch(() => ({}))) as T & ApiErrorBody;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok) {
     if (res.status === 401 && auth) onUnauthorized?.();

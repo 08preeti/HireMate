@@ -1,4 +1,5 @@
 import { env } from "../config/env.js";
+import { loggable, maskPhone } from "../utils/privacy.js";
 
 /** Sends the OTP through Twilio when configured. Returns true if an SMS went out. */
 export async function sendOtpSms(phone, otp) {
@@ -26,12 +27,12 @@ export async function sendOtpSms(phone, otp) {
     const smsData = await smsRes.json();
 
     if (smsData.sid) {
-      console.log(`✅ SMS sent to ${cleanPhone} via Twilio`);
+      console.log(`✅ SMS sent to ${maskPhone(cleanPhone)} via Twilio`);
       return true;
     }
-    console.log("Twilio error:", smsData.message || JSON.stringify(smsData));
+    console.log("Twilio error:", loggable(smsData.message || smsData.code || "unknown error"));
   } catch (err) {
-    console.log("Twilio failed:", err.message);
+    console.log("Twilio failed:", loggable(err.message));
   }
   return false;
 }
