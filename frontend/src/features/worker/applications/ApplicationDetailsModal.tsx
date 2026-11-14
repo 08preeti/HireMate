@@ -6,6 +6,7 @@ import { FiX } from "react-icons/fi";
 import ApplicationTimeline from "@/components/ui/ApplicationTimeline";
 import { Stars } from "@/components/worker/WorkerUi";
 import { useL } from "@/hooks/useL";
+import { paymentMethodLabel } from "@/i18n/formatters";
 import { GROUP_STYLE, completedAtOf, dateOf, groupOf, inr, jobLocationOf, jobTitleOf, offerDateOf, salaryOf, scheduleOf, statusLabel, timelineLabel, timelineOf, workDateOf } from "@/lib/workerApplications";
 import type { Application } from "@/types";
 
@@ -57,7 +58,7 @@ export default function ApplicationDetailsModal({ app, onClose }: { app: Applica
           {job?.contactInfo && <Row label={L("Employer phone", "नियोक्ता फ़ोन", "मालक फोन")}><a href={`tel:${job.contactInfo}`} className="text-[#1a4fc4] no-underline">{job.contactInfo}</a></Row>}
           {description && <Row label={L("Job description", "काम का विवरण", "कामाचे वर्णन")}>{description}</Row>}
           <Row label={L("Location", "स्थान", "ठिकाण")}>{jobLocationOf(app, language) || "—"}</Row>
-          <Row label={L("Payment", "भुगतान", "पेमेंट")}>{inr(salaryOf(app))}{job?.paymentMethod ? ` • ${job.paymentMethod}` : ""}</Row>
+          <Row label={L("Payment", "भुगतान", "पेमेंट")}>{inr(salaryOf(app))}{job?.paymentMethod ? ` • ${paymentMethodLabel(job.paymentMethod, language)}` : ""}</Row>
           {workDateOf(app) && <Row label={L("Work date", "काम की तिथि", "कामाची तारीख")}>{workDateOf(app)}</Row>}
           {scheduleOf(app) && <Row label={L("Work schedule", "काम का समय", "कामाची वेळ")}>{scheduleOf(app)}</Row>}
           {completedAtOf(app) && <Row label={L("Completed on", "पूरा होने की तिथि", "पूर्ण झाल्याची तारीख")}>{new Date(completedAtOf(app)!).toLocaleString(language === "hi" ? "hi-IN" : language === "mr" ? "mr-IN" : "en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</Row>}

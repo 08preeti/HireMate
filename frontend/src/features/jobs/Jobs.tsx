@@ -12,6 +12,9 @@ import type { IconType } from "react-icons";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { translations } from "@/i18n/translations";
+import { localizedLocation } from "@/i18n/locationLabels";
+import { localizedCategory, localizedSkillText, localizedTradeLabel } from "@/i18n/jobLabels";
+import { paymentMethodLabel } from "@/i18n/formatters";
 import { haversine } from "@/lib/geo";
 import { getJobs } from "@/services/jobs";
 import { getMyJobs } from "@/services/workers";
@@ -60,7 +63,7 @@ const categoryOf = (job: Job): string => {
   return CATEGORIES.find(([re]) => re.test(t))?.[1] ?? "Other";
 };
 const skillsOf = (job: Job, language: Language): string[] =>
-  (job.skills?.[language] || job.skills?.en || "").split(/[,،;、]/).map((x) => x.trim()).filter(Boolean);
+  localizedSkillText(job.skills?.[language] || job.skills?.en || "", language).split(/[,،;、]/).map((x) => x.trim()).filter(Boolean);
 
 const BANNERS = [
   "bg-[linear-gradient(120deg,#0f3a73,#1a6cf0)]",
@@ -82,7 +85,7 @@ function payPeriod(salary: number | string | undefined, language: Language) {
 // WhatsApp share
 function shareOnWhatsApp(job: Job, language: Language): void {
   const title    = job.jobTitle?.[language] || job.jobTitle?.en || "Job";
-  const location = job.location?.[language] || job.location?.en || "";
+  const location = localizedLocation(job.location, language);
   const salary   = job.salary ? `₹${job.salary}` : "";
   const text     = `🔔 *${title}* नोकरी उपलब्ध!\n📍 ${location}\n💰 ${salary}\n\nHireMate वर पहा: https://hiremate-brown.vercel.app/jobs`;
   window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
@@ -303,14 +306,14 @@ export default function Jobs() {
                   <div className="mb-1.5 text-[12px] font-semibold text-[#6b7a95]">{L("Category", "श्रेणी", "प्रवर्ग")}</div>
                   <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full cursor-pointer rounded-lg border border-[#e3eaf5] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#1a6cf0]">
                     <option value="">{L("All categories", "सभी श्रेणियां", "सर्व प्रवर्ग")}</option>
-                    {categoryOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                    {categoryOptions.map((c) => <option key={c} value={c}>{localizedCategory(c, language)}</option>)}
                   </select>
                 </div>
                 <div className="mb-3">
                   <div className="mb-1.5 text-[12px] font-semibold text-[#6b7a95]">{L("Skill", "कौशल", "कौशल्य")}</div>
                   <select value={filterSkill} onChange={(e) => setFilterSkill(e.target.value)} className="w-full cursor-pointer rounded-lg border border-[#e3eaf5] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#1a6cf0]">
                     <option value="">{L("Any skill", "कोई भी कौशल", "कोणतेही कौशल्य")}</option>
-                    {skillOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                    {skillOptions.map((c) => <option key={c} value={c}>{localizedTradeLabel(c, language)}</option>)}
                   </select>
                 </div>
                 <div className="mb-3">
@@ -359,10 +362,10 @@ export default function Jobs() {
       {/* ── Job cards ── */}
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {filtered.map((job) => {
-          const title = job.jobTitle?.[language] || job.jobTitle?.en;
+          const title = localizedTradeLabel(job.jobTitle?.[language] || job.jobTitle?.en || "", language);
           const Icon = getJobIcon(job.jobTitle?.en || title);
           const banner = BANNERS[(job._id.charCodeAt(job._id.length - 1) || 0) % BANNERS.length];
-          const tags = (job.skills?.[language] || job.skills?.en || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 3);
+          const tags = localizedSkillText(job.skills?.[language] || job.skills?.en || "", language).split(/[,،;、]/).map((x) => x.trim()).filter(Boolean).slice(0, 3);
           const dist = distOf(job);
           const pay = payPeriod(job.salary, language);
           const isSaved = saved.includes(job._id);
@@ -376,7 +379,7 @@ export default function Jobs() {
                   {job.isUrgent ? <><FiZap size={13} aria-hidden="true" /> {L("Urgent Hiring", "तत्काल भर्ती", "तातडीची भरती")}</> : L("Open Now", "अभी खुला", "आता खुले")}
                 </span>
                 {job.paymentMethod && (
-                  <span className="absolute bottom-2.5 left-2.5 rounded-md bg-black/35 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-white">{job.paymentMethod}</span>
+                  <span className="absolute bottom-2.5 left-2.5 rounded-md bg-black/35 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-white">{paymentMethodLabel(job.paymentMethod, language)}</span>
                 )}
               </div>
 
@@ -384,7 +387,7 @@ export default function Jobs() {
                 <h3 className="text-[18px] font-extrabold leading-snug">{title}</h3>
                 <div className="mt-1 flex items-start gap-1.5 text-[13px] text-[#5b6a85]">
                   <FiMapPin size={15} className="mt-0.5 shrink-0 text-[#e8334f]" aria-hidden="true" />
-                  <span>{job.location?.[language] || job.location?.en}</span>
+                  <span>{localizedLocation(job.location, language)}</span>
                 </div>
                 <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-[#6b7a95]">
                   {dist !== null && <span className="inline-flex items-center gap-1.5"><FiNavigation size={13} aria-hidden="true" /> {dist.toFixed(1)} km {t.kmAway}</span>}
@@ -410,7 +413,7 @@ export default function Jobs() {
                   </div>
                   {job.paymentMethod && (
                     <span className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] font-semibold ${job.paymentMethod === "Cash" ? "bg-[#e6f8ee] text-[#13783d]" : "bg-[#eaf2ff] text-[#1a4fb0]"}`}>
-                      {job.paymentMethod === "UPI" ? <FiCreditCard size={14} aria-hidden="true" /> : <span aria-hidden="true">💵</span>} {job.paymentMethod}
+                      {job.paymentMethod === "UPI" ? <FiCreditCard size={14} aria-hidden="true" /> : <span aria-hidden="true">💵</span>} {paymentMethodLabel(job.paymentMethod, language)}
                     </span>
                   )}
                 </div>

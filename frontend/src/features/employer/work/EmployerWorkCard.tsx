@@ -2,6 +2,8 @@
 
 import { FiClock, FiMapPin, FiNavigation, FiPhone } from "react-icons/fi";
 import { useEmployerT, type EmployerKey } from "@/i18n/employerText";
+import { useLanguage } from "@/context/LanguageContext";
+import { paymentMethodLabel } from "@/i18n/formatters";
 import type { Application } from "@/types";
 import WorkerAvatar from "../applications/WorkerAvatar";
 import { displayPhone, money, nameOf, phoneOf, skillsOf, unitKey, waLink, wageOf } from "../applications/helpers";
@@ -38,6 +40,7 @@ interface Props {
 
 export default function EmployerWorkCard({ app, work, onOpen, onTrack }: Props) {
   const { tr, loc, locale } = useEmployerT();
+  const { language } = useLanguage();
   const name = nameOf(app);
   const phone = phoneOf(app);
   const skills = skillsOf(app);
@@ -72,7 +75,7 @@ export default function EmployerWorkCard({ app, work, onOpen, onTrack }: Props) 
       <dl className="m-0 grid gap-x-4 gap-y-1.5 text-[13.5px] text-slate-600 sm:grid-cols-2">
         <div className="flex gap-1.5"><dt className="text-slate-400">{tr("aw_workDate")}:</dt><dd className="m-0">{workDateOf(app, locale) || tr("aw_notSet")}</dd></div>
         <div className="flex gap-1.5"><dt className="text-slate-400">{tr("aw_schedule")}:</dt><dd className="m-0 break-words">{scheduleOf(app) || tr("aw_notSet")}</dd></div>
-        <div className="flex gap-1.5"><dt className="text-slate-400">{tr("aw_payment")}:</dt><dd className="m-0 font-semibold text-slate-900">{wage ? `${money(wage)} / ${tr(unitKey(app.job))}` : tr("aw_notSet")}{app.job?.paymentMethod ? ` · ${app.job.paymentMethod}` : ""}</dd></div>
+        <div className="flex gap-1.5"><dt className="text-slate-400">{tr("aw_payment")}:</dt><dd className="m-0 font-semibold text-slate-900">{wage ? `${money(wage)} / ${tr(unitKey(app.job))}` : tr("aw_notSet")}{app.job?.paymentMethod ? ` · ${paymentMethodLabel(app.job.paymentMethod, language)}` : ""}</dd></div>
         {loc(app.job?.location) && <div className="flex gap-1.5"><FiMapPin className="mt-0.5 shrink-0 text-slate-400" /><dd className="m-0 break-words">{loc(app.job?.location)}</dd></div>}
         {doneAt && <div className="flex gap-1.5"><dt className="text-slate-400">{tr("aw_completedOn")}:</dt><dd className="m-0">{formatDate(doneAt, locale, true)}</dd></div>}
         {app.status === "completed" && (

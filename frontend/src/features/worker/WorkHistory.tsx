@@ -6,6 +6,7 @@ import ReviewDialog from "@/components/ui/ReviewDialog";
 import { toast } from "@/components/ui/Toast";
 import { EmptyPanel, ErrorPanel, LoadingCards, PageContainer, PageHeader, Stars } from "@/components/worker/WorkerUi";
 import { useL } from "@/hooks/useL";
+import { paymentMethodLabel } from "@/i18n/formatters";
 import { byLatest, completedAtOf, eventAt, inr, isCompleted, jobLocationOf, jobTitleOf, salaryOf, statusLabel, workDateOf } from "@/lib/workerApplications";
 import { ApiError } from "@/services/api";
 import { rateEmployer } from "@/services/applications";
@@ -98,7 +99,7 @@ export default function WorkHistory() {
                       </div>
                       <div className="text-right">
                         <div className="text-[24px] font-bold leading-none text-[#0b1b3d]">{inr(salaryOf(a))}</div>
-                        {a.job?.paymentMethod && <div className="mt-1.5 text-[12.5px] text-[#5b6a88]">{a.job.paymentMethod}</div>}
+                        {a.job?.paymentMethod && <div className="mt-1.5 text-[12.5px] text-[#5b6a88]">{paymentMethodLabel(a.job.paymentMethod, language)}</div>}
                       </div>
                     </div>
 

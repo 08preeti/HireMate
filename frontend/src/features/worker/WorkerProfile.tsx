@@ -1,5 +1,6 @@
 "use client";
 
+import { localizedLocation } from "@/i18n/locationLabels";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { FiCamera, FiCheckCircle, FiEdit2, FiEye, FiMapPin, FiTrash2, FiX } from "react-icons/fi";
@@ -14,6 +15,7 @@ import { ApiError } from "@/services/api";
 import { getMyJobs, getWorkerProfile, updateWorkerProfile } from "@/services/workers";
 import type { Application, Worker } from "@/types";
 import ProfileDocuments from "./profile/ProfileDocuments";
+import { localizedTradeLabel } from "@/i18n/jobLabels";
 
 const SKILL_OPTIONS = ["Electrician", "Plumber", "Cook", "Driver", "Carpenter", "Painter", "Cleaner", "Security Guard", "Gardener", "Delivery Boy", "Mechanic", "Mason", "House Maid", "Waiter", "Helper", "Welder"];
 
@@ -359,7 +361,7 @@ export default function WorkerProfile() {
         L("Contact Information", "संपर्क जानकारी", "संपर्क माहिती"),
         <dl className="m-0 grid gap-4 sm:grid-cols-2">
           <Value label={L("Phone", "फ़ोन", "फोन")}>{worker.phone || worker.contact}</Value>
-          <Value label={L("Home area", "घर का इलाका", "घराचा परिसर")}>{worker.location}</Value>
+          <Value label={L("Home area", "घर का इलाका", "घराचा परिसर")}>{localizedLocation(worker.location, language)}</Value>
         </dl>,
         d && (
           <>
@@ -372,14 +374,14 @@ export default function WorkerProfile() {
       {section(
         "skills",
         L("Skills", "कौशल", "कौशल्ये"),
-        skills.length ? <div className="flex flex-wrap gap-2">{skills.map((s) => <span key={s} className="rounded-full bg-[#eef4ff] px-3.5 py-1.5 text-[13.5px] font-medium text-[#1a4fb0]">{s}</span>)}</div> : <p className="m-0 text-[14px] text-[#8a96ae]">{L("No skills added yet.", "अभी कोई कौशल नहीं जोड़ा।", "अजून कौशल्य जोडलेले नाही.")}</p>,
+        skills.length ? <div className="flex flex-wrap gap-2">{skills.map((s) => <span key={s} className="rounded-full bg-[#eef4ff] px-3.5 py-1.5 text-[13.5px] font-medium text-[#1a4fb0]">{localizedTradeLabel(s, language)}</span>)}</div> : <p className="m-0 text-[14px] text-[#8a96ae]">{L("No skills added yet.", "अभी कोई कौशल नहीं जोड़ा।", "अजून कौशल्य जोडलेले नाही.")}</p>,
         d && (
           <div>
             <div className="flex flex-wrap gap-2" role="group" aria-label={L("Skills", "कौशल", "कौशल्ये")}>
               {[...SKILL_OPTIONS, ...d.skills.filter((s) => !SKILL_OPTIONS.some((o) => o.toLowerCase() === s.toLowerCase()))].map((s) => {
                 const on = d.skills.some((x) => x.toLowerCase() === s.toLowerCase());
                 return (
-                  <button key={s} type="button" aria-pressed={on} onClick={() => patch({ skills: on ? d.skills.filter((x) => x.toLowerCase() !== s.toLowerCase()) : [...d.skills, s] })} className={chipCls(on)}>{s}</button>
+                  <button key={s} type="button" aria-pressed={on} onClick={() => patch({ skills: on ? d.skills.filter((x) => x.toLowerCase() !== s.toLowerCase()) : [...d.skills, s] })} className={chipCls(on)}>{localizedTradeLabel(s, language)}</button>
                 );
               })}
             </div>
@@ -502,8 +504,8 @@ export default function WorkerProfile() {
             </div>
             <dl className="mb-0 mt-5 space-y-4">
               <Value label={L("Skills", "कौशल", "कौशल्ये")}>{skills.join(", ")}</Value>
-              <Value label={L("Location", "स्थान", "ठिकाण")}>{worker.location}</Value>
-              {areas.length > 0 && <Value label={L("Preferred work locations", "पसंदीदा काम के स्थान", "पसंतीची कामाची ठिकाणे")}>{areas.join(", ")}</Value>}
+              <Value label={L("Location", "स्थान", "ठिकाण")}>{localizedLocation(worker.location, language)}</Value>
+              {areas.length > 0 && <Value label={L("Preferred work locations", "पसंदीदा काम के स्थान", "पसंतीची कामाची ठिकाणे")}>{localizedLocation(areas.join(", "), language)}</Value>}
               {worker.experienceYears != null && <Value label={L("Experience", "अनुभव", "अनुभव")}>{`${worker.experienceYears} ${L("years", "वर्ष", "वर्षे")}`}</Value>}
               {worker.experienceDetails && <Value label={L("Previous work", "पिछला काम", "मागील काम")}>{worker.experienceDetails}</Value>}
               <Value label={L("Availability", "उपलब्धता", "उपलब्धता")}>{av?.isAvailable === false ? L("Not available for work", "काम के लिए उपलब्ध नहीं", "कामासाठी उपलब्ध नाही") : availabilityText || L("Available for work", "काम के लिए उपलब्ध", "कामासाठी उपलब्ध")}</Value>

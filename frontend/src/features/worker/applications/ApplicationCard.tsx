@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FiCalendar, FiCreditCard, FiMapPin, FiUser } from "react-icons/fi";
 import { useL } from "@/hooks/useL";
+import { paymentMethodLabel } from "@/i18n/formatters";
 import { GROUP_STYLE, canWithdraw, dateOf, groupOf, inr, isCompleted, jobLocationOf, jobTitleOf, salaryOf, statusLabel } from "@/lib/workerApplications";
 import type { WorkerApplications } from "../useApplicationActions";
 import type { Application } from "@/types";
@@ -37,14 +38,14 @@ export default function ApplicationCard({ app, actions, onOpen }: Props) {
           </div>
           <div className="text-right">
             <div className="text-[24px] font-bold leading-none text-[#0b1b3d]">{inr(salaryOf(app))}</div>
-            {method && <div className="mt-1.5 text-[12.5px] text-[#5b6a88]">{method}</div>}
+            {method && <div className="mt-1.5 text-[12.5px] text-[#5b6a88]">{paymentMethodLabel(method, language)}</div>}
           </div>
         </div>
 
         <dl className="mb-0 mt-4 grid gap-x-6 gap-y-2 text-[14px] text-[#33415f] sm:grid-cols-2">
           <div className="flex items-center gap-2"><FiUser size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><dt className="sr-only">{L("Employer", "नियोक्ता", "मालक")}</dt><dd className="m-0 truncate">{employer || "—"}</dd></div>
           <div className="flex items-center gap-2"><FiMapPin size={15} className="shrink-0 text-[#e11d48]" aria-hidden="true" /><dt className="sr-only">{L("Location", "स्थान", "ठिकाण")}</dt><dd className="m-0 truncate">{location || "—"}</dd></div>
-          <div className="flex items-center gap-2"><FiCreditCard size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><dt className="sr-only">{L("Payment", "भुगतान", "पेमेंट")}</dt><dd className="m-0">{inr(salaryOf(app))}{method ? ` • ${method}` : ""}</dd></div>
+          <div className="flex items-center gap-2"><FiCreditCard size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><dt className="sr-only">{L("Payment", "भुगतान", "पेमेंट")}</dt><dd className="m-0">{inr(salaryOf(app))}{method ? ` • ${paymentMethodLabel(method, language)}` : ""}</dd></div>
           <div className="flex items-center gap-2"><FiCalendar size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><dt className="sr-only">{L("Applied on", "आवेदन तिथि", "अर्जाची तारीख")}</dt><dd className="m-0">{L("Applied", "आवेदन", "अर्ज")} {dateOf(app.createdAt) || "—"}</dd></div>
         </dl>
 
