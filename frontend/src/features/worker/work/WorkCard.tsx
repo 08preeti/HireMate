@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FiAlertCircle, FiCalendar, FiClock, FiCreditCard, FiMapPin, FiUser } from "react-icons/fi";
 import { useL } from "@/hooks/useL";
+import { paymentMethodLabel } from "@/i18n/formatters";
 import LocationSharePanel from "@/components/maps/LocationSharePanel";
 import { GROUP_STYLE, groupOf, inr, isCompletionPending, jobLocationOf, jobTitleOf, mapsUrlOf, salaryOf, scheduleOf, statusLabel, workDateOf } from "@/lib/workerApplications";
 import type { Application } from "@/types";
@@ -52,7 +53,7 @@ export default function WorkCard({ app, actions, onOpen, onEmployer }: Props) {
           </div>
           <div className="text-right">
             <div className="text-[24px] font-bold leading-none text-[#0b1b3d]">{inr(salaryOf(app))}</div>
-            {app.job?.paymentMethod && <div className="mt-1.5 text-[12.5px] text-[#5b6a88]">{app.job.paymentMethod}</div>}
+            {app.job?.paymentMethod && <div className="mt-1.5 text-[12.5px] text-[#5b6a88]">{paymentMethodLabel(app.job.paymentMethod, language)}</div>}
           </div>
         </div>
 
@@ -61,7 +62,7 @@ export default function WorkCard({ app, actions, onOpen, onEmployer }: Props) {
           <div className="flex items-center gap-2"><FiMapPin size={15} className="shrink-0 text-[#e11d48]" aria-hidden="true" /><dt className="sr-only">{L("Location", "स्थान", "ठिकाण")}</dt><dd className="m-0 truncate">{jobLocationOf(app, language) || "—"}</dd></div>
           <div className="flex items-center gap-2"><FiCalendar size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><dt className="sr-only">{L("Work date", "काम की तिथि", "कामाची तारीख")}</dt><dd className="m-0">{workDate || L("Date not set", "तिथि तय नहीं", "तारीख ठरलेली नाही")}</dd></div>
           <div className="flex items-center gap-2"><FiClock size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><dt className="sr-only">{L("Schedule", "समय", "वेळ")}</dt><dd className="m-0 truncate">{schedule || L("Schedule not set", "समय तय नहीं", "वेळ ठरलेली नाही")}</dd></div>
-          <div className="flex items-center gap-2"><FiCreditCard size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><dt className="sr-only">{L("Payment", "भुगतान", "पेमेंट")}</dt><dd className="m-0">{inr(salaryOf(app))}{app.job?.paymentMethod ? ` • ${app.job.paymentMethod}` : ""}</dd></div>
+          <div className="flex items-center gap-2"><FiCreditCard size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><dt className="sr-only">{L("Payment", "भुगतान", "पेमेंट")}</dt><dd className="m-0">{inr(salaryOf(app))}{app.job?.paymentMethod ? ` • ${paymentMethodLabel(app.job.paymentMethod, language)}` : ""}</dd></div>
         </dl>
 
         <div className="mt-5 rounded-xl border border-[#edf1f7] bg-[#f8fafd] px-3 py-4 sm:px-5">

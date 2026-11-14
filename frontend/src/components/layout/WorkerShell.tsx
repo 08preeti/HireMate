@@ -16,6 +16,7 @@ import { useLanguage } from "@/context/LanguageContext";
 import { ROLE_SELECT } from "@/config/routes";
 import { groupOf } from "@/lib/workerApplications";
 import { profileCompletion } from "@/lib/profileCompletion";
+import { localizedSkillText } from "@/i18n/jobLabels";
 import { getMyJobs } from "@/services/workers";
 import type { Language } from "@/types";
 
@@ -201,7 +202,7 @@ export default function WorkerShell({ children }: { children: ReactNode }) {
         <div className="flex items-center gap-2.5 sm:gap-4">
           <label className="relative flex cursor-pointer items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-[14px]">
             <FiGlobe size={16} aria-hidden="true" />
-            <select value={language} onChange={(e) => setLanguage(e.target.value as Language)} aria-label="Language" className="cursor-pointer appearance-none bg-transparent pr-5 text-[14px] text-white outline-none">
+            <select value={language} onChange={(e) => setLanguage(e.target.value as Language)} aria-label={L("Language", "भाषा", "भाषा")} className="cursor-pointer appearance-none bg-transparent pr-5 text-[14px] text-white outline-none">
               <option value="en" className="text-black">English</option>
               <option value="hi" className="text-black">हिंदी</option>
               <option value="mr" className="text-black">मराठी</option>
@@ -224,7 +225,7 @@ export default function WorkerShell({ children }: { children: ReactNode }) {
                   {worker?.name}
                   <FiChevronDown size={14} aria-hidden="true" />
                 </span>
-                <span className="block truncate text-[12px] font-medium text-[#4be08f]">{worker?.skills ? `${worker.skills} • ` : ""}{L("Verified Active", "सत्यापित सक्रिय", "सत्यापित सक्रिय")}</span>
+                <span className="block truncate text-[12px] font-medium text-[#4be08f]">{worker?.skills ? `${localizedSkillText(worker.skills, language)} • ` : ""}{L("Verified Active", "सत्यापित सक्रिय", "सत्यापित सक्रिय")}</span>
               </span>
             </button>
             {menuOpen && (

@@ -1,4 +1,6 @@
 import type { Application, Language, TimelineEntry, TimelineEventName } from "@/types";
+import { localizedTradeLabel } from "@/i18n/jobLabels";
+import { localizedLocation } from "@/i18n/locationLabels";
 
 export type ApplicationGroup = "pending" | "offers" | "confirmed" | "declined" | "withdrawn" | "completed";
 
@@ -62,10 +64,10 @@ export const dateOf = (iso?: string): string =>
   iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "";
 
 export const jobTitleOf = (a: Application, language: Language): string =>
-  a.job?.jobTitle?.[language] || a.job?.jobTitle?.en || "";
+  localizedTradeLabel(a.job?.jobTitle?.[language] || a.job?.jobTitle?.en || "", language);
 
 export const jobLocationOf = (a: Application, language: Language): string =>
-  a.job?.location?.[language] || a.job?.location?.en || "";
+  localizedLocation(a.job?.location, language);
 
 /** Newest activity first. */
 export const byLatest = (a: Application, b: Application): number =>

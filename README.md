@@ -1,6 +1,21 @@
-# HireMate (full stack)
+# HireMate
 
-- `backend/`  Express + MongoDB API  — `cd backend && npm i && cp .env.example .env` (fill MONGODB_URI, JWT_SECRET) `&& npm run dev`
-- `frontend/` Next.js + TypeScript + Tailwind — `cd frontend && npm i && cp .env.example .env.local && npm run dev`
+This archive contains the HireMate project with the existing language selector and expanded English, Hindi and Marathi labels for common worker job titles, skills, payment methods and job categories.
 
-Backend runs on :5000, frontend on :3000 (set FRONTEND_URL=http://localhost:3000 in backend/.env).
+## Run locally
+
+Frontend:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Backend:
+```bash
+cd backend
+npm install
+npm run dev
+```
+
+See `LANGUAGE-CHANGES.md` for the language update scope and verification notes. Configure environment variables using the existing `.env.example` files.

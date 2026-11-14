@@ -8,8 +8,11 @@ import { targetFor } from "@/components/notifications/NotificationBell";
 import { CARD, ErrorPanel, PageContainer, SectionCard, Stars } from "@/components/worker/WorkerUi";
 import { useAuth } from "@/context/AuthContext";
 import { useL } from "@/hooks/useL";
+import { localizedNotification } from "@/i18n/notifications";
 import { COMPLETION_LABELS, profileCompletion } from "@/lib/profileCompletion";
 import { GROUP_STYLE, byLatest, dateOf, groupOf, inr, isActiveWork, isCompleted, isOffer, isPending, jobLocationOf, jobTitleOf, salaryOf, statusLabel } from "@/lib/workerApplications";
+import { localizedSkillText, localizedTradeLabel } from "@/i18n/jobLabels";
+import { localizedLocation } from "@/i18n/locationLabels";
 import { getJobs } from "@/services/jobs";
 import { getNotifications, markNotificationRead } from "@/services/notifications";
 import type { AppNotification, Application, Job } from "@/types";
@@ -147,8 +150,8 @@ export default function WorkerDashboard() {
           <p className="m-0 text-[14px] font-medium text-[#5b6a88]">{greeting},</p>
           <h1 className="m-0 mt-1 truncate text-[26px] font-bold tracking-tight text-[#0b1b3d] sm:text-[30px]">{worker?.name}</h1>
           <p className="mb-0 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[14px] text-[#5b6a88]">
-            {worker?.skills && <span>{worker.skills}</span>}
-            {worker?.location && <span className="inline-flex items-center gap-1.5"><FiMapPin size={14} className="text-[#e11d48]" aria-hidden="true" />{worker.location}</span>}
+            {worker?.skills && <span>{localizedSkillText(worker.skills, language)}</span>}
+            {worker?.location && <span className="inline-flex items-center gap-1.5"><FiMapPin size={14} className="text-[#e11d48]" aria-hidden="true" />{localizedLocation(worker.location, language)}</span>}
             {(Number(worker?.rating) > 0) && <span className="inline-flex items-center gap-1.5"><Stars value={Number(worker?.rating)} size={14} />{Number(worker?.rating).toFixed(1)}</span>}
           </p>
         </div>
@@ -188,8 +191,8 @@ export default function WorkerDashboard() {
                 <Row
                   key={j._id}
                   href={`/jobs/${j._id}`}
-                  title={j.jobTitle?.[language] || j.jobTitle?.en || ""}
-                  sub={[j.companyName, j.location?.[language] || j.location?.en].filter(Boolean).join(" • ")}
+                  title={localizedTradeLabel(j.jobTitle?.[language] || j.jobTitle?.en || "", language)}
+                  sub={[j.companyName, localizedLocation(j.location, language)].filter(Boolean).join(" • ")}
                   right={<span>{inr(Number(j.salary) || 0)}</span>}
                 />
               ))}
@@ -228,8 +231,8 @@ export default function WorkerDashboard() {
                   <button type="button" onClick={() => openNote(n)} className="flex w-full cursor-pointer items-start gap-3 rounded-xl border border-[#edf1f7] bg-white px-4 py-3 text-left hover:bg-[#f6f9ff]">
                     <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.isRead ? "bg-transparent" : "bg-[#1f6bff]"}`} aria-label={n.isRead ? undefined : L("Unread", "अपठित", "न वाचलेले")} />
                     <span className="min-w-0">
-                      <span className={`block truncate text-[14.5px] text-[#0b1b3d] ${n.isRead ? "font-medium" : "font-bold"}`}>{n.title}</span>
-                      <span className="mt-0.5 line-clamp-1 block text-[13px] text-[#5b6a88]">{n.message}</span>
+                      <span className={`block truncate text-[14.5px] text-[#0b1b3d] ${n.isRead ? "font-medium" : "font-bold"}`}>{localizedNotification(n, language).title}</span>
+                      <span className="mt-0.5 line-clamp-1 block text-[13px] text-[#5b6a88]">{localizedNotification(n, language).message}</span>
                     </span>
                   </button>
                 </li>

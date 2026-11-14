@@ -4,6 +4,8 @@ import { useEffect, type ReactNode } from "react";
 import { FiX } from "react-icons/fi";
 import ApplicationTimeline from "@/components/ui/ApplicationTimeline";
 import { useEmployerT, type EmployerKey } from "@/i18n/employerText";
+import { useLanguage } from "@/context/LanguageContext";
+import { paymentMethodLabel } from "@/i18n/formatters";
 import type { Application } from "@/types";
 import ApplicantProfile from "../applications/ApplicantProfile";
 import { money, unitKey, wageOf } from "../applications/helpers";
@@ -31,6 +33,7 @@ function Field({ label, value }: { label: string; value: string }) {
 
 export default function WorkDetailsPanel({ app, work, onClose }: { app: Application; work: EmployerWork; onClose: () => void }) {
   const { tr, loc, locale } = useEmployerT();
+  const { language } = useLanguage();
   const wage = wageOf(app.job);
   const active = ["confirmed", "on_the_way", "arrived"].includes(app.status ?? "");
   const ended = app.status === "cancelled" || app.status === "withdrawn";
@@ -75,7 +78,7 @@ export default function WorkDetailsPanel({ app, work, onClose }: { app: Applicat
               <Field label={tr("dt_jobLocation")} value={loc(app.job?.location)} />
               <Field label={tr("aw_workDate")} value={workDateOf(app, locale)} />
               <Field label={tr("aw_schedule")} value={scheduleOf(app)} />
-              <Field label={tr("aw_payment")} value={wage ? `${money(wage)} / ${tr(unitKey(app.job))}${app.job?.paymentMethod ? ` · ${app.job.paymentMethod}` : ""}` : ""} />
+              <Field label={tr("aw_payment")} value={wage ? `${money(wage)} / ${tr(unitKey(app.job))}${app.job?.paymentMethod ? ` · ${paymentMethodLabel(app.job.paymentMethod, language)}` : ""}` : ""} />
               {doneAt && <Field label={tr("aw_completedOn")} value={formatDate(doneAt, locale, true)} />}
               {app.cancellationReason && <Field label={tr("aw_cancelledReason")} value={app.cancellationReason} />}
             </div>

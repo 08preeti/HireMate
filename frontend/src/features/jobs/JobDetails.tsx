@@ -1,5 +1,6 @@
 "use client";
 
+import { localizedLocation } from "@/i18n/locationLabels";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -8,6 +9,8 @@ import {
 } from "react-icons/fi";
 import { useLanguage } from "@/context/LanguageContext";
 import { translations } from "@/i18n/translations";
+import { localizedSkillText, localizedTradeLabel } from "@/i18n/jobLabels";
+import { paymentMethodLabel } from "@/i18n/formatters";
 import { toast } from "@/components/ui/Toast";
 import { useAuth } from "@/context/AuthContext";
 import { ROLE_LOGIN } from "@/config/routes";
@@ -141,10 +144,10 @@ export default function JobDetails() {
     setReporting(false);
   };
 
-  const title = job?.jobTitle?.[language] || job?.jobTitle?.en || "";
-  const location = job?.location?.[language] || job?.location?.en || "";
+  const title = localizedTradeLabel(job?.jobTitle?.[language] || job?.jobTitle?.en || "", language);
+  const location = localizedLocation(job?.location, language);
   const skillList = useMemo(
-    () => (job?.skills?.[language] || job?.skills?.en || "").split(/[,،;、]/).map((s) => s.trim()).filter(Boolean),
+    () => localizedSkillText(job?.skills?.[language] || job?.skills?.en || "", language).split(/[,،;、]/).map((s) => s.trim()).filter(Boolean),
     [job, language]
   );
   const distanceKm = useMemo(() => {
@@ -193,7 +196,7 @@ export default function JobDetails() {
     ? L("Instant Cash in Hand", "तुरंत नकद हाथ में", "त्वरित रोख हातात")
     : payMethod === "upi"
       ? L("Instant UPI Payment", "तुरंत UPI भुगतान", "त्वरित UPI पेमेंट")
-      : job.paymentMethod ? `${L("Payment:", "भुगतान:", "पेमेंट:")} ${job.paymentMethod}` : "";
+      : job.paymentMethod ? `${L("Payment:", "भुगतान:", "पेमेंट:")} ${paymentMethodLabel(job.paymentMethod, language)}` : "";
   const dailyNote = job.salaryUnit === "day" ? ` ${L("(Daily at end of work)", "(रोज़ काम के अंत में)", "(रोज कामाच्या शेवटी)")}` : "";
 
   const [titleMain, titleSub] = (() => {

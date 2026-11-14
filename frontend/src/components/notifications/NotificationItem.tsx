@@ -3,6 +3,8 @@
 import type { ReactNode } from "react";
 import { FiAlertCircle, FiBriefcase, FiCheckCircle, FiMapPin, FiNavigation, FiSend, FiStar, FiUserPlus, FiX, FiXCircle } from "react-icons/fi";
 import type { AppNotification, NotificationType } from "@/types";
+import { useLanguage } from "@/context/LanguageContext";
+import { localizedNotification } from "@/i18n/notifications";
 
 const ICONS: Record<NotificationType, { icon: ReactNode; tone: string }> = {
   job_match: { icon: <FiBriefcase />, tone: "bg-blue-50 text-blue-600" },
@@ -50,16 +52,18 @@ interface Props {
 
 export default function NotificationItem({ notification: n, dismissLabel, onOpen, onDismiss, onMarkRead, markReadLabel }: Props) {
   const { icon, tone } = ICONS[n.type] ?? ICONS.job_match;
+  const { language } = useLanguage();
+  const copy = localizedNotification(n, language);
   return (
     <li className={`group relative flex items-start gap-3 px-4 py-3 transition-colors hover:bg-slate-50 ${n.isRead ? "" : "bg-blue-50/60"}`}>
       <button type="button" onClick={() => onOpen(n)} className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 text-left">
         <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[16px] ${tone}`}>{icon}</span>
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline justify-between gap-2">
-            <span className={`truncate text-[13.5px] text-slate-900 ${n.isRead ? "font-medium" : "font-bold"}`}>{n.title}</span>
+            <span className={`truncate text-[13.5px] text-slate-900 ${n.isRead ? "font-medium" : "font-bold"}`}>{copy.title}</span>
             <span className="shrink-0 text-[11px] text-slate-400">{timeAgo(n.createdAt)}</span>
           </span>
-          <span className="mt-0.5 line-clamp-2 block text-[12.5px] leading-snug text-slate-600">{n.message}</span>
+          <span className="mt-0.5 line-clamp-2 block text-[12.5px] leading-snug text-slate-600">{copy.message}</span>
         </span>
       </button>
       {!n.isRead && <span className="absolute right-3 top-9 h-2 w-2 rounded-full bg-blue-600" aria-hidden="true" />}
