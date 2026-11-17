@@ -34,6 +34,8 @@ export interface NewJobPayload {
   workInstructions?: string;
   gateNote?: string;
   perkItems?: string[];
+  /** New photos as data URLs, or "existing:<n>" to keep a photo the job already has. Omit when editing to leave photos unchanged. */
+  photos?: string[];
   overtimeRate?: number;
   addressLine?: string;
   city?: string;

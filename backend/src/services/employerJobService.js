@@ -22,6 +22,7 @@ import {
 } from "../constants/jobRules.js";
 import { ensureCounter, fillIfFull, hasFreeVacancy, healJobStatus, withVacancyCounts } from "./vacancyService.js";
 import { notifyJobClosed, notifyJobUpdated } from "./notificationService.js";
+import { resolvePhotos } from "./jobPhotos.js";
 
 const everyLanguage = (value) => ({ en: value, hi: value, mr: value });
 const entry = (event, by) => ({ event, by, at: new Date() });
@@ -171,6 +172,17 @@ export async function updateEmployerJob(employerId, jobId, body) {
   if (job.status === "completed") throw new HttpError(409, "A completed job cannot be edited");
 
   const patch = parseJobInput(body, { partial: true });
+  // Photos are not a "detail workers are notified about": handled on their own, never through changedFields.
+  const photoInput = patch.photos;
+  delete patch.photos;
+  let nextPhotos;
+  if (photoInput !== undefined) {
+    const withBytes = await Job.findById(job._id).select("+photos");
+    const before = withBytes?.photos ?? [];
+    nextPhotos = resolvePhotos(photoInput, before);
+    const same = nextPhotos.length === before.length && nextPhotos.every((p, i) => photoInput[i].keep === i);
+    if (same) nextPhotos = undefined;
+  }
   const plainDescription = job.summary === undefined && patch.summary === undefined ? patch.description : undefined;
   delete patch.description;
 
@@ -178,7 +190,7 @@ export async function updateEmployerJob(employerId, jobId, body) {
   const current = await Job.findById(job._id);
   const changed = changedFields(current.toObject(), patch).filter((f) => f !== "description");
   const descriptionChanged = plainDescription !== undefined && plainDescription !== (current.description?.en ?? "");
-  if (!changed.length && !descriptionChanged) {
+  if (!changed.length && !descriptionChanged && nextPhotos === undefined) {
     return getEmployerJob(employerId, jobId);
   }
 
@@ -207,6 +219,11 @@ export async function updateEmployerJob(employerId, jobId, body) {
     set.description = everyLanguage(composeDescription({ ...merged, jobTitle: merged.jobTitle, vacancies: patch.vacancies ?? vacanciesOf(current) }));
   } else if (plainDescription !== undefined) {
     set.description = everyLanguage(plainDescription);
+  }
+
+  if (nextPhotos !== undefined) {
+    set.photos = nextPhotos;
+    set.photoCount = nextPhotos.length;
   }
 
   const guards = [{ $lte: [{ $ifNull: ["$filledPositions", 0] }, patch.vacancies ?? Number.MAX_SAFE_INTEGER] }];

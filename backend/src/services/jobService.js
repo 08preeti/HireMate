@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Job from "../models/Job.js";
 import Application from "../models/Application.js";
 import { ROLES } from "../constants/roles.js";
@@ -6,6 +7,7 @@ import { HttpError } from "../utils/httpError.js";
 import { notifyMatchingWorkers } from "./notificationService.js";
 import { composeDescription } from "../constants/jobRules.js";
 import { loggable } from "../utils/privacy.js";
+import { resolvePhotos } from "./jobPhotos.js";
 
 // Employers type a job in one language; it is stored for every supported language.
 const everyLanguage = (value) => ({ en: value, hi: value, mr: value });
@@ -13,7 +15,8 @@ const everyLanguage = (value) => ({ en: value, hi: value, mr: value });
 export async function createJob(employerId, fields) {
   const summaryMode = fields.summary !== undefined;
   const description = summaryMode ? composeDescription(fields) : fields.description ?? "";
-  const { jobTitle, skills, location, summary, vacancies, description: _legacy, ...rest } = fields;
+  const { jobTitle, skills, location, summary, vacancies, description: _legacy, photos: photoInput, ...rest } = fields;
+  const photos = photoInput?.length ? resolvePhotos(photoInput) : undefined;
   const job = await Job.create({
     ...rest,
     jobTitle: everyLanguage(jobTitle),
@@ -23,11 +26,13 @@ export async function createJob(employerId, fields) {
     ...(summaryMode && { summary }),
     vacancies,
     filledPositions: 0,
+    ...(photos && { photos, photoCount: photos.length }),
     employer: employerId, // always the authenticated employer, never a client-supplied id
     status: "active",
   });
   notifyMatchingWorkers(job); // fire-and-forget, never blocks or fails the post
-  return withVacancyCounts(job);
+  const { photos: _bytes, ...plain } = withVacancyCounts(job); // never send image bytes back in JSON
+  return plain;
 }
 
 // Public listings never include the employer's private contact number.
@@ -71,4 +76,14 @@ export async function reportJob(id, workerId, reasonInput) {
   // Reports are written to the server log with the verified reporter id; there is no reports collection yet.
   console.log(`🚨 Job reported: ${id} | Reason: ${reason} | Reporter: ${workerId}`);
   return { success: true, message: "Report submitted. We will review this job." };
+}
+
+// One photo of a job as raw image bytes (the <img> tags of the job cards point here).
+export async function getJobPhoto(id, index) {
+  const i = Number(index);
+  if (!mongoose.isValidObjectId(id) || !Number.isInteger(i) || i < 0) throw new HttpError(404, "Photo not found");
+  const job = await Job.findById(id).select("+photos");
+  const photo = job?.photos?.[i];
+  if (!photo) throw new HttpError(404, "Photo not found");
+  return { contentType: photo.contentType, data: photo.data };
 }

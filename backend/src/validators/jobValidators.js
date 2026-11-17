@@ -1,6 +1,7 @@
 import { HttpError } from "../utils/httpError.js";
 import { JOB_TYPES, SALARY_UNITS, SHIFT_KEYS } from "../constants/jobRules.js";
 import { isValidCoordinate } from "../utils/geo.js";
+import { parsePhotoInput } from "../services/jobPhotos.js";
 
 const isBlank = (v) => v === undefined || v === null || (typeof v === "string" && v.trim() === "");
 const todayUtc = () => {
@@ -151,6 +152,8 @@ export function parseJobInput(body = {}, { partial = false } = {}) {
     if (typeof body.isUrgent !== "boolean") fail("isUrgent", "Urgent must be true or false");
     else out.isUrgent = body.isUrgent;
   }
+
+  if (has("photos")) out.photos = parsePhotoInput(body.photos);
 
   const fields = Object.keys(errors);
   if (fields.length) throw new HttpError(400, errors[fields[0]], { field: fields[0], errors });

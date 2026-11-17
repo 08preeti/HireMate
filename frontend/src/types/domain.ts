@@ -28,6 +28,10 @@ export interface Job {
   latitude?: number;
   longitude?: number;
   applicationCount?: number;
+  /** How many site photos the job has (0–4). Load them with jobPhotoUrl(). */
+  photoCount?: number;
+  /** Bumped on every edit; used to refresh cached photos. */
+  revision?: number;
   status?: JobStatus;
   // ── Optional employer-supplied details shown on the job page (each section hides when empty) ──
   /** Trade category tag, e.g. "Automobile Repair". */

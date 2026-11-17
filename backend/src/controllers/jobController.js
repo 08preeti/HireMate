@@ -1,4 +1,4 @@
-import { createJob, listActiveJobs, getPublicJob, reportJob } from "../services/jobService.js";
+import { createJob, listActiveJobs, getPublicJob, reportJob, getJobPhoto } from "../services/jobService.js";
 import {
   listEmployerJobs,
   getEmployerJob,
@@ -34,6 +34,20 @@ export async function getJobById(req, res) {
     res.json(await getPublicJob(req.params.id, req.auth));
   } catch (err) {
     sendError(res, err, "Failed to fetch job");
+  }
+}
+
+export async function jobPhoto(req, res) {
+  try {
+    const { contentType, data } = await getJobPhoto(req.params.id, req.params.index);
+    res.set({
+      "Content-Type": contentType,
+      "Cache-Control": "public, max-age=86400, immutable", // the frontend adds ?v=<revision>, so edits get a new URL
+      "Cross-Origin-Resource-Policy": "cross-origin", // the site (Vercel) and the API (Render) are different origins
+    });
+    res.send(data);
+  } catch (err) {
+    sendError(res, err, "Failed to load photo");
   }
 }
 

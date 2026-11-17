@@ -97,6 +97,16 @@ const jobSchema = new mongoose.Schema(
 
     postalCode: { type: String, default: "" },
 
+    // Site / work photos (max 4). `select: false` keeps the image bytes out of every normal job query;
+    // they are served one at a time by GET /api/jobs/:id/photos/:index.
+    photos: {
+      type: [{ contentType: { type: String, required: true }, data: { type: Buffer, required: true }, _id: false }],
+      select: false,
+      default: undefined,
+    },
+
+    photoCount: { type: Number, default: 0, min: 0, max: 4 },
+
     closedAt: { type: Date },
 
     completedAt: { type: Date },
@@ -131,4 +141,3 @@ const jobSchema = new mongoose.Schema(
 const Job = mongoose.model("Job", jobSchema);
 
 export default Job;
-
