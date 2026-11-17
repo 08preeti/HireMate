@@ -46,7 +46,13 @@ import { fixLeafletIcons } from "@/lib/leaflet";
 import { haversine } from "@/lib/geo";
 import { getSeenCount } from "@/lib/seenApplications";
 import { useEmployerT, type EmployerKey } from "@/i18n/employerText";
-import type { Application, ApplicationStatus, EmployerJob, EmployerJobsSummary, LiveApplication } from "@/types";
+import type {
+  Application,
+  ApplicationStatus,
+  EmployerJob,
+  EmployerJobsSummary,
+  LiveApplication,
+} from "@/types";
 import { STATUS_LABEL, STATUS_TONE, jobStatusOf } from "./jobs/jobHelpers";
 
 fixLeafletIcons();
@@ -354,7 +360,10 @@ export default function EmployerDashboard() {
           );
           if (curr === "completed") setRatingApp(app);
           try {
-            if ("Notification" in window && Notification.permission === "granted")
+            if (
+              "Notification" in window &&
+              Notification.permission === "granted"
+            )
               new Notification(
                 `HireMate — ${trRef.current(STATUS_CONFIG[curr].label)}`,
                 {
@@ -379,7 +388,8 @@ export default function EmployerDashboard() {
     return () => clearInterval(iv);
   }, [fetchDashboard, fetchLive]);
 
-  const activeJobs = stats?.activeJobs ?? jobs.filter((j) => j.status === "active").length;
+  const activeJobs =
+    stats?.activeJobs ?? jobs.filter((j) => j.status === "active").length;
   const closedJobs = stats?.closedJobs ?? 0;
   const onSite = liveApps.filter(
     (a) => a.status === "arrived" || a.status === "completed",
@@ -464,22 +474,21 @@ export default function EmployerDashboard() {
                 >
                   {tr(STATUS_CONFIG[selectedApp.status].label)}
                 </span>
-                {selectedApp.liveLocation?.lat &&
-                  selectedApp.job?.latitude && (
-                    <span className="text-slate-500 ml-auto">
-                      {tr("kmAway", {
-                        n: haversine(
-                          selectedApp.liveLocation.lat,
-                          selectedApp.liveLocation.lng,
-                          selectedApp.job.latitude,
-                          selectedApp.job.longitude ?? 0,
-                        ).toFixed(1),
-                      })}
-                    </span>
-                  )}
+                {selectedApp.liveLocation?.lat && selectedApp.job?.latitude && (
+                  <span className="text-slate-500 ml-auto">
+                    {tr("kmAway", {
+                      n: haversine(
+                        selectedApp.liveLocation.lat,
+                        selectedApp.liveLocation.lng,
+                        selectedApp.job.latitude,
+                        selectedApp.job.longitude ?? 0,
+                      ).toFixed(1),
+                    })}
+                  </span>
+                )}
               </div>
             )}
-            <div className="flex-1 min-h-[0px]">
+            <div className="relative flex-1 min-h-[260px]">
               {selectedApp.job?.latitude ? (
                 <MapContainer
                   center={
@@ -494,9 +503,9 @@ export default function EmployerDashboard() {
                         ]
                   }
                   zoom={14}
-                  className="h-full w-full"
+                  className="absolute inset-0 h-full w-full"
                 >
-                  <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
+                  <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" />
                   <Marker
                     position={[
                       selectedApp.job.latitude,
@@ -681,10 +690,23 @@ export default function EmployerDashboard() {
             />
           </div>
 
-          {liveApps.some((a) => a.status === "arrived" && a.completionRequestedAt) && (
-            <Link href="/employer-active-work" className="flex items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 no-underline">
-              <span className="text-[14px] font-semibold text-violet-800">{tr("aw_pendingBanner", { n: liveApps.filter((a) => a.status === "arrived" && a.completionRequestedAt).length })}</span>
-              <span className="shrink-0 text-[13px] font-semibold text-violet-700">{tr("aw_reviewBtn")} →</span>
+          {liveApps.some(
+            (a) => a.status === "arrived" && a.completionRequestedAt,
+          ) && (
+            <Link
+              href="/employer-active-work"
+              className="flex items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 no-underline"
+            >
+              <span className="text-[14px] font-semibold text-violet-800">
+                {tr("aw_pendingBanner", {
+                  n: liveApps.filter(
+                    (a) => a.status === "arrived" && a.completionRequestedAt,
+                  ).length,
+                })}
+              </span>
+              <span className="shrink-0 text-[13px] font-semibold text-violet-700">
+                {tr("aw_reviewBtn")} →
+              </span>
             </Link>
           )}
 
@@ -692,18 +714,54 @@ export default function EmployerDashboard() {
             <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
               {(
                 [
-                  { label: "kpi_activeJobs", value: stats.activeJobs, href: "/employer-jobs" },
-                  { label: "ds_filledJobs", value: stats.filledJobs, href: "/employer-jobs" },
-                  { label: "ds_completedJobs", value: stats.completedJobs, href: "/employer-jobs" },
-                  { label: "kpi_totalApplicants", value: stats.totalApplications, href: "/applications" },
-                  { label: "ds_pending", value: stats.pendingApplications, href: "/applications?tab=new" },
-                  { label: "ds_confirmed", value: stats.confirmedWorkers, href: "/applications?tab=confirmed" },
-                  { label: "ds_available", value: stats.availableVacancies, href: "/employer-jobs" },
+                  {
+                    label: "kpi_activeJobs",
+                    value: stats.activeJobs,
+                    href: "/employer-jobs",
+                  },
+                  {
+                    label: "ds_filledJobs",
+                    value: stats.filledJobs,
+                    href: "/employer-jobs",
+                  },
+                  {
+                    label: "ds_completedJobs",
+                    value: stats.completedJobs,
+                    href: "/employer-jobs",
+                  },
+                  {
+                    label: "kpi_totalApplicants",
+                    value: stats.totalApplications,
+                    href: "/applications",
+                  },
+                  {
+                    label: "ds_pending",
+                    value: stats.pendingApplications,
+                    href: "/applications?tab=new",
+                  },
+                  {
+                    label: "ds_confirmed",
+                    value: stats.confirmedWorkers,
+                    href: "/applications?tab=confirmed",
+                  },
+                  {
+                    label: "ds_available",
+                    value: stats.availableVacancies,
+                    href: "/employer-jobs",
+                  },
                 ] as { label: EmployerKey; value: number; href: string }[]
               ).map((t) => (
-                <Link key={t.label} href={t.href} className="bg-white rounded-xl border border-slate-100 shadow-[0_2px_12px_rgba(15,23,42,.05)] px-4 py-3 no-underline">
-                  <span className="block text-[22px] font-extrabold text-[#0F1F4B] leading-none">{t.value}</span>
-                  <span className="mt-1 block text-[12px] text-slate-500">{tr(t.label)}</span>
+                <Link
+                  key={t.label}
+                  href={t.href}
+                  className="bg-white rounded-xl border border-slate-100 shadow-[0_2px_12px_rgba(15,23,42,.05)] px-4 py-3 no-underline"
+                >
+                  <span className="block text-[22px] font-extrabold text-[#0F1F4B] leading-none">
+                    {t.value}
+                  </span>
+                  <span className="mt-1 block text-[12px] text-slate-500">
+                    {tr(t.label)}
+                  </span>
                 </Link>
               ))}
             </div>
@@ -839,7 +897,10 @@ export default function EmployerDashboard() {
                             {trp("applicants", job.applicationCount || 0)}
                           </span>
                           <span className="flex items-center gap-1.5 text-slate-600 font-semibold">
-                            {tr("jm_total")}: {job.stats.totalVacancies} · {tr("jm_confirmedW")}: {job.stats.confirmedWorkers} · {tr("jm_available")}: {job.stats.availableVacancies}
+                            {tr("jm_total")}: {job.stats.totalVacancies} ·{" "}
+                            {tr("jm_confirmedW")}: {job.stats.confirmedWorkers}{" "}
+                            · {tr("jm_available")}:{" "}
+                            {job.stats.availableVacancies}
                           </span>
                         </div>
                       </div>
@@ -911,7 +972,10 @@ export default function EmployerDashboard() {
                           ? app.status
                           : "accepted";
                       const sc = STATUS_CONFIG[st];
-                      const live = !!app.liveLocation?.updatedAt && Date.now() - Date.parse(app.liveLocation.updatedAt) < 120_000;
+                      const live =
+                        !!app.liveLocation?.updatedAt &&
+                        Date.now() - Date.parse(app.liveLocation.updatedAt) <
+                          120_000;
                       const wname = app.worker?.name || app.applicantName;
                       return (
                         <button
