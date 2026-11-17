@@ -13,6 +13,8 @@ import { localizedSkillText, localizedTradeLabel } from "@/i18n/jobLabels";
 import { paymentMethodLabel } from "@/i18n/formatters";
 import { toast } from "@/components/ui/Toast";
 import { useAuth } from "@/context/AuthContext";
+import JobPhotoGallery from "@/components/ui/JobPhotoGallery";
+import { jobPhotoUrls } from "@/lib/jobPhotos";
 import { ROLE_LOGIN } from "@/config/routes";
 import MapViewLazy from "@/components/maps/MapViewLazy";
 import { haversine } from "@/lib/geo";
@@ -285,6 +287,9 @@ export default function JobDetails() {
               ) : null}
             </div>
           )}
+
+          {/* Photos (only when the employer added some) */}
+          <JobPhotoGallery urls={jobPhotoUrls(job)} alt={title} />
 
           {/* Header */}
           <div className="flex flex-wrap items-start justify-between gap-5 px-6 py-6">

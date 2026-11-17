@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Poppins } from "next/font/google";
 import {
   FiArrowRight, FiBookmark, FiBox, FiBriefcase, FiChevronDown, FiCoffee, FiCreditCard, FiDroplet, FiHome, FiLayers,
-  FiMapPin, FiNavigation, FiPenTool, FiPhoneCall, FiSearch, FiSettings, FiShare2, FiShield, FiSliders, FiStar, FiSun,
+  FiImage, FiMapPin, FiNavigation, FiPenTool, FiPhoneCall, FiSearch, FiSettings, FiShare2, FiShield, FiSliders, FiStar, FiSun,
   FiTool, FiTruck, FiUsers, FiWind, FiX, FiZap,
 } from "react-icons/fi";
 import type { IconType } from "react-icons";
@@ -16,6 +16,7 @@ import { localizedLocation } from "@/i18n/locationLabels";
 import { localizedCategory, localizedSkillText, localizedTradeLabel } from "@/i18n/jobLabels";
 import { paymentMethodLabel } from "@/i18n/formatters";
 import { haversine } from "@/lib/geo";
+import { jobPhotoUrl } from "@/lib/jobPhotos";
 import { getJobs } from "@/services/jobs";
 import { getMyJobs } from "@/services/workers";
 import type { Job, Language, LatLng } from "@/types";
@@ -369,12 +370,29 @@ export default function Jobs() {
           const dist = distOf(job);
           const pay = payPeriod(job.salary, language);
           const isSaved = saved.includes(job._id);
+          const photo = (job.photoCount ?? 0) > 0 ? jobPhotoUrl(job._id, 0, job.revision) : null;
           return (
             <article key={job._id} className="flex flex-col rounded-2xl border border-[#e6ecf5] bg-white p-3.5 shadow-[0_6px_24px_rgba(20,50,110,0.06)] transition hover:shadow-[0_10px_30px_rgba(20,50,110,0.12)]">
               {/* Banner */}
-              <div className={`relative flex h-[92px] items-center justify-end overflow-hidden rounded-xl pr-6 ${banner}`}>
-                <div className="pointer-events-none absolute -left-6 -top-8 h-28 w-28 rounded-full bg-white/10" />
-                <Icon size={46} className="relative text-white/90" aria-hidden="true" />
+              <div className={`relative flex ${photo ? "h-[150px]" : "h-[92px]"} items-center justify-end overflow-hidden rounded-xl pr-6 ${banner}`}>
+                {photo ? (
+                  <>
+                    {/* The gradient behind stays visible if the photo fails to load */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photo} alt={title} loading="lazy" onError={(e) => { e.currentTarget.style.display = "none"; }} className="absolute inset-0 h-full w-full object-cover" />
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/25" />
+                    {(job.photoCount ?? 0) > 1 && (
+                      <span className="absolute bottom-2.5 right-2.5 inline-flex items-center gap-1 rounded-md bg-black/45 px-2 py-0.5 text-[11px] font-bold text-white">
+                        <FiImage size={12} aria-hidden="true" /> {job.photoCount}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="pointer-events-none absolute -left-6 -top-8 h-28 w-28 rounded-full bg-white/10" />
+                    <Icon size={46} className="relative text-white/90" aria-hidden="true" />
+                  </>
+                )}
                 <span className={`absolute left-2.5 top-2.5 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-bold text-white ${job.isUrgent ? "bg-[#f0264a]" : "bg-[#1fb25a]"}`}>
                   {job.isUrgent ? <><FiZap size={13} aria-hidden="true" /> {L("Urgent Hiring", "तत्काल भर्ती", "तातडीची भरती")}</> : L("Open Now", "अभी खुला", "आता खुले")}
                 </span>

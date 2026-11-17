@@ -3,6 +3,7 @@ import {
   postJob,
   listJobs,
   getJobById,
+  jobPhoto,
   report,
   myJobs,
   myJob,
@@ -38,6 +39,8 @@ router.post("/report/:id", authenticate, requireRole(ROLES.WORKER), report);
 
 // Browsing: visitors ("Browse jobs without login") and workers. Employers are blocked.
 router.get("/", optionalAuthenticate, allowVisitorOr(ROLES.WORKER), listJobs);
+// Job photos are public images (an <img> tag cannot send a login token), like the public job listing itself.
+router.get("/:id/photos/:index", jobPhoto);
 router.get("/:id", optionalAuthenticate, allowVisitorOr(ROLES.WORKER), getJobById);
 
 export default router;
