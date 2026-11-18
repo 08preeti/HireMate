@@ -13,16 +13,25 @@ function readBearer(req) {
 // the role stored inside the (signed) token. Sets:
 //   req.auth = { id, role, phone? }   <- the only trusted identity
 //   req.user = the Mongoose document
-async function resolveIdentity(token) {
+export async function resolveIdentity(token) {
   const { id, role } = verifyToken(token);
 
   if (role === ROLES.EMPLOYER) {
     const employer = await Employer.findById(id).select("-password");
-    return employer ? { auth: { id: employer._id.toString(), role }, user: employer } : null;
+    return employer
+      ? { auth: { id: employer._id.toString(), role }, user: employer }
+      : null;
   }
   if (role === ROLES.WORKER) {
-    const worker = await Worker.findById(id).select("-otp -otpExpires -otpAttempts");
-    return worker ? { auth: { id: worker._id.toString(), role, phone: worker.phone }, user: worker } : null;
+    const worker = await Worker.findById(id).select(
+      "-otp -otpExpires -otpAttempts",
+    );
+    return worker
+      ? {
+          auth: { id: worker._id.toString(), role, phone: worker.phone },
+          user: worker,
+        }
+      : null;
   }
   return null;
 }
@@ -30,10 +39,12 @@ async function resolveIdentity(token) {
 /** Requires a valid token. */
 export async function authenticate(req, res, next) {
   const token = readBearer(req);
-  if (!token) return res.status(401).json({ message: "Authentication required" });
+  if (!token)
+    return res.status(401).json({ message: "Authentication required" });
   try {
     const identity = await resolveIdentity(token);
-    if (!identity) return res.status(401).json({ message: "Account not found" });
+    if (!identity)
+      return res.status(401).json({ message: "Account not found" });
     req.auth = identity.auth;
     req.user = identity.user;
     return next();

@@ -2,7 +2,14 @@
 
 import L from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
+import {
+  MapContainer,
+  Marker,
+  Polyline,
+  Popup,
+  TileLayer,
+  useMap,
+} from "react-leaflet";
 import { useL } from "@/hooks/useL";
 import type { LatLngTuple, MapMarker, MarkerKind } from "@/types";
 
@@ -10,6 +17,7 @@ const ICON_HTML: Record<MarkerKind, string> = {
   worker: `<div class="flex h-[40px] w-[40px] items-center justify-center rounded-full border-[3px] border-white bg-brand text-[18px] shadow-[0_2px_12px_rgba(0,100,145,0.5)]">🚗</div>`,
   workerStale: `<div class="flex h-[40px] w-[40px] items-center justify-center rounded-full border-[3px] border-white bg-slate-400 text-[18px] opacity-80 shadow-[0_2px_8px_rgba(0,0,0,0.3)]">🚗</div>`,
   destination: `<div class="flex h-[40px] w-[40px] items-center justify-center rounded-full border-[3px] border-white bg-danger text-[18px] shadow-[0_2px_12px_rgba(232,0,42,0.5)]">📍</div>`,
+  start: `<div class="flex h-[26px] w-[26px] items-center justify-center rounded-full border-[3px] border-white bg-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.35)]"><div class="h-[8px] w-[8px] rounded-full bg-white"></div></div>`,
   pin: `<div class="flex h-[40px] w-[40px] items-center justify-center rounded-full border-[3px] border-white bg-emerald-500 text-[18px] shadow-[0_2px_12px_rgba(16,185,129,0.5)]">📌</div>`,
 };
 
@@ -17,14 +25,85 @@ const iconCache = new Map<MarkerKind, L.DivIcon>();
 function iconFor(kind: MarkerKind): L.DivIcon {
   let icon = iconCache.get(kind);
   if (!icon) {
-    icon = L.divIcon({ html: ICON_HTML[kind], className: "", iconSize: [40, 40], iconAnchor: [20, kind === "destination" || kind === "pin" ? 38 : 20], popupAnchor: [0, -34] });
+    icon = L.divIcon({
+      html: ICON_HTML[kind],
+      className: "",
+      iconSize: kind === "start" ? [26, 26] : [40, 40],
+      iconAnchor:
+        kind === "start"
+          ? [13, 13]
+          : [20, kind === "destination" || kind === "pin" ? 38 : 20],
+      popupAnchor: [0, -34],
+    });
     iconCache.set(kind, icon);
   }
   return icon;
 }
 
+const GLIDE_MIN_MS = 800;
+const GLIDE_MAX_MS = 6_000;
+
+/**
+ * A marker that glides to each new position instead of jumping. The glide lasts about as long as the gap since the
+ * previous update (so movement looks continuous between GPS fixes). It moves the Leaflet marker directly, with no
+ * React re-render per frame, and cancels its animation frame on unmount.
+ */
+function GlideMarker({ marker }: { marker: MapMarker }) {
+  const ref = useRef<L.Marker | null>(null);
+  const frame = useRef<number | null>(null);
+  const shown = useRef<LatLngTuple>(marker.position);
+  const lastUpdate = useRef(0);
+  const [lat, lng] = marker.position;
+
+  useEffect(() => {
+    const instance = ref.current;
+    if (!instance) return;
+    const now = performance.now();
+    const from = shown.current;
+    const gap = lastUpdate.current ? now - lastUpdate.current : 0;
+    lastUpdate.current = now;
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    if (!gap || (from[0] === lat && from[1] === lng)) {
+      instance.setLatLng([lat, lng]);
+      shown.current = [lat, lng];
+      return;
+    }
+    const duration = Math.min(GLIDE_MAX_MS, Math.max(GLIDE_MIN_MS, gap));
+    const step = (t: number) => {
+      const k = Math.min(1, (t - now) / duration);
+      const here: LatLngTuple = [
+        from[0] + (lat - from[0]) * k,
+        from[1] + (lng - from[1]) * k,
+      ];
+      instance.setLatLng(here);
+      shown.current = here;
+      frame.current = k < 1 ? requestAnimationFrame(step) : null;
+    };
+    frame.current = requestAnimationFrame(step);
+  }, [lat, lng]);
+
+  useEffect(
+    () => () => {
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+    },
+    [],
+  );
+
+  return (
+    <Marker ref={ref} position={shown.current} icon={iconFor(marker.kind)}>
+      {marker.label && <Popup>{marker.label}</Popup>}
+    </Marker>
+  );
+}
+
 /** Fits all markers into view on first render and whenever `focusKey` changes; afterwards it only re-fits when a marker would leave the screen. */
-function Focus({ points, focusKey }: { points: LatLngTuple[]; focusKey?: string | number }) {
+function Focus({
+  points,
+  focusKey,
+}: {
+  points: LatLngTuple[];
+  focusKey?: string | number;
+}) {
   const map = useMap();
   const lastKey = useRef<string | number | undefined>(undefined);
   const fitted = useRef(false);
@@ -37,8 +116,14 @@ function Focus({ points, focusKey }: { points: LatLngTuple[]; focusKey?: string 
     if (!refit && !outside) return;
     fitted.current = true;
     lastKey.current = focusKey;
-    if (points.length === 1) map.setView(points[0], Math.max(map.getZoom(), 16), { animate: true });
-    else map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 17, animate: true });
+    if (points.length === 1)
+      map.setView(points[0], Math.max(map.getZoom(), 16), { animate: true });
+    else
+      map.fitBounds(L.latLngBounds(points), {
+        padding: [48, 48],
+        maxZoom: 17,
+        animate: true,
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature, focusKey, map]);
   return null;
@@ -47,12 +132,22 @@ function Focus({ points, focusKey }: { points: LatLngTuple[]; focusKey?: string 
 interface Props {
   center: LatLngTuple;
   markers: MapMarker[];
+  /** The part of the route still to go (drawn strong). */
   route?: LatLngTuple[];
+  /** The part already travelled (drawn faded and dashed). */
+  routeDone?: LatLngTuple[];
   focusKey?: string | number;
   className?: string;
 }
 
-export default function MapView({ center, markers, route, focusKey, className = "h-full w-full" }: Props) {
+export default function MapView({
+  center,
+  markers,
+  route,
+  routeDone,
+  focusKey,
+  className = "absolute inset-0 h-full w-full",
+}: Props) {
   const { L: t } = useL();
   const [tileKey, setTileKey] = useState(0);
   const [tileErrors, setTileErrors] = useState(0);
@@ -60,32 +155,78 @@ export default function MapView({ center, markers, route, focusKey, className = 
   const tilesDown = tileErrors >= 4;
 
   return (
-    <div className="relative isolate h-full w-full">
-      <MapContainer center={center} zoom={15} scrollWheelZoom className={className}>
+    <div className="relative isolate h-full min-h-[240px] w-full">
+      <MapContainer
+        center={center}
+        zoom={15}
+        scrollWheelZoom
+        className={className}
+      >
         <TileLayer
           key={tileKey}
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
-          eventHandlers={{ tileerror: () => setTileErrors((n) => n + 1), tileload: () => setTileErrors(0) }}
+          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          eventHandlers={{
+            tileerror: () => setTileErrors((n) => n + 1),
+            tileload: () => setTileErrors(0),
+          }}
         />
+        {routeDone && routeDone.length > 1 && (
+          <Polyline
+            positions={routeDone}
+            pathOptions={{
+              color: "#94a3b8",
+              weight: 5,
+              opacity: 0.85,
+              dashArray: "2 9",
+              lineCap: "round",
+            }}
+          />
+        )}
         {route && route.length > 1 && (
           <>
-            <Polyline positions={route} pathOptions={{ color: "#006491", weight: 10, opacity: 0.25 }} />
-            <Polyline positions={route} pathOptions={{ color: "#006491", weight: 5, opacity: 0.9 }} />
+            <Polyline
+              positions={route}
+              pathOptions={{ color: "#006491", weight: 10, opacity: 0.25 }}
+            />
+            <Polyline
+              positions={route}
+              pathOptions={{ color: "#006491", weight: 5, opacity: 0.9 }}
+            />
           </>
         )}
-        {markers.map((m) => (
-          <Marker key={m.id} position={m.position} icon={iconFor(m.kind)}>
-            {m.label && <Popup>{m.label}</Popup>}
-          </Marker>
-        ))}
+        {markers.map((m) =>
+          m.kind === "worker" || m.kind === "workerStale" ? (
+            <GlideMarker key={m.id} marker={m} />
+          ) : (
+            <Marker key={m.id} position={m.position} icon={iconFor(m.kind)}>
+              {m.label && <Popup>{m.label}</Popup>}
+            </Marker>
+          ),
+        )}
         <Focus points={points} focusKey={focusKey} />
       </MapContainer>
 
       {tilesDown && (
-        <div role="alert" className="absolute inset-x-3 bottom-3 z-[500] flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 shadow">
-          <span>{t("Map images could not be loaded. Check your internet connection.", "मैप की तस्वीरें लोड नहीं हो सकीं। इंटरनेट कनेक्शन जाँचें।", "नकाशाची चित्रे लोड होऊ शकली नाहीत. इंटरनेट कनेक्शन तपासा.")}</span>
-          <button type="button" onClick={() => { setTileErrors(0); setTileKey((k) => k + 1); }} className="shrink-0 cursor-pointer rounded-md border border-amber-300 bg-white px-2.5 py-1 font-semibold">
+        <div
+          role="alert"
+          className="absolute inset-x-3 bottom-3 z-[500] flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 shadow"
+        >
+          <span>
+            {t(
+              "Map images could not be loaded. Check your internet connection.",
+              "मैप की तस्वीरें लोड नहीं हो सकीं। इंटरनेट कनेक्शन जाँचें।",
+              "नकाशाची चित्रे लोड होऊ शकली नाहीत. इंटरनेट कनेक्शन तपासा.",
+            )}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setTileErrors(0);
+              setTileKey((k) => k + 1);
+            }}
+            className="shrink-0 cursor-pointer rounded-md border border-amber-300 bg-white px-2.5 py-1 font-semibold"
+          >
             {t("Retry", "फिर कोशिश करें", "पुन्हा प्रयत्न करा")}
           </button>
         </div>

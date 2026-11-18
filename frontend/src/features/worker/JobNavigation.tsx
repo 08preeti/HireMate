@@ -2,24 +2,24 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FiArrowLeft, FiExternalLink } from "react-icons/fi";
 import LocationSharePanel from "@/components/maps/LocationSharePanel";
 import MapViewLazy from "@/components/maps/MapViewLazy";
+import NavigationPanel from "@/components/maps/NavigationPanel";
 import { useGeoWatch } from "@/hooks/useGeoWatch";
 import { useL } from "@/hooks/useL";
+import { useLiveRoute } from "@/hooks/useLiveRoute";
+import { useWakeLock } from "@/hooks/useWakeLock";
 import { haversine } from "@/lib/geo";
-import { clockTime, formatDistance, formatDuration, googleMapsDirectionsUrl, isValidLatLng } from "@/lib/maps";
+import { formatDistance, formatDuration, googleMapsDirectionsUrl, isValidLatLng } from "@/lib/maps";
 import { jobLocationOf, jobTitleOf } from "@/lib/workerApplications";
-import { ApiError } from "@/services/api";
 import { requestCompletion, setLocationConsent, updateApplicationStatus } from "@/services/applications";
 import { getRouteToJob } from "@/services/location";
-import type { LatLng, MapMarker, RouteInfo } from "@/types";
+import type { LatLng, LocationStatus, MapMarker } from "@/types";
 import { useWorkerApplications } from "./useApplicationActions";
 
 const ACTIVE = ["confirmed", "on_the_way", "arrived"];
-const REROUTE_MIN_KM = 0.1;
-const REROUTE_MIN_MS = 15_000;
 const NEAR_SITE_KM = 0.1;
 
 function Frame({ children }: { children: React.ReactNode }) {
@@ -41,61 +41,45 @@ export default function JobNavigation() {
   const app = state.apps.find((a) => a._id === appId);
 
   const geo = useGeoWatch();
-  const [route, setRoute] = useState<{ info: RouteInfo; at: number } | null>(null);
-  const [routeProblem, setRouteProblem] = useState<string | null>(null);
-  const [routing, setRouting] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const lastRoute = useRef<{ at: number; lat: number; lng: number } | null>(null);
-  const routingRef = useRef(false);
+  const [tripStart, setTripStart] = useState<LatLng | null>(null);
 
   const job = app?.job;
   const dest = useMemo<LatLng | null>(() => (isValidLatLng(job?.latitude, job?.longitude) ? { lat: job!.latitude as number, lng: job!.longitude as number } : null), [job]);
   const eligible = !!app && ACTIVE.includes(app.status ?? "") && !app.isCompleted;
   const here: LatLng | null = geo.fix ? { lat: geo.fix.lat, lng: geo.fix.lng } : null;
   const address = app ? jobLocationOf(app, language) : "";
+  const navigating = geo.status === "watching";
 
-  const refreshRoute = useCallback(
-    async (from: LatLng) => {
-      if (!appId || routingRef.current) return;
-      routingRef.current = true;
-      setRouting(true);
-      lastRoute.current = { at: Date.now(), lat: from.lat, lng: from.lng };
-      try {
-        const info = await getRouteToJob(appId, from);
-        setRoute({ info, at: Date.now() });
-        setRouteProblem(null);
-      } catch (err) {
-        const status = err instanceof ApiError ? err.status : 0;
-        setRouteProblem(
-          status === 404
-            ? L("No driving route was found. Use Google Maps below.", "ड्राइविंग रूट नहीं मिला। नीचे Google Maps का उपयोग करें।", "ड्रायव्हिंग मार्ग सापडला नाही. खाली Google Maps वापरा.")
-            : status === 429
-              ? L("Too many route requests. Please wait a moment.", "रूट के बहुत अनुरोध। कृपया थोड़ा रुकें।", "मार्गाच्या खूप विनंत्या. कृपया थोडे थांबा.")
-              : status === 0
-                ? L("No internet connection. The route will update when you are back online.", "इंटरनेट नहीं है। इंटरनेट लौटने पर रूट अपडेट होगा।", "इंटरनेट नाही. इंटरनेट आल्यावर मार्ग अपडेट होईल.")
-                : L("The routing service is not available right now. You can still use Google Maps below.", "रूटिंग सेवा अभी उपलब्ध नहीं है। आप नीचे Google Maps का उपयोग कर सकते हैं।", "रूटिंग सेवा सध्या उपलब्ध नाही. तुम्ही खाली Google Maps वापरू शकता."),
-        );
-      } finally {
-        routingRef.current = false;
-        setRouting(false);
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [appId, language],
-  );
+  // The first route is requested at once; after that only when the worker leaves the route (see useLiveRoute).
+  const live = useLiveRoute({
+    position: geo.fix,
+    destination: dest,
+    enabled: eligible && navigating,
+    fetchRoute: (from) => getRouteToJob(appId ?? "", from),
+  });
+  const { info: routeInfo, progress, next: nextStep } = live;
 
-  // Calculate the first route, then only recalculate after moving ~100 m (and at most every 15 s).
-  const fixLat = geo.fix?.lat;
-  const fixLng = geo.fix?.lng;
+  // Where this navigation session began; cleared when navigation stops.
   useEffect(() => {
-    if (!eligible || !dest || fixLat === undefined || fixLng === undefined) return;
-    const prev = lastRoute.current;
-    const elapsed = prev ? Date.now() - prev.at : Infinity;
-    const movedKm = prev ? haversine(prev.lat, prev.lng, fixLat, fixLng) : Infinity;
-    if (elapsed < REROUTE_MIN_MS) return;
-    if (!route || routeProblem || movedKm >= REROUTE_MIN_KM) void refreshRoute({ lat: fixLat, lng: fixLng });
-  }, [fixLat, fixLng, eligible, dest, route, routeProblem, refreshRoute]);
+    if (!navigating) setTripStart(null);
+    else if (!tripStart && here) setTripStart(here);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigating, here?.lat, here?.lng]);
+
+  useWakeLock(eligible && navigating);
+
+  const routeProblem =
+    live.problem === "notFound"
+      ? L("No driving route was found. Use Google Maps below.", "ड्राइविंग रूट नहीं मिला। नीचे Google Maps का उपयोग करें।", "ड्रायव्हिंग मार्ग सापडला नाही. खाली Google Maps वापरा.")
+      : live.problem === "busy"
+        ? L("Too many route requests. Please wait a moment.", "रूट के बहुत अनुरोध। कृपया थोड़ा रुकें।", "मार्गाच्या खूप विनंत्या. कृपया थोडे थांबा.")
+        : live.problem === "offline"
+          ? L("No internet connection. The route will update when you are back online.", "इंटरनेट नहीं है। इंटरनेट लौटने पर रूट अपडेट होगा।", "इंटरनेट नाही. इंटरनेट आल्यावर मार्ग अपडेट होईल.")
+          : live.problem
+            ? L("The routing service is not available right now. You can still use Google Maps below.", "रूटिंग सेवा अभी उपलब्ध नहीं है। आप नीचे Google Maps का उपयोग कर सकते हैं।", "रूटिंग सेवा सध्या उपलब्ध नाही. तुम्ही खाली Google Maps वापरू शकता.")
+            : null;
 
   useEffect(() => {
     if (!eligible) geo.stop();
@@ -144,12 +128,13 @@ export default function JobNavigation() {
   }
 
   const markers: MapMarker[] = [{ id: "dest", kind: "destination", position: [dest.lat, dest.lng], label: address || L("Job location", "काम की जगह", "कामाचे ठिकाण") }];
+  if (tripStart && navigating) markers.push({ id: "start", kind: "start", position: [tripStart.lat, tripStart.lng], label: L("Where you started", "जहाँ से शुरू किया", "जिथून सुरू केले") });
   if (here) markers.push({ id: "me", kind: "worker", position: [here.lat, here.lng], label: L("You are here", "आप यहाँ हैं", "तुम्ही येथे आहात") });
   const straightKm = here ? haversine(here.lat, here.lng, dest.lat, dest.lng) : null;
   const nearSite = straightKm !== null && straightKm <= NEAR_SITE_KM;
-  const nextStep = route?.info.steps[1] ?? route?.info.steps[0];
-  const arriveAt = route ? route.at + route.info.durationSeconds * 1000 : null;
-  const navigating = geo.status === "watching";
+  const remainingMeters = progress?.remainingMeters ?? null;
+  const remainingSeconds = progress?.remainingSeconds ?? null;
+  const locationStatus: LocationStatus = geo.status === "denied" ? "denied" : geo.status === "unavailable" || geo.status === "timeout" || geo.status === "unsupported" ? "unavailable" : navigating ? "live" : geo.status === "requesting" ? "waiting" : "off";
 
   const geoMessage =
     geo.status === "denied"
@@ -171,16 +156,16 @@ export default function JobNavigation() {
         <div className="min-w-0 flex-1">
           <div className="truncate text-[15px] font-bold">{jobTitleOf(app, language)}</div>
           <div className="text-[12.5px] opacity-90">
-            {route ? `${formatDistance(route.info.distanceMeters)} · ${formatDuration(route.info.durationSeconds)}${arriveAt ? ` · ${L("Arrive about", "लगभग पहुँचेंगे", "सुमारे पोहोचाल")} ${clockTime(arriveAt)}` : ""}` : navigating ? (routing ? L("Calculating route…", "रूट निकाला जा रहा है…", "मार्ग काढत आहे…") : L("Route not available yet", "रूट अभी उपलब्ध नहीं", "मार्ग अजून उपलब्ध नाही")) : L("Navigation not started", "नेविगेशन शुरू नहीं हुआ", "नेव्हिगेशन सुरू नाही")}
+            {progress && remainingMeters !== null && remainingSeconds !== null ? `${formatDistance(remainingMeters)} · ${formatDuration(remainingSeconds)}` : navigating ? (live.fetching ? L("Calculating route…", "रूट निकाला जा रहा है…", "मार्ग काढत आहे…") : L("Route not available yet", "रूट अभी उपलब्ध नहीं", "मार्ग अजून उपलब्ध नाही")) : L("Navigation not started", "नेविगेशन शुरू नहीं हुआ", "नेव्हिगेशन सुरू नाही")}
           </div>
         </div>
-        {routing && route && <span className="text-[12px] opacity-80">{L("Updating…", "अपडेट हो रहा है…", "अपडेट होत आहे…")}</span>}
+        {live.status === "rerouting" && <span className="text-[12px] opacity-80">{L("Updating…", "अपडेट हो रहा है…", "अपडेट होत आहे…")}</span>}
       </div>
 
-      {nextStep && navigating && <div className="shrink-0 bg-[#1a1a2e] px-4 py-2.5 text-[14px] text-white"><b>{L("Next", "अगला", "पुढे")}:</b> {nextStep}</div>}
+      {nextStep && navigating && <div className="shrink-0 bg-[#1a1a2e] px-4 py-2.5 text-[14px] text-white"><b>{L("Next", "अगला", "पुढे")}:</b> {nextStep.text}{nextStep.inMeters > 0 ? ` · ${formatDistance(nextStep.inMeters)}` : ""}</div>}
 
       <div className="relative min-h-0 flex-1">
-        <MapViewLazy center={markers[markers.length - 1].position} markers={markers} route={route?.info.coordinates} focusKey={navigating ? "nav" : "idle"} />
+        <MapViewLazy center={markers[markers.length - 1].position} markers={markers} route={progress?.remaining ?? routeInfo?.coordinates} routeDone={progress?.done} focusKey={navigating ? "nav" : "idle"} />
         <a href={googleMapsDirectionsUrl(dest, here ?? undefined)} target="_blank" rel="noopener noreferrer" className="absolute right-3 top-3 z-[500] flex items-center gap-1.5 rounded-lg border border-[#ddd] bg-white px-3 py-2 text-[12.5px] font-semibold text-[#1a73e8] no-underline shadow">
           <FiExternalLink aria-hidden="true" /> {L("Open in Google Maps", "Google Maps में खोलें", "Google Maps मध्ये उघडा")}
         </a>
@@ -188,11 +173,17 @@ export default function JobNavigation() {
 
       <div className="z-[500] max-h-[55vh] shrink-0 overflow-y-auto rounded-t-3xl bg-white px-5 pb-8 pt-4 shadow-[0_-4px_24px_rgba(0,0,0,0.12)]">
         <div className="mb-1 text-[15px] font-bold text-[#1a1a1a]">{address || L("Job location", "काम की जगह", "कामाचे ठिकाण")}</div>
-        {here && !route && straightKm !== null && <div className="mb-2 text-[13px] text-gray-500">{L("Straight-line distance", "सीधी दूरी", "सरळ अंतर")}: {formatDistance(straightKm * 1000)}</div>}
-        {routeProblem && <div role="alert" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">{routeProblem}{route ? ` ${L("Showing the last route.", "आखिरी रूट दिखाया जा रहा है।", "शेवटचा मार्ग दाखवला आहे.")}` : ""}</div>}
+        {here && !routeInfo && straightKm !== null && <div className="mb-2 text-[13px] text-gray-500">{L("Straight-line distance", "सीधी दूरी", "सरळ अंतर")}: {formatDistance(straightKm * 1000)}</div>}
+        {routeProblem && <div role="alert" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">{routeProblem}{routeInfo ? ` ${L("Showing the last route.", "आखिरी रूट दिखाया जा रहा है।", "शेवटचा मार्ग दाखवला आहे.")}` : ""}</div>}
         {geoMessage && <div role="alert" className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-800">{geoMessage}</div>}
         {actionError && <div role="alert" className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-800">{actionError}</div>}
         {nearSite && app.status !== "arrived" && <div role="status" className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] text-emerald-800">{L("You are close to the site. Tap “I have arrived” when you reach it.", "आप साइट के पास हैं। पहुँचकर “मैं पहुँच गया” दबाएं।", "तुम्ही साइटजवळ आहात. पोहोचल्यावर “मी पोहोचलो” दाबा.")}</div>}
+
+        {navigating && (
+          <div className="mb-3">
+            <NavigationPanel distanceMeters={remainingMeters} etaSeconds={remainingSeconds} locationStatus={locationStatus} routeStatus={live.status} destination={address || undefined} updatedAt={geo.fix?.timestamp ?? null} />
+          </div>
+        )}
 
         {!navigating ? (
           <button type="button" disabled={geo.status === "requesting"} onClick={() => void geo.start()} className={`${PRIMARY} bg-brand`}>

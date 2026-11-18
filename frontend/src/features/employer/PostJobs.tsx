@@ -1,15 +1,57 @@
 "use client";
 
-import { useState, useRef, useEffect, type FormEvent, type ReactNode } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
-import { MapContainer, TileLayer, Marker, Tooltip, useMapEvents, useMap } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Tooltip,
+  useMapEvents,
+  useMap,
+} from "react-leaflet";
 import L from "leaflet";
 import {
-  FiBox, FiCheck, FiChevronRight, FiClock, FiCrosshair, FiEdit2, FiHome, FiInfo, FiLayers,
-  FiMapPin, FiMaximize2, FiMoon, FiNavigation, FiPhone, FiSend, FiStar, FiSun, FiTool,
-  FiTruck, FiZap, FiEdit3, FiSearch, FiPlus, FiCoffee, FiShield, FiDroplet, FiScissors,
+  FiBox,
+  FiCheck,
+  FiChevronRight,
+  FiClock,
+  FiCrosshair,
+  FiEdit2,
+  FiHome,
+  FiInfo,
+  FiLayers,
+  FiMapPin,
+  FiMaximize2,
+  FiMoon,
+  FiNavigation,
+  FiPhone,
+  FiSend,
+  FiStar,
+  FiSun,
+  FiTool,
+  FiTruck,
+  FiZap,
+  FiEdit3,
+  FiSearch,
+  FiPlus,
+  FiCoffee,
+  FiShield,
+  FiDroplet,
+  FiScissors,
 } from "react-icons/fi";
-import { getMyJob, postJob, updateJob, type NewJobPayload } from "@/services/jobs";
+import {
+  getMyJob,
+  postJob,
+  updateJob,
+  type NewJobPayload,
+} from "@/services/jobs";
 import { ApiError } from "@/services/api";
 import { reversePlace, searchPlaces } from "@/services/location";
 import { fixLeafletIcons } from "@/lib/leaflet";
@@ -34,17 +76,29 @@ const redPin = new L.DivIcon({
   html: `<div class="relative w-8 h-[42px]">
     <div class="w-8 h-8 rounded-[50%_50%_50%_0] bg-danger border-[3px] border-white -rotate-45 shadow-[0_3px_10px_rgba(232,0,42,.5)]"></div>
     <div class="absolute top-1.5 left-1.5 w-3 h-3 rounded-full bg-white"></div></div>`,
-  iconSize: [32, 42], iconAnchor: [16, 42], className: "",
+  iconSize: [32, 42],
+  iconAnchor: [16, 42],
+  className: "",
 });
 
 function MapMover({ center }: { center: [number, number] | null }) {
   const map = useMap();
-  useEffect(() => { if (center) map.setView(center, 17, { animate: true, duration: 0.8 }); }, [center, map]);
+  useEffect(() => {
+    if (center) map.setView(center, 17, { animate: true, duration: 0.8 });
+  }, [center, map]);
   return null;
 }
 
-function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
-  useMapEvents({ click(e) { onMapClick(e.latlng.lat, e.latlng.lng); } });
+function MapClickHandler({
+  onMapClick,
+}: {
+  onMapClick: (lat: number, lng: number) => void;
+}) {
+  useMapEvents({
+    click(e) {
+      onMapClick(e.latlng.lat, e.latlng.lng);
+    },
+  });
   return null;
 }
 
@@ -53,7 +107,10 @@ async function searchLocations(query: string): Promise<LocationSuggestion[]> {
   return (await searchPlaces(query)).results;
 }
 
-async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+async function reverseGeocode(
+  lat: number,
+  lng: number,
+): Promise<string | null> {
   try {
     return (await reversePlace(lat, lng)).label;
   } catch {
@@ -62,71 +119,280 @@ async function reverseGeocode(lat: number, lng: number): Promise<string | null> 
 }
 
 // ── Static option lists ────────────────────────────────────────────────────
-const JOB_GROUPS: { key: string; label: string; icon: ReactNode; jobs: string[] }[] = [
-  { key: "construction", label: "Construction & Civil", icon: <FiHome />, jobs: [
-    "Construction Helper", "Mason / Rajmistri", "Concrete Worker", "Bar Bender / Steel Fixer", "Shuttering Carpenter",
-    "Scaffolder", "Tile / Marble Fitter", "Plasterer", "Waterproofing Worker", "Road Construction Labour",
-    "Paver Block Worker", "JCB / Crane Operator", "Site Supervisor / Mukadam", "Demolition Labour", "Borewell / Well Digger",
-    "False Ceiling Worker", "Glass & Aluminium Fitter", "Stone Cutter", "Brick Layer",
-  ] },
-  { key: "electrical", label: "Electrical & Repair", icon: <FiZap />, jobs: [
-    "Electrician", "Wireman", "AC Technician", "Fridge / Washing Machine Technician", "Solar Panel Installer",
-    "CCTV Installer", "Mobile Repair Technician", "TV / Appliance Repair", "Inverter / Battery Technician",
-    "Generator Mechanic", "Lift Technician", "Lineman / Cable Puller", "Computer / Laptop Technician", "RO / Water Purifier Technician",
-  ] },
-  { key: "mechanical", label: "Plumbing & Mechanical", icon: <FiTool />, jobs: [
-    "Plumber", "Pipe Fitter", "Sanitary Fitter", "Pump / Motor Mechanic", "Welder", "Fabricator",
-    "Lathe / Turner", "Fitter", "Machine Operator", "Gas Pipeline Fitter", "Bike Mechanic", "Car Mechanic",
-    "Tyre / Puncture Repair", "Car Denter / Painter", "Auto Electrician", "Truck Mechanic",
-  ] },
-  { key: "painting", label: "Painting & Carpentry", icon: <FiEdit3 />, jobs: [
-    "Painter", "Polisher", "POP / Gypsum Worker", "Texture / Wallpaper Painter", "Carpenter", "Furniture Maker",
-    "Modular Kitchen Installer", "Sign Board / Flex Installer", "Door & Window Fitter", "Upholstery Worker",
-  ] },
-  { key: "driving", label: "Driving & Delivery", icon: <FiTruck />, jobs: [
-    "Car Driver", "Auto Rickshaw Driver", "Truck Driver", "Tempo / Pickup Driver", "Bus Driver", "Tractor Driver",
-    "Cab Driver", "Forklift Operator", "Bike Delivery Rider", "Courier Delivery Boy", "Packers & Movers Helper",
-    "Vehicle Cleaner / Helper", "Driver Cum Helper", "School Van Driver",
-  ] },
-  { key: "factory", label: "Warehouse & Factory", icon: <FiBox />, jobs: [
-    "Warehouse & Loader", "Packing Worker", "Factory Worker", "General Helper / Labour", "Quality Checker",
-    "Sorting Worker", "Hamal / Mathadi (Loading-Unloading)", "Tailor / Stitching Worker", "Textile / Power Loom Worker",
-    "Garment Ironing Worker", "Food Processing Worker", "Dispatch Helper", "Store Keeper", "Printing Press Worker",
-    "Bakery Helper", "Brick Kiln Worker",
-  ] },
-  { key: "home", label: "Housekeeping & Home Help", icon: <FiStar />, jobs: [
-    "House Maid", "Cook", "Babysitter / Nanny", "Elderly Care Attendant", "Patient Attendant / Ward Boy",
-    "Post-Work Cleaner", "Office Cleaner", "Sweeper", "Dishwasher", "Laundry / Dhobi", "Gardener / Mali",
-    "Pest Control Worker", "Car Washer", "Water Tank Cleaner", "Sofa / Carpet Cleaner", "Home Shifting Helper",
-  ] },
-  { key: "hospitality", label: "Hotel, Food & Retail", icon: <FiCoffee />, jobs: [
-    "Waiter", "Kitchen Helper", "Chef / Head Cook", "Tandoor / Roti Maker", "Chai / Tea Maker", "Cashier",
-    "Sales Boy / Girl", "Shop Helper", "Street Food Helper", "Catering Boy", "Event Helper", "Tent / Decoration Worker",
-    "Banquet Staff", "Sound / DJ Helper", "Hotel Room Boy", "Delivery Packer",
-  ] },
-  { key: "security", label: "Security & Office", icon: <FiShield />, jobs: [
-    "Security Guard", "Watchman", "Gatekeeper", "Society Caretaker", "Peon / Office Boy", "Receptionist",
-    "Data Entry Operator", "Telecaller", "Office Helper", "Lift Operator", "Parking Attendant", "Bouncer",
-  ] },
-  { key: "farm", label: "Agriculture & Outdoor", icon: <FiDroplet />, jobs: [
-    "Farm Labour", "Harvesting Worker", "Sugarcane Cutter", "Fruit / Vegetable Picker", "Nursery / Plant Worker",
-    "Dairy / Cattle Worker", "Poultry Worker", "Irrigation Worker", "Fishing Worker", "Tree Cutter / Climber",
-    "Sheep / Goat Herder", "Grain Loader",
-  ] },
-  { key: "personal", label: "Beauty & Personal Services", icon: <FiScissors />, jobs: [
-    "Barber / Hair Cutter", "Beautician", "Massage Therapist", "Mehendi Artist", "Cobbler",
-    "Tailor (Ladies / Gents)", "Photographer", "Videographer", "Pharmacy Helper", "Salon Helper",
-  ] },
+const JOB_GROUPS: {
+  key: string;
+  label: string;
+  icon: ReactNode;
+  jobs: string[];
+}[] = [
+  {
+    key: "construction",
+    label: "Construction & Civil",
+    icon: <FiHome />,
+    jobs: [
+      "Construction Helper",
+      "Mason / Rajmistri",
+      "Concrete Worker",
+      "Bar Bender / Steel Fixer",
+      "Shuttering Carpenter",
+      "Scaffolder",
+      "Tile / Marble Fitter",
+      "Plasterer",
+      "Waterproofing Worker",
+      "Road Construction Labour",
+      "Paver Block Worker",
+      "JCB / Crane Operator",
+      "Site Supervisor / Mukadam",
+      "Demolition Labour",
+      "Borewell / Well Digger",
+      "False Ceiling Worker",
+      "Glass & Aluminium Fitter",
+      "Stone Cutter",
+      "Brick Layer",
+    ],
+  },
+  {
+    key: "electrical",
+    label: "Electrical & Repair",
+    icon: <FiZap />,
+    jobs: [
+      "Electrician",
+      "Wireman",
+      "AC Technician",
+      "Fridge / Washing Machine Technician",
+      "Solar Panel Installer",
+      "CCTV Installer",
+      "Mobile Repair Technician",
+      "TV / Appliance Repair",
+      "Inverter / Battery Technician",
+      "Generator Mechanic",
+      "Lift Technician",
+      "Lineman / Cable Puller",
+      "Computer / Laptop Technician",
+      "RO / Water Purifier Technician",
+    ],
+  },
+  {
+    key: "mechanical",
+    label: "Plumbing & Mechanical",
+    icon: <FiTool />,
+    jobs: [
+      "Plumber",
+      "Pipe Fitter",
+      "Sanitary Fitter",
+      "Pump / Motor Mechanic",
+      "Welder",
+      "Fabricator",
+      "Lathe / Turner",
+      "Fitter",
+      "Machine Operator",
+      "Gas Pipeline Fitter",
+      "Bike Mechanic",
+      "Car Mechanic",
+      "Tyre / Puncture Repair",
+      "Car Denter / Painter",
+      "Auto Electrician",
+      "Truck Mechanic",
+    ],
+  },
+  {
+    key: "painting",
+    label: "Painting & Carpentry",
+    icon: <FiEdit3 />,
+    jobs: [
+      "Painter",
+      "Polisher",
+      "POP / Gypsum Worker",
+      "Texture / Wallpaper Painter",
+      "Carpenter",
+      "Furniture Maker",
+      "Modular Kitchen Installer",
+      "Sign Board / Flex Installer",
+      "Door & Window Fitter",
+      "Upholstery Worker",
+    ],
+  },
+  {
+    key: "driving",
+    label: "Driving & Delivery",
+    icon: <FiTruck />,
+    jobs: [
+      "Car Driver",
+      "Auto Rickshaw Driver",
+      "Truck Driver",
+      "Tempo / Pickup Driver",
+      "Bus Driver",
+      "Tractor Driver",
+      "Cab Driver",
+      "Forklift Operator",
+      "Bike Delivery Rider",
+      "Courier Delivery Boy",
+      "Packers & Movers Helper",
+      "Vehicle Cleaner / Helper",
+      "Driver Cum Helper",
+      "School Van Driver",
+    ],
+  },
+  {
+    key: "factory",
+    label: "Warehouse & Factory",
+    icon: <FiBox />,
+    jobs: [
+      "Warehouse & Loader",
+      "Packing Worker",
+      "Factory Worker",
+      "General Helper / Labour",
+      "Quality Checker",
+      "Sorting Worker",
+      "Hamal / Mathadi (Loading-Unloading)",
+      "Tailor / Stitching Worker",
+      "Textile / Power Loom Worker",
+      "Garment Ironing Worker",
+      "Food Processing Worker",
+      "Dispatch Helper",
+      "Store Keeper",
+      "Printing Press Worker",
+      "Bakery Helper",
+      "Brick Kiln Worker",
+    ],
+  },
+  {
+    key: "home",
+    label: "Housekeeping & Home Help",
+    icon: <FiStar />,
+    jobs: [
+      "House Maid",
+      "Cook",
+      "Babysitter / Nanny",
+      "Elderly Care Attendant",
+      "Patient Attendant / Ward Boy",
+      "Post-Work Cleaner",
+      "Office Cleaner",
+      "Sweeper",
+      "Dishwasher",
+      "Laundry / Dhobi",
+      "Gardener / Mali",
+      "Pest Control Worker",
+      "Car Washer",
+      "Water Tank Cleaner",
+      "Sofa / Carpet Cleaner",
+      "Home Shifting Helper",
+    ],
+  },
+  {
+    key: "hospitality",
+    label: "Hotel, Food & Retail",
+    icon: <FiCoffee />,
+    jobs: [
+      "Waiter",
+      "Kitchen Helper",
+      "Chef / Head Cook",
+      "Tandoor / Roti Maker",
+      "Chai / Tea Maker",
+      "Cashier",
+      "Sales Boy / Girl",
+      "Shop Helper",
+      "Street Food Helper",
+      "Catering Boy",
+      "Event Helper",
+      "Tent / Decoration Worker",
+      "Banquet Staff",
+      "Sound / DJ Helper",
+      "Hotel Room Boy",
+      "Delivery Packer",
+    ],
+  },
+  {
+    key: "security",
+    label: "Security & Office",
+    icon: <FiShield />,
+    jobs: [
+      "Security Guard",
+      "Watchman",
+      "Gatekeeper",
+      "Society Caretaker",
+      "Peon / Office Boy",
+      "Receptionist",
+      "Data Entry Operator",
+      "Telecaller",
+      "Office Helper",
+      "Lift Operator",
+      "Parking Attendant",
+      "Bouncer",
+    ],
+  },
+  {
+    key: "farm",
+    label: "Agriculture & Outdoor",
+    icon: <FiDroplet />,
+    jobs: [
+      "Farm Labour",
+      "Harvesting Worker",
+      "Sugarcane Cutter",
+      "Fruit / Vegetable Picker",
+      "Nursery / Plant Worker",
+      "Dairy / Cattle Worker",
+      "Poultry Worker",
+      "Irrigation Worker",
+      "Fishing Worker",
+      "Tree Cutter / Climber",
+      "Sheep / Goat Herder",
+      "Grain Loader",
+    ],
+  },
+  {
+    key: "personal",
+    label: "Beauty & Personal Services",
+    icon: <FiScissors />,
+    jobs: [
+      "Barber / Hair Cutter",
+      "Beautician",
+      "Massage Therapist",
+      "Mehendi Artist",
+      "Cobbler",
+      "Tailor (Ladies / Gents)",
+      "Photographer",
+      "Videographer",
+      "Pharmacy Helper",
+      "Salon Helper",
+    ],
+  },
 ];
 
 const CUSTOM_JOBS_KEY = "hiremate_custom_jobs";
-const ALL_JOBS = JOB_GROUPS.flatMap((g) => g.jobs.map((label) => ({ label, group: g.key, icon: g.icon })));
+const ALL_JOBS = JOB_GROUPS.flatMap((g) =>
+  g.jobs.map((label) => ({ label, group: g.key, icon: g.icon })),
+);
 
 type ShiftKey = "day" | "night" | "half";
-const SHIFTS: { key: ShiftKey; title: string; time: string; note: string; icon: ReactNode }[] = [
-  { key: "day", title: "Standard Day Shift", time: "08:00 AM – 05:00 PM", note: "9 hrs (includes 1 hr lunch)", icon: <FiSun /> },
-  { key: "night", title: "Night Shift", time: "08:00 PM – 04:00 AM", note: "8 hrs night allowance", icon: <FiMoon /> },
-  { key: "half", title: "Half Day / Hourly", time: "4 Hours Flexible", note: "Short turnaround", icon: <FiClock /> },
+const SHIFTS: {
+  key: ShiftKey;
+  title: string;
+  time: string;
+  note: string;
+  icon: ReactNode;
+}[] = [
+  {
+    key: "day",
+    title: "Standard Day Shift",
+    time: "08:00 AM – 05:00 PM",
+    note: "9 hrs (includes 1 hr lunch)",
+    icon: <FiSun />,
+  },
+  {
+    key: "night",
+    title: "Night Shift",
+    time: "08:00 PM – 04:00 AM",
+    note: "8 hrs night allowance",
+    icon: <FiMoon />,
+  },
+  {
+    key: "half",
+    title: "Half Day / Hourly",
+    time: "4 Hours Flexible",
+    note: "Short turnaround",
+    icon: <FiClock />,
+  },
 ];
 
 type DateMode = "today" | "tomorrow" | "custom";
@@ -144,7 +410,11 @@ const JOB_TYPES: { value: JobType; label: string }[] = [
   { value: "contract", label: "Contract" },
 ];
 
-const PAY_UNITS: { value: "hour" | "day" | "week" | "month"; label: string; short: string }[] = [
+const PAY_UNITS: {
+  value: "hour" | "day" | "week" | "month";
+  label: string;
+  short: string;
+}[] = [
   { value: "hour", label: "Hourly", short: "Hour" },
   { value: "day", label: "Daily", short: "Day" },
   { value: "week", label: "Weekly", short: "Week" },
@@ -160,10 +430,19 @@ const isoDay = (offset: number) => {
 type FormErrors = Record<string, string>;
 
 function FieldError({ message }: { message?: string }) {
-  return message ? <p role="alert" className="mt-1.5 text-[12px] font-medium text-red-600">{message}</p> : null;
+  return message ? (
+    <p role="alert" className="mt-1.5 text-[12px] font-medium text-red-600">
+      {message}
+    </p>
+  ) : null;
 }
 
-const PERKS = ["Free Lunch / Chai", "Safety Helmets", "Travel Allowance", "Filtered Water & Shade"];
+const PERKS = [
+  "Free Lunch / Chai",
+  "Safety Helmets",
+  "Travel Allowance",
+  "Filtered Water & Shade",
+];
 
 // Values stay compatible with what the backend / AI scoring already expects.
 const SETTLEMENTS = [
@@ -173,18 +452,35 @@ const SETTLEMENTS = [
 ];
 
 // ── Small UI helpers ───────────────────────────────────────────────────────
-const LABEL = "block text-[11px] font-bold tracking-[0.08em] text-slate-500 uppercase mb-2";
+const LABEL =
+  "block text-[11px] font-bold tracking-[0.08em] text-slate-500 uppercase mb-2";
 const INPUT =
   "w-full h-11 rounded-lg border border-slate-200 bg-white px-3.5 text-[14px] text-slate-900 placeholder:text-slate-400 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100";
 
-function SectionCard({ n, title, subtitle, badge, children }: { n: number; title: string; subtitle: string; badge?: ReactNode; children: ReactNode }) {
+function SectionCard({
+  n,
+  title,
+  subtitle,
+  badge,
+  children,
+}: {
+  n: number;
+  title: string;
+  subtitle: string;
+  badge?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <section className="bg-white rounded-2xl border border-slate-200 shadow-[0_1px_2px_rgba(15,23,42,.04)] p-5 sm:p-6">
       <div className="flex items-start justify-between gap-3 pb-4 mb-5 border-b border-slate-100">
         <div className="flex items-start gap-3">
-          <span className="w-9 h-9 shrink-0 rounded-lg bg-red-50 text-red-600 font-bold text-[14px] flex items-center justify-center">{n}</span>
+          <span className="w-9 h-9 shrink-0 rounded-lg bg-red-50 text-red-600 font-bold text-[14px] flex items-center justify-center">
+            {n}
+          </span>
           <div>
-            <h2 className="text-[18px] font-bold text-slate-900 leading-tight">{title}</h2>
+            <h2 className="text-[18px] font-bold text-slate-900 leading-tight">
+              {title}
+            </h2>
             <p className="text-[13px] text-slate-500 mt-0.5">{subtitle}</p>
           </div>
         </div>
@@ -195,13 +491,25 @@ function SectionCard({ n, title, subtitle, badge, children }: { n: number; title
   );
 }
 
-function Tile({ active, onClick, children, className = "" }: { active: boolean; onClick: () => void; children: ReactNode; className?: string }) {
+function Tile({
+  active,
+  onClick,
+  children,
+  className = "",
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={`rounded-lg border-2 text-left cursor-pointer transition-colors ${
-        active ? "border-red-500 bg-red-50" : "border-slate-200 bg-white hover:border-slate-300"
+        active
+          ? "border-red-500 bg-red-50"
+          : "border-slate-200 bg-white hover:border-slate-300"
       } ${className}`}
     >
       {children}
@@ -209,19 +517,39 @@ function Tile({ active, onClick, children, className = "" }: { active: boolean; 
   );
 }
 
-function Check({ checked, onChange, children, className = "" }: { checked: boolean; onChange: (v: boolean) => void; children: ReactNode; className?: string }) {
+function Check({
+  checked,
+  onChange,
+  children,
+  className = "",
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <label className={`flex items-center gap-2.5 cursor-pointer text-[13px] text-slate-700 ${className}`}>
-      <span className={`w-[18px] h-[18px] shrink-0 rounded flex items-center justify-center border ${checked ? "bg-red-500 border-red-500 text-white" : "bg-white border-slate-300"}`}>
+    <label
+      className={`flex items-center gap-2.5 cursor-pointer text-[13px] text-slate-700 ${className}`}
+    >
+      <span
+        className={`w-[18px] h-[18px] shrink-0 rounded flex items-center justify-center border ${checked ? "bg-red-500 border-red-500 text-white" : "bg-white border-slate-300"}`}
+      >
         {checked && <FiCheck size={12} strokeWidth={3} />}
       </span>
-      <input type="checkbox" className="sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <input
+        type="checkbox"
+        className="sr-only"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
       {children}
     </label>
   );
 }
 
-const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmt = (n: number) =>
+  `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // ══════════════════════════════════════════════════════════════════════════
 export default function PostJobs({ jobId }: { jobId?: string } = {}) {
@@ -285,7 +613,9 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
   const [summary, setSummary] = useState("");
 
   // Payment
-  const [salaryUnit, setSalaryUnit] = useState<"hour" | "day" | "week" | "month">("day");
+  const [salaryUnit, setSalaryUnit] = useState<
+    "hour" | "day" | "week" | "month"
+  >("day");
   const [paymentDetails, setPaymentDetails] = useState("");
 
   // Work
@@ -311,7 +641,8 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
 
   // Prefill the hiring entity with the signed-in company.
   useEffect(() => {
-    if (employer?.companyName) setCompany((c) => c || employer.companyName || "");
+    if (employer?.companyName)
+      setCompany((c) => c || employer.companyName || "");
   }, [employer?.companyName]);
 
   // "Quick worker request" links from the employer dashboard arrive as /post-job?skill=Driver.
@@ -322,8 +653,15 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
     const s = skill.toLowerCase();
     const hit =
       ALL_JOBS.find((j) => j.label.toLowerCase() === s) ??
-      ALL_JOBS.find((j) => j.label.toLowerCase().includes(s) || s.includes(j.label.toLowerCase()));
-    if (hit) { setTrade(hit.label); setGroupKey(hit.group); } else setTrade(skill);
+      ALL_JOBS.find(
+        (j) =>
+          j.label.toLowerCase().includes(s) ||
+          s.includes(j.label.toLowerCase()),
+      );
+    if (hit) {
+      setTrade(hit.label);
+      setGroupKey(hit.group);
+    } else setTrade(skill);
   }, []);
 
   // Saved custom jobs (this browser only).
@@ -331,13 +669,20 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
     try {
       const raw = localStorage.getItem(CUSTOM_JOBS_KEY);
       const list: unknown = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(list)) setCustomJobs(list.filter((x): x is string => typeof x === "string"));
-    } catch { /* storage unavailable */ }
+      if (Array.isArray(list))
+        setCustomJobs(list.filter((x): x is string => typeof x === "string"));
+    } catch {
+      /* storage unavailable */
+    }
   }, []);
 
   const saveCustomJobs = (list: string[]) => {
     setCustomJobs(list);
-    try { localStorage.setItem(CUSTOM_JOBS_KEY, JSON.stringify(list)); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(CUSTOM_JOBS_KEY, JSON.stringify(list));
+    } catch {
+      /* ignore */
+    }
   };
 
   // Selecting a job also fills the title, unless the employer already typed their own.
@@ -357,20 +702,35 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
     const lower = name.toLowerCase();
     const known = ALL_JOBS.find((j) => j.label.toLowerCase() === lower);
     const mine = customJobs.find((j) => j.toLowerCase() === lower);
-    if (known) { setGroupKey(known.group); pickJob(known.label); }
-    else if (mine) { setGroupKey("custom"); pickJob(mine); }
-    else { saveCustomJobs([...customJobs, name]); setGroupKey("custom"); pickJob(name); }
+    if (known) {
+      setGroupKey(known.group);
+      pickJob(known.label);
+    } else if (mine) {
+      setGroupKey("custom");
+      pickJob(mine);
+    } else {
+      saveCustomJobs([...customJobs, name]);
+      setGroupKey("custom");
+      pickJob(name);
+    }
     setNewJob("");
     setAddingJob(false);
     setJobSearch("");
   };
 
-  const removeCustomJob = (name: string) => saveCustomJobs(customJobs.filter((j) => j !== name));
+  const removeCustomJob = (name: string) =>
+    saveCustomJobs(customJobs.filter((j) => j !== name));
 
   const q = jobSearch.trim().toLowerCase();
-  const customTiles = customJobs.map((label) => ({ label, icon: <FiPlus />, custom: true }));
+  const customTiles = customJobs.map((label) => ({
+    label,
+    icon: <FiPlus />,
+    custom: true,
+  }));
   const visibleJobs: { label: string; icon: ReactNode; custom?: boolean }[] = q
-    ? [...ALL_JOBS, ...customTiles].filter((j) => j.label.toLowerCase().includes(q))
+    ? [...ALL_JOBS, ...customTiles].filter((j) =>
+        j.label.toLowerCase().includes(q),
+      )
     : groupKey === "custom"
       ? customTiles
       : ALL_JOBS.filter((j) => j.group === groupKey);
@@ -379,16 +739,24 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
   const total = workers * wageNum;
   const shiftInfo = SHIFTS.find((s) => s.key === shift)!;
 
-
   // ── Edit mode: load the real job ─────────────────────────────────────────
   const fillFrom = (j: EmployerJobDetail) => {
-    const parts = (j.skills?.en || "").split(",").map((x) => x.trim()).filter(Boolean);
+    const parts = (j.skills?.en || "")
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
     const main = parts[0] || "";
-    const hit = ALL_JOBS.find((x) => x.label.toLowerCase() === main.toLowerCase());
+    const hit = ALL_JOBS.find(
+      (x) => x.label.toLowerCase() === main.toLowerCase(),
+    );
     if (main) setTrade(main);
     setGroupKey(hit ? hit.group : "custom");
     setExtraSkills(parts.slice(1).join(", "));
-    setCategory((typeof j.category === "string" && j.category) || (hit ? JOB_GROUPS.find((g) => g.key === hit.group)?.label : "") || "Other");
+    setCategory(
+      (typeof j.category === "string" && j.category) ||
+        (hit ? JOB_GROUPS.find((g) => g.key === hit.group)?.label : "") ||
+        "Other",
+    );
     setJobTitle(j.jobTitle?.en || "");
     setCompany(j.companyName || "");
     setWorkers(j.vacancies);
@@ -436,7 +804,12 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
         fillFrom(j);
       })
       .catch((err) => {
-        if (alive) setLoadError(err instanceof ApiError && err.status !== 500 ? err.message : "Could not load this job. Please try again.");
+        if (alive)
+          setLoadError(
+            err instanceof ApiError && err.status !== 500
+              ? err.message
+              : "Could not load this job. Please try again.",
+          );
       })
       .finally(() => alive && setLoadingJob(false));
     return () => {
@@ -451,16 +824,26 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
     setShowDropdown(true);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setSearchNotice("");
-    if (value.trim().length < 3) { setSuggestions([]); return; }
+    if (value.trim().length < 3) {
+      setSuggestions([]);
+      return;
+    }
     debounceRef.current = setTimeout(async () => {
       setSearching(true);
       try {
         const res = await searchLocations(value.trim());
         setSuggestions(res);
-        if (!res.length) setSearchNotice("No place found for that search. Try a nearby landmark or tap the map to drop the pin.");
+        if (!res.length)
+          setSearchNotice(
+            "No place found for that search. Try a nearby landmark or tap the map to drop the pin.",
+          );
       } catch (err) {
         setSuggestions([]);
-        setSearchNotice(err instanceof ApiError && err.message ? `${err.message} You can still tap the map to drop the pin.` : "Address search is not reachable. Check your internet connection, or tap the map to drop the pin.");
+        setSearchNotice(
+          err instanceof ApiError && err.message
+            ? `${err.message} You can still tap the map to drop the pin.`
+            : "Address search is not reachable. Check your internet connection, or tap the map to drop the pin.",
+        );
       } finally {
         setSearching(false);
         setShowDropdown(true);
@@ -486,11 +869,17 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
     setLocationNotice("");
     const addr = await reverseGeocode(lat, lng);
     if (addr) setLocation(addr);
-    else setLocationNotice("We could not find an address for this spot. The pin is still valid; type the site address yourself.");
+    else
+      setLocationNotice(
+        "We could not find an address for this spot. The pin is still valid; type the site address yourself.",
+      );
   };
 
   const detectGps = () => {
-    if (!navigator.geolocation) { setError("Geolocation is not supported on this device."); return; }
+    if (!navigator.geolocation) {
+      setError("Geolocation is not supported on this device.");
+      return;
+    }
     setDetecting(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -508,7 +897,7 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
             : "Could not read your current position. Turn on GPS, or search the address / tap the map instead.",
         );
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 },
     );
   };
 
@@ -517,19 +906,39 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
     const e: FormErrors = {};
     const digits = phone.replace(/\D/g, "");
     if (!jobTitle.trim()) e.jobTitle = "Please enter a job title.";
-    else if (jobTitle.trim().length > 150) e.jobTitle = "Job title must be 150 characters or fewer.";
-    if (!company.trim()) e.companyName = "Please enter the hiring entity / contractor name.";
-    if (workers < 1 || workers > 500) e.vacancies = "Workers required must be between 1 and 500.";
-    else if (workers < heldWorkers) e.vacancies = `${heldWorkers} worker${heldWorkers > 1 ? "s are" : " is"} already accepted or confirmed, so this cannot be lower than ${heldWorkers}.`;
-    if (!location.trim() || !pinPos) e.location = "Please search the site address or tap the map to pin the exact gate location.";
-    else if (!pinConfirmed) e.location = "Please press “Confirm location” under the map to confirm the pin.";
-    if (postalCode.trim() && !/^\d{6}$/.test(postalCode.trim())) e.postalCode = "Postal code must be 6 digits.";
-    if (digits.length !== 10) e.contactInfo = "Enter a valid 10-digit on-site contact number.";
-    if (dateMode === "custom" && !customDate && !isEdit) e.startDate = "Please choose the work date.";
-    if (!isEdit && dateMode === "custom" && customDate && customDate < isoDay(0)) e.startDate = "Work date cannot be in the past.";
+    else if (jobTitle.trim().length > 150)
+      e.jobTitle = "Job title must be 150 characters or fewer.";
+    if (!company.trim())
+      e.companyName = "Please enter the hiring entity / contractor name.";
+    if (workers < 1 || workers > 500)
+      e.vacancies = "Workers required must be between 1 and 500.";
+    else if (workers < heldWorkers)
+      e.vacancies = `${heldWorkers} worker${heldWorkers > 1 ? "s are" : " is"} already accepted or confirmed, so this cannot be lower than ${heldWorkers}.`;
+    if (!location.trim() || !pinPos)
+      e.location =
+        "Please search the site address or tap the map to pin the exact gate location.";
+    else if (!pinConfirmed)
+      e.location =
+        "Please press “Confirm location” under the map to confirm the pin.";
+    if (postalCode.trim() && !/^\d{6}$/.test(postalCode.trim()))
+      e.postalCode = "Postal code must be 6 digits.";
+    if (digits.length !== 10)
+      e.contactInfo = "Enter a valid 10-digit on-site contact number.";
+    if (dateMode === "custom" && !customDate && !isEdit)
+      e.startDate = "Please choose the work date.";
+    if (
+      !isEdit &&
+      dateMode === "custom" &&
+      customDate &&
+      customDate < isoDay(0)
+    )
+      e.startDate = "Work date cannot be in the past.";
     if (wageNum <= 0) e.salary = "Please enter the pay amount per worker.";
-    if (summary.length > 3000) e.summary = "Job description must be 3000 characters or fewer.";
-    if (note.length > 1500) e.workInstructions = "Work instructions must be 1500 characters or fewer.";
+    if (summary.length > 3000)
+      e.summary = "Job description must be 3000 characters or fewer.";
+    if (note.length > 1500)
+      e.workInstructions =
+        "Work instructions must be 1500 characters or fewer.";
     return e;
   };
 
@@ -542,12 +951,19 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
     const first = Object.keys(found)[0];
     if (first) {
       setError(found[first]);
-      document.getElementById(`field-${first}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      document
+        .getElementById(`field-${first}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
 
     const digits = phone.replace(/\D/g, "");
-    const startDate = dateMode === "today" ? isoDay(0) : dateMode === "tomorrow" ? isoDay(1) : customDate;
+    const startDate =
+      dateMode === "today"
+        ? isoDay(0)
+        : dateMode === "tomorrow"
+          ? isoDay(1)
+          : customDate;
     const payload: NewJobPayload = {
       jobTitle: jobTitle.trim(),
       companyName: company.trim(),
@@ -572,12 +988,21 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
       isUrgent: urgent,
       vacancies: workers,
       ...(!isEdit || startDate ? { startDate: startDate || undefined } : {}),
-      ...(!isEdit || original?.jobType || touched.has("jobType") ? { jobType } : {}),
-      ...(!isEdit || original?.shift || touched.has("shift") ? { shift, workSchedule: `${shiftInfo.title} (${shiftInfo.time})` } : {}),
-      ...(legacyDescription ? { description: summary.trim() } : { summary: summary.trim() }),
+      ...(!isEdit || original?.jobType || touched.has("jobType")
+        ? { jobType }
+        : {}),
+      ...(!isEdit || original?.shift || touched.has("shift")
+        ? { shift, workSchedule: `${shiftInfo.title} (${shiftInfo.time})` }
+        : {}),
+      ...(legacyDescription
+        ? { description: summary.trim() }
+        : { summary: summary.trim() }),
     };
-    const originalDigits = (original?.contactInfo || "").replace(/\D/g, "").slice(-10);
-    if (!isEdit || digits !== originalDigits) payload.contactInfo = `+91${digits}`;
+    const originalDigits = (original?.contactInfo || "")
+      .replace(/\D/g, "")
+      .slice(-10);
+    if (!isEdit || digits !== originalDigits)
+      payload.contactInfo = `+91${digits}`;
 
     setLoading(true);
     try {
@@ -587,24 +1012,44 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       console.error(err);
-      if (err instanceof ApiError && err.fieldErrors) setErrors(err.fieldErrors);
-      setError(err instanceof ApiError && err.message ? err.message : isEdit ? "Failed to save the job. Please try again." : "Failed to post job. Make sure you are logged in.");
+      if (err instanceof ApiError && err.fieldErrors)
+        setErrors(err.fieldErrors);
+      setError(
+        err instanceof ApiError && err.message
+          ? err.message
+          : isEdit
+            ? "Failed to save the job. Please try again."
+            : "Failed to post job. Make sure you are logged in.",
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  if (isEdit && (loadingJob || loadError || (original && !original.actions.canEdit))) {
+  if (
+    isEdit &&
+    (loadingJob || loadError || (original && !original.actions.canEdit))
+  ) {
     return (
       <EmployerShell>
         <div className="max-w-[720px] mx-auto px-4 py-12 text-center font-app">
           {loadingJob ? (
-            <p role="status" className="text-[14px] text-slate-500">Loading job…</p>
+            <p role="status" className="text-[14px] text-slate-500">
+              Loading job…
+            </p>
           ) : (
-            <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-6 text-[14px] text-red-800">
+            <div
+              role="alert"
+              className="rounded-xl border border-red-200 bg-red-50 p-6 text-[14px] text-red-800"
+            >
               {loadError || "A completed job cannot be edited."}
               <div className="mt-4">
-                <Link href="/employer-jobs" className="font-semibold text-red-700 underline">Back to My Jobs</Link>
+                <Link
+                  href="/employer-jobs"
+                  className="font-semibold text-red-700 underline"
+                >
+                  Back to My Jobs
+                </Link>
               </div>
             </div>
           )}
@@ -617,585 +1062,1123 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
 
   return (
     <EmployerShell>
-    <div className="flex flex-col bg-[#F4F6FA] font-app text-slate-900">
-
-      {/* ── Title area ──────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-6">
-          <div className="flex items-center gap-1.5 text-[12px] text-slate-500 mb-3">
-            <Link href="/employer-dashboard" className="no-underline text-slate-500 hover:text-slate-800">Dashboard</Link>
-            <FiChevronRight size={12} />
-            <span className="text-slate-900 font-semibold">{isEdit ? "Edit Job" : "Post a Job & Request Workers"}</span>
-          </div>
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h1 className="text-[28px] sm:text-[32px] font-extrabold tracking-tight leading-tight">{isEdit ? "Edit Job" : "Post a Job & Request Workers"}</h1>
-              <p className="text-[14px] text-slate-600 mt-1.5 max-w-[620px]">
-                Find daily-wage helpers, skilled tradesmen and loaders. Pin your site gate so workers can navigate straight to you.
-              </p>
+      <div className="flex flex-col bg-[#F4F6FA] font-app text-slate-900">
+        {/* ── Title area ──────────────────────────────────────────────── */}
+        <div className="bg-white border-b border-slate-200">
+          <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-6">
+            <div className="flex items-center gap-1.5 text-[12px] text-slate-500 mb-3">
+              <Link
+                href="/employer-dashboard"
+                className="no-underline text-slate-500 hover:text-slate-800"
+              >
+                Dashboard
+              </Link>
+              <FiChevronRight size={12} />
+              <span className="text-slate-900 font-semibold">
+                {isEdit ? "Edit Job" : "Post a Job & Request Workers"}
+              </span>
             </div>
-            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 text-[13px] font-semibold">
-              <button
-                type="button"
-                onClick={() => setUrgent(false)}
-                className={`rounded-lg px-3.5 py-2 cursor-pointer ${!urgent ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`}
-              >
-                Standard Posting
-              </button>
-              <button
-                type="button"
-                onClick={() => setUrgent(true)}
-                className={`rounded-lg px-3.5 py-2 cursor-pointer flex items-center gap-1.5 ${urgent ? "bg-white shadow-sm text-red-600" : "text-slate-500"}`}
-              >
-                <FiZap className="text-amber-500" /> Urgent Dispatch
-              </button>
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h1 className="text-[28px] sm:text-[32px] font-extrabold tracking-tight leading-tight">
+                  {isEdit ? "Edit Job" : "Post a Job & Request Workers"}
+                </h1>
+                <p className="text-[14px] text-slate-600 mt-1.5 max-w-[620px]">
+                  Find daily-wage helpers, skilled tradesmen and loaders. Pin
+                  your site gate so workers can navigate straight to you.
+                </p>
+              </div>
+              <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 text-[13px] font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setUrgent(false)}
+                  className={`rounded-lg px-3.5 py-2 cursor-pointer ${!urgent ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`}
+                >
+                  Standard Posting
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUrgent(true)}
+                  className={`rounded-lg px-3.5 py-2 cursor-pointer flex items-center gap-1.5 ${urgent ? "bg-white shadow-sm text-red-600" : "text-slate-500"}`}
+                >
+                  <FiZap className="text-amber-500" /> Urgent Dispatch
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* ── Form + summary ──────────────────────────────────────────── */}
-      <form onSubmit={handleSubmit} className="flex-1 w-full max-w-[1400px] mx-auto px-4 lg:px-8 py-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] items-start">
-        <div className="flex flex-col gap-6 min-w-0">
+        {/* ── Form + summary ──────────────────────────────────────────── */}
+        <form
+          onSubmit={handleSubmit}
+          className="flex-1 w-full max-w-[1400px] mx-auto px-4 lg:px-8 py-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] items-start"
+        >
+          <div className="flex flex-col gap-6 min-w-0">
+            {/* 1 · Role & requirements */}
+            <SectionCard
+              n={1}
+              title="Basic Information"
+              subtitle="What kind of work is it and who do you need?"
+              badge={
+                <span className="text-[12px] font-semibold text-red-600 bg-red-50 rounded px-2.5 py-1">
+                  Required
+                </span>
+              }
+            >
+              <fieldset disabled={locked} className="contents">
+                <span className={LABEL}>Select worker trade / category</span>
 
-          {/* 1 · Role & requirements */}
-          <SectionCard n={1} title="Basic Information" subtitle="What kind of work is it and who do you need?" badge={<span className="text-[12px] font-semibold text-red-600 bg-red-50 rounded px-2.5 py-1">Required</span>}>
-            <fieldset disabled={locked} className="contents">
-            <span className={LABEL}>Select worker trade / category</span>
+                {/* Search all jobs */}
+                <div className="relative mb-3">
+                  <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    value={jobSearch}
+                    onChange={(e) => setJobSearch(e.target.value)}
+                    placeholder="Search all jobs — mason, driver, cook, electrician…"
+                    className={`${INPUT} pl-10`}
+                    aria-label="Search jobs"
+                  />
+                </div>
 
-            {/* Search all jobs */}
-            <div className="relative mb-3">
-              <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                {/* Category chips */}
+                {!q && (
+                  <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
+                    {[
+                      ...JOB_GROUPS.map((g) => ({
+                        key: g.key,
+                        label: g.label,
+                      })),
+                      ...(customJobs.length
+                        ? [{ key: "custom", label: "My Added Jobs" }]
+                        : []),
+                    ].map((g) => (
+                      <button
+                        key={g.key}
+                        type="button"
+                        onClick={() => setGroupKey(g.key)}
+                        className={`whitespace-nowrap rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold cursor-pointer ${
+                          groupKey === g.key
+                            ? "border-red-500 bg-red-50 text-red-600"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                        }`}
+                      >
+                        {g.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Job tiles */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 max-h-[300px] overflow-y-auto pr-1">
+                  {visibleJobs.map((j) => (
+                    <Tile
+                      key={j.label}
+                      active={trade === j.label}
+                      onClick={() => pickJob(j.label)}
+                      className="relative min-h-[72px] flex flex-col items-center justify-center gap-1.5 px-2 py-2 text-center"
+                    >
+                      <span
+                        className={`text-[18px] ${trade === j.label ? "text-red-600" : "text-slate-500"}`}
+                      >
+                        {j.icon}
+                      </span>
+                      <span className="text-[12.5px] font-semibold text-slate-800 leading-tight">
+                        {j.label}
+                      </span>
+                      {j.custom && (
+                        <span
+                          role="button"
+                          aria-label={`Remove ${j.label}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeCustomJob(j.label);
+                          }}
+                          className="absolute top-1 right-1.5 text-[12px] text-slate-400 hover:text-red-500"
+                        >
+                          ✕
+                        </span>
+                      )}
+                    </Tile>
+                  ))}
+
+                  {/* Add your own job */}
+                  {!addingJob && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddingJob(true);
+                        setNewJob(q ? jobSearch.trim() : "");
+                      }}
+                      className="min-h-[72px] rounded-lg border-2 border-dashed border-slate-300 text-slate-600 hover:border-red-400 hover:text-red-600 flex flex-col items-center justify-center gap-1.5 px-2 cursor-pointer"
+                    >
+                      <FiPlus className="text-[18px]" />
+                      <span className="text-[12.5px] font-semibold">
+                        Add other job
+                      </span>
+                    </button>
+                  )}
+                </div>
+
+                {q && visibleJobs.length === 0 && (
+                  <p className="text-[13px] text-slate-500 mb-3">
+                    No job matches &quot;{jobSearch}&quot;. Use{" "}
+                    <b>Add other job</b> to create it.
+                  </p>
+                )}
+
+                {addingJob && (
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      autoFocus
+                      value={newJob}
+                      onChange={(e) => setNewJob(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addCustomJob(newJob);
+                        }
+                      }}
+                      placeholder="Type the job name, e.g. Tent Decorator"
+                      maxLength={60}
+                      className={INPUT}
+                      aria-label="New job name"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => addCustomJob(newJob)}
+                      className="h-11 shrink-0 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[13px] font-semibold px-4 cursor-pointer"
+                    >
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddingJob(false);
+                        setNewJob("");
+                      }}
+                      className="h-11 shrink-0 rounded-lg border border-slate-200 text-slate-600 text-[13px] font-semibold px-3 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+
+                <p className="text-[12.5px] text-slate-500 mb-6">
+                  Selected job: <b className="text-slate-900">{trade}</b>
+                </p>
+              </fieldset>
+
+              <div className="mb-4" id="field-jobTitle">
+                <label className={LABEL} htmlFor="jobTitle">
+                  Job title / primary task details *
+                </label>
+                <div className="relative">
+                  <input
+                    id="jobTitle"
+                    disabled={locked}
+                    className={`${INPUT} pr-10${fe("jobTitle")} disabled:bg-slate-50 disabled:text-slate-500`}
+                    value={jobTitle}
+                    onChange={(e) => setJobTitle(e.target.value)}
+                    placeholder="e.g. Site helpers for shuttering & concrete pouring"
+                    maxLength={150}
+                  />
+                  <FiEdit2 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                </div>
+                <FieldError message={errors.jobTitle} />
+                <p className="mt-2 text-[12px] text-blue-600 flex items-center gap-1.5">
+                  <FiInfo /> Add the specific task for faster acceptances.
+                </p>
+              </div>
+
+              <label className={LABEL} htmlFor="company">
+                Hiring entity / contractor name
+              </label>
               <input
-                value={jobSearch} onChange={(e) => setJobSearch(e.target.value)}
-                placeholder="Search all jobs — mason, driver, cook, electrician…"
-                className={`${INPUT} pl-10`} aria-label="Search jobs"
+                id="company"
+                className={`${INPUT}${fe("companyName")}`}
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                placeholder="Company or contractor name"
               />
-            </div>
+              <FieldError message={errors.companyName} />
 
-            {/* Category chips */}
-            {!q && (
-              <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
-                {[...JOB_GROUPS.map((g) => ({ key: g.key, label: g.label })), ...(customJobs.length ? [{ key: "custom", label: "My Added Jobs" }] : [])].map((g) => (
-                  <button
-                    key={g.key} type="button" onClick={() => setGroupKey(g.key)}
-                    className={`whitespace-nowrap rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold cursor-pointer ${
-                      groupKey === g.key ? "border-red-500 bg-red-50 text-red-600" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-                    }`}
+              <div className="grid sm:grid-cols-2 gap-4 mt-4">
+                <div>
+                  <label className={LABEL} htmlFor="category">
+                    Job category
+                  </label>
+                  <select
+                    id="category"
+                    disabled={locked}
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className={`${INPUT} cursor-pointer disabled:bg-slate-50 disabled:text-slate-500`}
                   >
-                    {g.label}
-                  </button>
+                    {[...JOB_GROUPS.map((g) => g.label), "Other"].map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={LABEL} htmlFor="extraSkills">
+                    Required skills (besides the selected trade)
+                  </label>
+                  <input
+                    id="extraSkills"
+                    className={INPUT}
+                    value={extraSkills}
+                    onChange={(e) => setExtraSkills(e.target.value)}
+                    placeholder="e.g. Concrete mixing, reading drawings"
+                    maxLength={200}
+                  />
+                </div>
+              </div>
+              <div className="mt-4">
+                <label className={LABEL} htmlFor="experience">
+                  Experience requirements
+                </label>
+                <input
+                  id="experience"
+                  className={INPUT}
+                  value={experience}
+                  onChange={(e) => setExperience(e.target.value)}
+                  placeholder="e.g. 1+ year on construction sites"
+                  maxLength={200}
+                />
+              </div>
+              <div className="mt-4" id="field-summary">
+                <label className={LABEL} htmlFor="summary">
+                  Job description
+                </label>
+                <textarea
+                  id="summary"
+                  value={summary}
+                  onChange={(e) => setSummary(e.target.value)}
+                  rows={3}
+                  placeholder="Describe the work, the site and what workers should expect."
+                  className={`w-full rounded-lg border border-slate-200 p-3.5 text-[14px] placeholder:text-slate-400 outline-none resize-none focus:border-red-400 focus:ring-2 focus:ring-red-100${fe("summary")}`}
+                />
+                <FieldError message={errors.summary} />
+              </div>
+            </SectionCard>
+
+            {/* 4 · Wage */}
+            <SectionCard
+              n={2}
+              title="Payment Information"
+              subtitle="Clear pricing attracts more workers"
+            >
+              <fieldset disabled={locked} className="contents">
+                <div className="grid sm:grid-cols-3 gap-4 mb-5">
+                  <div id="field-salary">
+                    <label className={LABEL} htmlFor="wage">
+                      Pay amount per worker (₹) *
+                    </label>
+                    <div
+                      className={`flex h-12 items-center rounded-lg border border-slate-200 px-3.5 focus-within:border-red-400 focus-within:ring-2 focus-within:ring-red-100${fe("salary")}`}
+                    >
+                      <span className="text-slate-500 mr-2">₹</span>
+                      <input
+                        id="wage"
+                        inputMode="numeric"
+                        value={wage}
+                        onChange={(e) =>
+                          setWage(e.target.value.replace(/\D/g, ""))
+                        }
+                        className="flex-1 min-w-0 text-[18px] font-bold outline-none bg-transparent"
+                        placeholder="850"
+                      />
+                      <span className="text-[12px] text-slate-400">
+                        / {PAY_UNITS.find((u) => u.value === salaryUnit)?.short}
+                      </span>
+                    </div>
+                    <FieldError message={errors.salary} />
+                  </div>
+                  <div>
+                    <label className={LABEL} htmlFor="salaryUnit">
+                      Payment type *
+                    </label>
+                    <select
+                      id="salaryUnit"
+                      value={salaryUnit}
+                      onChange={(e) =>
+                        setSalaryUnit(e.target.value as typeof salaryUnit)
+                      }
+                      className={`${INPUT} h-12 cursor-pointer`}
+                    >
+                      {PAY_UNITS.map((u) => (
+                        <option key={u.value} value={u.value}>
+                          {u.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={LABEL} htmlFor="settle">
+                      Worker settlement method *
+                    </label>
+                    <select
+                      id="settle"
+                      value={settlement}
+                      onChange={(e) => setSettlement(e.target.value)}
+                      className={`${INPUT} h-12 cursor-pointer`}
+                    >
+                      {SETTLEMENTS.map((s) => (
+                        <option key={s.value} value={s.value}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </fieldset>
+
+              <div className="mb-5">
+                <label className={LABEL} htmlFor="paymentDetails">
+                  Payment details
+                </label>
+                <textarea
+                  id="paymentDetails"
+                  value={paymentDetails}
+                  onChange={(e) => setPaymentDetails(e.target.value)}
+                  rows={2}
+                  maxLength={500}
+                  placeholder="e.g. Paid by 7 PM at the site office. Bring a bank passbook for UPI payments."
+                  className="w-full rounded-lg border border-slate-200 p-3.5 text-[14px] placeholder:text-slate-400 outline-none resize-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+                />
+              </div>
+
+              <span className={LABEL}>
+                On-site amenities &amp; perks provided
+              </span>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {PERKS.map((p) => (
+                  <div
+                    key={p}
+                    className="rounded-lg border border-slate-200 px-3 py-3"
+                  >
+                    <Check
+                      checked={perks.includes(p)}
+                      onChange={(v) =>
+                        setPerks((cur) =>
+                          v ? [...cur, p] : cur.filter((x) => x !== p),
+                        )
+                      }
+                    >
+                      {p}
+                    </Check>
+                  </div>
                 ))}
               </div>
-            )}
+            </SectionCard>
 
-            {/* Job tiles */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 max-h-[300px] overflow-y-auto pr-1">
-              {visibleJobs.map((j) => (
-                <Tile key={j.label} active={trade === j.label} onClick={() => pickJob(j.label)} className="relative min-h-[72px] flex flex-col items-center justify-center gap-1.5 px-2 py-2 text-center">
-                  <span className={`text-[18px] ${trade === j.label ? "text-red-600" : "text-slate-500"}`}>{j.icon}</span>
-                  <span className="text-[12.5px] font-semibold text-slate-800 leading-tight">{j.label}</span>
-                  {j.custom && (
-                    <span
-                      role="button" aria-label={`Remove ${j.label}`}
-                      onClick={(e) => { e.stopPropagation(); removeCustomJob(j.label); }}
-                      className="absolute top-1 right-1.5 text-[12px] text-slate-400 hover:text-red-500"
-                    >✕</span>
-                  )}
-                </Tile>
-              ))}
-
-              {/* Add your own job */}
-              {!addingJob && (
-                <button
-                  type="button" onClick={() => { setAddingJob(true); setNewJob(q ? jobSearch.trim() : ""); }}
-                  className="min-h-[72px] rounded-lg border-2 border-dashed border-slate-300 text-slate-600 hover:border-red-400 hover:text-red-600 flex flex-col items-center justify-center gap-1.5 px-2 cursor-pointer"
-                >
-                  <FiPlus className="text-[18px]" />
-                  <span className="text-[12.5px] font-semibold">Add other job</span>
-                </button>
-              )}
-            </div>
-
-            {q && visibleJobs.length === 0 && (
-              <p className="text-[13px] text-slate-500 mb-3">No job matches &quot;{jobSearch}&quot;. Use <b>Add other job</b> to create it.</p>
-            )}
-
-            {addingJob && (
-              <div className="flex gap-2 mb-3">
-                <input
-                  autoFocus value={newJob} onChange={(e) => setNewJob(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomJob(newJob); } }}
-                  placeholder="Type the job name, e.g. Tent Decorator" maxLength={60}
-                  className={INPUT} aria-label="New job name"
-                />
-                <button type="button" onClick={() => addCustomJob(newJob)} className="h-11 shrink-0 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[13px] font-semibold px-4 cursor-pointer">Add</button>
-                <button type="button" onClick={() => { setAddingJob(false); setNewJob(""); }} className="h-11 shrink-0 rounded-lg border border-slate-200 text-slate-600 text-[13px] font-semibold px-3 cursor-pointer">Cancel</button>
-              </div>
-            )}
-
-            <p className="text-[12.5px] text-slate-500 mb-6">Selected job: <b className="text-slate-900">{trade}</b></p>
-            </fieldset>
-
-            <div className="mb-4" id="field-jobTitle">
-              <label className={LABEL} htmlFor="jobTitle">Job title / primary task details *</label>
-              <div className="relative">
-                <input id="jobTitle" disabled={locked} className={`${INPUT} pr-10${fe("jobTitle")} disabled:bg-slate-50 disabled:text-slate-500`} value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="e.g. Site helpers for shuttering & concrete pouring" maxLength={150} />
-                <FiEdit2 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              </div>
-              <FieldError message={errors.jobTitle} />
-              <p className="mt-2 text-[12px] text-blue-600 flex items-center gap-1.5"><FiInfo /> Add the specific task for faster acceptances.</p>
-            </div>
-
-            <label className={LABEL} htmlFor="company">Hiring entity / contractor name</label>
-            <input id="company" className={`${INPUT}${fe("companyName")}`} value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Company or contractor name" />
-            <FieldError message={errors.companyName} />
-
-            <div className="grid sm:grid-cols-2 gap-4 mt-4">
-              <div>
-                <label className={LABEL} htmlFor="category">Job category</label>
-                <select id="category" disabled={locked} value={category} onChange={(e) => setCategory(e.target.value)} className={`${INPUT} cursor-pointer disabled:bg-slate-50 disabled:text-slate-500`}>
-                  {[...JOB_GROUPS.map((g) => g.label), "Other"].map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className={LABEL} htmlFor="extraSkills">Required skills (besides the selected trade)</label>
-                <input id="extraSkills" className={INPUT} value={extraSkills} onChange={(e) => setExtraSkills(e.target.value)} placeholder="e.g. Concrete mixing, reading drawings" maxLength={200} />
-              </div>
-            </div>
-            <div className="mt-4">
-              <label className={LABEL} htmlFor="experience">Experience requirements</label>
-              <input id="experience" className={INPUT} value={experience} onChange={(e) => setExperience(e.target.value)} placeholder="e.g. 1+ year on construction sites" maxLength={200} />
-            </div>
-            <div className="mt-4" id="field-summary">
-              <label className={LABEL} htmlFor="summary">Job description</label>
-              <textarea id="summary" value={summary} onChange={(e) => setSummary(e.target.value)} rows={3} placeholder="Describe the work, the site and what workers should expect." className={`w-full rounded-lg border border-slate-200 p-3.5 text-[14px] placeholder:text-slate-400 outline-none resize-none focus:border-red-400 focus:ring-2 focus:ring-red-100${fe("summary")}`} />
-              <FieldError message={errors.summary} />
-            </div>
-          </SectionCard>
-
-          {/* 4 · Wage */}
-          <SectionCard n={2} title="Payment Information" subtitle="Clear pricing attracts more workers">
-            <fieldset disabled={locked} className="contents">
-              <div className="grid sm:grid-cols-3 gap-4 mb-5">
-                <div id="field-salary">
-                  <label className={LABEL} htmlFor="wage">Pay amount per worker (₹) *</label>
-                  <div className={`flex h-12 items-center rounded-lg border border-slate-200 px-3.5 focus-within:border-red-400 focus-within:ring-2 focus-within:ring-red-100${fe("salary")}`}>
-                    <span className="text-slate-500 mr-2">₹</span>
-                    <input
-                      id="wage" inputMode="numeric" value={wage}
-                      onChange={(e) => setWage(e.target.value.replace(/\D/g, ""))}
-                      className="flex-1 min-w-0 text-[18px] font-bold outline-none bg-transparent" placeholder="850"
-                    />
-                    <span className="text-[12px] text-slate-400">/ {PAY_UNITS.find((u) => u.value === salaryUnit)?.short}</span>
-                  </div>
-                  <FieldError message={errors.salary} />
-                </div>
+            {/* 3 · Shift */}
+            <SectionCard
+              n={3}
+              title="Work Information"
+              subtitle="Type of work, how many workers, date, shift and instructions"
+            >
+              <div className="grid sm:grid-cols-2 gap-4 mb-5">
                 <div>
-                  <label className={LABEL} htmlFor="salaryUnit">Payment type *</label>
-                  <select id="salaryUnit" value={salaryUnit} onChange={(e) => setSalaryUnit(e.target.value as typeof salaryUnit)} className={`${INPUT} h-12 cursor-pointer`}>
-                    {PAY_UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className={LABEL} htmlFor="settle">Worker settlement method *</label>
+                  <label className={LABEL} htmlFor="jobType">
+                    Job type
+                  </label>
                   <select
-                    id="settle" value={settlement} onChange={(e) => setSettlement(e.target.value)}
-                    className={`${INPUT} h-12 cursor-pointer`}
+                    id="jobType"
+                    disabled={locked}
+                    value={jobType}
+                    onChange={(e) => {
+                      setJobType(e.target.value as JobType);
+                      touch("jobType");
+                    }}
+                    className={`${INPUT} cursor-pointer disabled:bg-slate-50 disabled:text-slate-500`}
                   >
-                    {SETTLEMENTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    {JOB_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
-              </div>
-            </fieldset>
-
-            <div className="mb-5">
-              <label className={LABEL} htmlFor="paymentDetails">Payment details</label>
-              <textarea id="paymentDetails" value={paymentDetails} onChange={(e) => setPaymentDetails(e.target.value)} rows={2} maxLength={500} placeholder="e.g. Paid by 7 PM at the site office. Bring a bank passbook for UPI payments." className="w-full rounded-lg border border-slate-200 p-3.5 text-[14px] placeholder:text-slate-400 outline-none resize-none focus:border-red-400 focus:ring-2 focus:ring-red-100" />
-            </div>
-
-            <span className={LABEL}>On-site amenities &amp; perks provided</span>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {PERKS.map((p) => (
-                <div key={p} className="rounded-lg border border-slate-200 px-3 py-3">
-                  <Check
-                    checked={perks.includes(p)}
-                    onChange={(v) => setPerks((cur) => (v ? [...cur, p] : cur.filter((x) => x !== p)))}
+                <div id="field-vacancies">
+                  <span className={LABEL}>Number of workers required *</span>
+                  <div
+                    className={`flex h-11 rounded-lg border border-slate-200 overflow-hidden${fe("vacancies")}`}
                   >
-                    {p}
-                  </Check>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-
-          {/* 3 · Shift */}
-          <SectionCard n={3} title="Work Information" subtitle="Type of work, how many workers, date, shift and instructions">
-            <div className="grid sm:grid-cols-2 gap-4 mb-5">
-              <div>
-                <label className={LABEL} htmlFor="jobType">Job type</label>
-                <select id="jobType" disabled={locked} value={jobType} onChange={(e) => { setJobType(e.target.value as JobType); touch("jobType"); }} className={`${INPUT} cursor-pointer disabled:bg-slate-50 disabled:text-slate-500`}>
-                  {JOB_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
-              </div>
-              <div id="field-vacancies">
-                <span className={LABEL}>Number of workers required *</span>
-                <div className={`flex h-11 rounded-lg border border-slate-200 overflow-hidden${fe("vacancies")}`}>
-                  <button type="button" onClick={() => setWorkers((w) => Math.max(Math.max(1, heldWorkers), w - 1))} className="w-11 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold cursor-pointer" aria-label="Fewer workers">-</button>
-                  <input
-                    type="number" min={Math.max(1, heldWorkers)} max={500} value={workers}
-                    onChange={(e) => setWorkers(Math.max(1, Math.min(500, Number(e.target.value) || 1)))}
-                    className="flex-1 min-w-0 text-center font-bold text-[15px] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-                    aria-label="Workers needed"
-                  />
-                  <button type="button" onClick={() => setWorkers((w) => Math.min(500, w + 1))} className="w-11 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold cursor-pointer" aria-label="More workers">+</button>
-                </div>
-                <FieldError message={errors.vacancies} />
-                {isEdit && heldWorkers > 0 && <p className="mt-1.5 text-[12px] text-slate-500">{heldWorkers} already accepted or confirmed.</p>}
-              </div>
-            </div>
-
-            <span className={LABEL} id="field-startDate">Start date</span>
-            <fieldset disabled={locked} className="contents">
-            <div className="grid grid-cols-3 gap-3 mb-3">
-              {DATES.map((d) => (
-                <Tile key={d.key} active={dateMode === d.key} onClick={() => setDateMode(d.key)} className="py-3 px-2 text-center">
-                  <span className="block text-[13px] font-bold text-slate-900">{d.title}</span>
-                  <span className="block text-[11.5px] text-slate-500 mt-0.5">{d.sub}</span>
-                </Tile>
-              ))}
-            </div>
-            {dateMode === "custom" && (
-              <input type="date" value={customDate} onChange={(e) => setCustomDate(e.target.value)} className={`${INPUT} max-w-[240px] mb-1${fe("startDate")}`} aria-label="Custom work date" />
-            )}
-            <FieldError message={errors.startDate} />
-
-            <div className="grid sm:grid-cols-3 gap-3 mt-3 mb-4">
-              {SHIFTS.map((s) => (
-                <Tile key={s.key} active={shift === s.key} onClick={() => { setShift(s.key); touch("shift"); }} className="p-3.5">
-                  <span className="flex items-start justify-between">
-                    <span className="text-[13px] font-bold text-slate-900">{s.title}</span>
-                    <span className={shift === s.key ? "text-amber-500" : "text-blue-500"}>{s.icon}</span>
-                  </span>
-                  <span className="block text-[12.5px] text-slate-700 mt-2">{s.time}</span>
-                  <span className="block text-[11.5px] text-slate-400 mt-1">{s.note}</span>
-                </Tile>
-              ))}
-            </div>
-
-            </fieldset>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Check checked={overtime} onChange={setOvertime}>Overtime paid extra beyond shift hours</Check>
-              {overtime && (
-                <span className="flex items-center gap-1 text-[13px] text-slate-700">
-                  at ₹
-                  <input
-                    inputMode="numeric" value={otRate} onChange={(e) => setOtRate(e.target.value.replace(/\D/g, ""))}
-                    className="w-16 h-8 rounded-md border border-slate-200 px-2 text-[13px] outline-none focus:border-red-400" aria-label="Overtime rate per hour"
-                  />
-                  / hour
-                </span>
-              )}
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-4 mt-5">
-              <div>
-                <label className={LABEL} htmlFor="duration">Duration</label>
-                <input id="duration" className={INPUT} value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="e.g. 3 days, 2 weeks, ongoing" maxLength={100} />
-              </div>
-            </div>
-            <div className="mt-4" id="field-workInstructions">
-              <label className={LABEL} htmlFor="note">Work instructions (optional)</label>
-              <textarea
-                id="note" value={note} onChange={(e) => setNote(e.target.value)} rows={3}
-                placeholder="e.g. Please bring your own steel measuring tape if possible. Must carry a valid Aadhaar card."
-                className={`w-full rounded-lg border border-slate-200 p-3.5 text-[14px] placeholder:text-slate-400 outline-none resize-none focus:border-red-400 focus:ring-2 focus:ring-red-100${fe("workInstructions")}`}
-              />
-              <FieldError message={errors.workInstructions} />
-            </div>
-          </SectionCard>
-
-          {/* 2 · Site & map */}
-          <SectionCard n={4} title="Location Information" subtitle="Workers navigate straight to the gate you mark" badge={<span className="hidden sm:flex items-center gap-1.5 text-[12px] font-semibold text-blue-600 bg-blue-50 rounded px-2.5 py-1"><FiCrosshair /> GPS Precision Pin</span>}>
-            <span className={LABEL} id="field-location">Site address / chowk / landmark *</span>
-            <div className="flex gap-2 mb-3">
-              <div className="relative flex-1 min-w-0">
-                <FiMapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 text-red-500" />
-                <input
-                  disabled={locked}
-                  className={`${INPUT} pl-10 pr-9 disabled:bg-slate-50 disabled:text-slate-500${fe("location")}`}
-                  value={location}
-                  onChange={(e) => onLocationInput(e.target.value)}
-                  onFocus={() => location.length >= 2 && setShowDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-                  placeholder="Type area, street, landmark, chowk…"
-                  autoComplete="off"
-                />
-                {searching && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px]">⏳</span>}
-                {!searching && location && (
-                  <span
-                    onMouseDown={() => { setLocation(""); setSuggestions([]); setPinPos(null); setPinConfirmed(false); setSearchNotice(""); }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-[14px] text-slate-400"
-                  >✕</span>
-                )}
-
-                {showDropdown && searchNotice && suggestions.length === 0 && !searching && (
-                  <p role="status" className="absolute top-[calc(100%+4px)] left-0 right-0 z-[1000] m-0 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] text-amber-900 shadow-lg">{searchNotice}</p>
-                )}
-                {showDropdown && suggestions.length > 0 && (
-                  <ul className="absolute top-[calc(100%+4px)] left-0 right-0 z-[1000] bg-white border border-slate-200 rounded-xl shadow-[0_16px_48px_rgba(0,0,0,0.16)] list-none m-0 p-0 max-h-[300px] overflow-y-auto">
-                    {suggestions.map((item, i) => (
-                      <li
-                        key={i}
-                        onMouseDown={() => selectSuggestion(item)}
-                        className="py-3 px-4 cursor-pointer flex items-start gap-3 hover:bg-slate-50 border-b border-slate-100 last:border-b-0"
-                      >
-                        <div className="w-9 h-9 rounded-full shrink-0 flex items-center justify-center text-[16px] border border-slate-100 bg-indigo-50">
-                          📍
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-[14px] text-slate-900 leading-snug">{item.short}</div>
-                          <div className="text-[12px] text-slate-500 truncate">
-                            {item.label.startsWith(item.short) ? item.label.slice(item.short.length).replace(/^,\s*/, "") : item.label}
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                    <li className="py-2 px-4 text-[11px] text-slate-400 border-t border-slate-100 bg-slate-50 rounded-b-xl">🗺️ OpenStreetMap</li>
-                  </ul>
-                )}
-                {showDropdown && !searching && location.length >= 2 && suggestions.length === 0 && (
-                  <div className="absolute top-[calc(100%+4px)] left-0 right-0 z-[1000] bg-white border border-slate-200 rounded-xl shadow-lg p-4 text-center">
-                    <div className="text-[13px] text-slate-600 font-semibold">No results found</div>
-                    <div className="text-[12px] text-slate-500 mt-1">Try adding the city, e.g. <b>&quot;Sambhaji Chowk Nashik&quot;</b></div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setWorkers((w) =>
+                          Math.max(Math.max(1, heldWorkers), w - 1),
+                        )
+                      }
+                      className="w-11 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold cursor-pointer"
+                      aria-label="Fewer workers"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min={Math.max(1, heldWorkers)}
+                      max={500}
+                      value={workers}
+                      onChange={(e) =>
+                        setWorkers(
+                          Math.max(
+                            1,
+                            Math.min(500, Number(e.target.value) || 1),
+                          ),
+                        )
+                      }
+                      className="flex-1 min-w-0 text-center font-bold text-[15px] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                      aria-label="Workers needed"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setWorkers((w) => Math.min(500, w + 1))}
+                      className="w-11 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold cursor-pointer"
+                      aria-label="More workers"
+                    >
+                      +
+                    </button>
                   </div>
+                  <FieldError message={errors.vacancies} />
+                  {isEdit && heldWorkers > 0 && (
+                    <p className="mt-1.5 text-[12px] text-slate-500">
+                      {heldWorkers} already accepted or confirmed.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <span className={LABEL} id="field-startDate">
+                Start date
+              </span>
+              <fieldset disabled={locked} className="contents">
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  {DATES.map((d) => (
+                    <Tile
+                      key={d.key}
+                      active={dateMode === d.key}
+                      onClick={() => setDateMode(d.key)}
+                      className="py-3 px-2 text-center"
+                    >
+                      <span className="block text-[13px] font-bold text-slate-900">
+                        {d.title}
+                      </span>
+                      <span className="block text-[11.5px] text-slate-500 mt-0.5">
+                        {d.sub}
+                      </span>
+                    </Tile>
+                  ))}
+                </div>
+                {dateMode === "custom" && (
+                  <input
+                    type="date"
+                    value={customDate}
+                    onChange={(e) => setCustomDate(e.target.value)}
+                    className={`${INPUT} max-w-[240px] mb-1${fe("startDate")}`}
+                    aria-label="Custom work date"
+                  />
+                )}
+                <FieldError message={errors.startDate} />
+
+                <div className="grid sm:grid-cols-3 gap-3 mt-3 mb-4">
+                  {SHIFTS.map((s) => (
+                    <Tile
+                      key={s.key}
+                      active={shift === s.key}
+                      onClick={() => {
+                        setShift(s.key);
+                        touch("shift");
+                      }}
+                      className="p-3.5"
+                    >
+                      <span className="flex items-start justify-between">
+                        <span className="text-[13px] font-bold text-slate-900">
+                          {s.title}
+                        </span>
+                        <span
+                          className={
+                            shift === s.key ? "text-amber-500" : "text-blue-500"
+                          }
+                        >
+                          {s.icon}
+                        </span>
+                      </span>
+                      <span className="block text-[12.5px] text-slate-700 mt-2">
+                        {s.time}
+                      </span>
+                      <span className="block text-[11.5px] text-slate-400 mt-1">
+                        {s.note}
+                      </span>
+                    </Tile>
+                  ))}
+                </div>
+              </fieldset>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Check checked={overtime} onChange={setOvertime}>
+                  Overtime paid extra beyond shift hours
+                </Check>
+                {overtime && (
+                  <span className="flex items-center gap-1 text-[13px] text-slate-700">
+                    at ₹
+                    <input
+                      inputMode="numeric"
+                      value={otRate}
+                      onChange={(e) =>
+                        setOtRate(e.target.value.replace(/\D/g, ""))
+                      }
+                      className="w-16 h-8 rounded-md border border-slate-200 px-2 text-[13px] outline-none focus:border-red-400"
+                      aria-label="Overtime rate per hour"
+                    />
+                    / hour
+                  </span>
                 )}
               </div>
-              <button
-                type="button" onClick={detectGps} disabled={detecting || locked}
-                className="h-11 shrink-0 rounded-lg bg-[#0B1228] text-white text-[13px] font-semibold px-4 flex items-center gap-2 cursor-pointer disabled:opacity-60"
-              >
-                <FiNavigation /> {detecting ? "Detecting…" : "Detect GPS"}
-              </button>
-            </div>
 
-            <FieldError message={errors.location} />
-            {locked && <p className="rounded-lg border border-slate-200 bg-slate-50 text-slate-600 text-[12px] px-3 py-2 mb-3">The address and map pin cannot be changed while workers hold a position on this job.</p>}
-            <p className="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-[12px] px-3 py-2 mb-4">
-              <b>Pro Tip:</b> Always include the local chowk or labor naka name so workers recognise the meeting spot immediately.
-            </p>
-
-            {/* Map */}
-            <div className="isolate relative h-[300px] rounded-xl overflow-hidden border border-slate-200">
-              <MapContainer center={mapCenter} zoom={15} className="h-full w-full">
-                {satellite ? (
-                  <TileLayer
-                    key="sat"
-                    url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                    attribution="Tiles &copy; Esri"
-                    eventHandlers={{ tileerror: () => setTileErrors((n) => n + 1), tileload: () => setTileErrors(0) }}
+              <div className="grid sm:grid-cols-2 gap-4 mt-5">
+                <div>
+                  <label className={LABEL} htmlFor="duration">
+                    Duration
+                  </label>
+                  <input
+                    id="duration"
+                    className={INPUT}
+                    value={duration}
+                    onChange={(e) => setDuration(e.target.value)}
+                    placeholder="e.g. 3 days, 2 weeks, ongoing"
+                    maxLength={100}
                   />
-                ) : (
-                  <TileLayer
-                    key="map"
-                    url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-                    attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-                    eventHandlers={{ tileerror: () => setTileErrors((n) => n + 1), tileload: () => setTileErrors(0) }}
-                  />
-                )}
-                <MapClickHandler onMapClick={movePin} />
-                <MapMover center={mapCenter} />
-                {pinPos && (
-                  <Marker
-                    position={[pinPos.lat, pinPos.lng]}
-                    icon={redPin}
-                    draggable
-                    eventHandlers={{
-                      dragend: (e) => {
-                        const ll = (e.target as L.Marker).getLatLng();
-                        movePin(ll.lat, ll.lng);
-                      },
-                    }}
-                  >
-                    <Tooltip permanent direction="bottom" offset={[0, 4]}>Drag to move gate pin</Tooltip>
-                  </Marker>
-                )}
-              </MapContainer>
-
-              {tileErrors >= 4 && (
-                <div role="alert" className="absolute top-3 left-3 right-3 z-[500] rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900 shadow">
-                  Map images could not be loaded. Check your internet connection. You can still search the address.
                 </div>
-              )}
+              </div>
+              <div className="mt-4" id="field-workInstructions">
+                <label className={LABEL} htmlFor="note">
+                  Work instructions (optional)
+                </label>
+                <textarea
+                  id="note"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  rows={3}
+                  placeholder="e.g. Please bring your own steel measuring tape if possible. Must carry a valid Aadhaar card."
+                  className={`w-full rounded-lg border border-slate-200 p-3.5 text-[14px] placeholder:text-slate-400 outline-none resize-none focus:border-red-400 focus:ring-2 focus:ring-red-100${fe("workInstructions")}`}
+                />
+                <FieldError message={errors.workInstructions} />
+              </div>
+            </SectionCard>
 
-              {!pinPos && (
-                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[500] rounded-full bg-white/95 shadow px-3.5 py-1.5 text-[12px] font-semibold text-slate-700 pointer-events-none">
-                  Tap the map to drop the gate pin
-                </div>
-              )}
-
-              <div className="absolute bottom-3 left-3 right-3 z-[500] flex items-center justify-between gap-3 rounded-lg bg-white/95 shadow px-3 py-2 text-[12px]">
-                <span className="flex items-center gap-2 text-slate-700 min-w-0">
-                  <FiMapPin className="text-red-500 shrink-0" />
-                  <span className="truncate">
-                    {pinPos ? `${pinPos.lat.toFixed(4)}° N, ${pinPos.lng.toFixed(4)}° E (exact entrance)` : "No pin yet"}
-                  </span>
+            {/* 2 · Site & map */}
+            <SectionCard
+              n={4}
+              title="Location Information"
+              subtitle="Workers navigate straight to the gate you mark"
+              badge={
+                <span className="hidden sm:flex items-center gap-1.5 text-[12px] font-semibold text-blue-600 bg-blue-50 rounded px-2.5 py-1">
+                  <FiCrosshair /> GPS Precision Pin
                 </span>
-                {pinPos && !locked && (
-                  pinConfirmed ? (
-                    <span className="shrink-0 flex items-center gap-1 font-bold text-emerald-600"><FiCheck /> Location confirmed</span>
-                  ) : (
-                    <button type="button" onClick={() => setPinConfirmed(true)} className="shrink-0 rounded-md bg-emerald-600 px-2.5 py-1 font-bold text-white cursor-pointer hover:bg-emerald-700">Confirm location</button>
-                  )
-                )}
-                <button type="button" onClick={() => setSatellite((s) => !s)} className="shrink-0 flex items-center gap-1.5 text-red-600 font-bold cursor-pointer">
-                  {satellite ? <FiLayers /> : <FiMaximize2 />} {satellite ? "Map View" : "Full Satellite View"}
+              }
+            >
+              <span className={LABEL} id="field-location">
+                Site address / chowk / landmark *
+              </span>
+              <div className="flex gap-2 mb-3">
+                <div className="relative flex-1 min-w-0">
+                  <FiMapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 text-red-500" />
+                  <input
+                    disabled={locked}
+                    className={`${INPUT} pl-10 pr-9 disabled:bg-slate-50 disabled:text-slate-500${fe("location")}`}
+                    value={location}
+                    onChange={(e) => onLocationInput(e.target.value)}
+                    onFocus={() =>
+                      location.length >= 2 && setShowDropdown(true)
+                    }
+                    onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                    placeholder="Type area, street, landmark, chowk…"
+                    autoComplete="off"
+                  />
+                  {searching && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px]">
+                      ⏳
+                    </span>
+                  )}
+                  {!searching && location && (
+                    <span
+                      onMouseDown={() => {
+                        setLocation("");
+                        setSuggestions([]);
+                        setPinPos(null);
+                        setPinConfirmed(false);
+                        setSearchNotice("");
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-[14px] text-slate-400"
+                    >
+                      ✕
+                    </span>
+                  )}
+
+                  {showDropdown &&
+                    searchNotice &&
+                    suggestions.length === 0 &&
+                    !searching && (
+                      <p
+                        role="status"
+                        className="absolute top-[calc(100%+4px)] left-0 right-0 z-[1000] m-0 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] text-amber-900 shadow-lg"
+                      >
+                        {searchNotice}
+                      </p>
+                    )}
+                  {showDropdown && suggestions.length > 0 && (
+                    <ul className="absolute top-[calc(100%+4px)] left-0 right-0 z-[1000] bg-white border border-slate-200 rounded-xl shadow-[0_16px_48px_rgba(0,0,0,0.16)] list-none m-0 p-0 max-h-[300px] overflow-y-auto">
+                      {suggestions.map((item, i) => (
+                        <li
+                          key={i}
+                          onMouseDown={() => selectSuggestion(item)}
+                          className="py-3 px-4 cursor-pointer flex items-start gap-3 hover:bg-slate-50 border-b border-slate-100 last:border-b-0"
+                        >
+                          <div className="w-9 h-9 rounded-full shrink-0 flex items-center justify-center text-[16px] border border-slate-100 bg-indigo-50">
+                            📍
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-[14px] text-slate-900 leading-snug">
+                              {item.short}
+                            </div>
+                            <div className="text-[12px] text-slate-500 truncate">
+                              {item.label.startsWith(item.short)
+                                ? item.label
+                                    .slice(item.short.length)
+                                    .replace(/^,\s*/, "")
+                                : item.label}
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                      <li className="py-2 px-4 text-[11px] text-slate-400 border-t border-slate-100 bg-slate-50 rounded-b-xl">
+                        🗺️ OpenStreetMap
+                      </li>
+                    </ul>
+                  )}
+                  {showDropdown &&
+                    !searching &&
+                    location.length >= 2 &&
+                    suggestions.length === 0 && (
+                      <div className="absolute top-[calc(100%+4px)] left-0 right-0 z-[1000] bg-white border border-slate-200 rounded-xl shadow-lg p-4 text-center">
+                        <div className="text-[13px] text-slate-600 font-semibold">
+                          No results found
+                        </div>
+                        <div className="text-[12px] text-slate-500 mt-1">
+                          Try adding the city, e.g.{" "}
+                          <b>&quot;Sambhaji Chowk Nashik&quot;</b>
+                        </div>
+                      </div>
+                    )}
+                </div>
+                <button
+                  type="button"
+                  onClick={detectGps}
+                  disabled={detecting || locked}
+                  className="h-11 shrink-0 rounded-lg bg-[#0B1228] text-white text-[13px] font-semibold px-4 flex items-center gap-2 cursor-pointer disabled:opacity-60"
+                >
+                  <FiNavigation /> {detecting ? "Detecting…" : "Detect GPS"}
                 </button>
               </div>
-            </div>
 
-            {locationNotice && <p role="status" className="m-0 mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">{locationNotice}</p>}
-
-            <div className="grid sm:grid-cols-3 gap-4 mt-5">
-              <div>
-                <label className={LABEL} htmlFor="city">City / area</label>
-                <input id="city" disabled={locked} className={`${INPUT} disabled:bg-slate-50 disabled:text-slate-500`} value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Nashik" maxLength={80} />
-              </div>
-              <div>
-                <label className={LABEL} htmlFor="stateName">State</label>
-                <input id="stateName" disabled={locked} className={`${INPUT} disabled:bg-slate-50 disabled:text-slate-500`} value={stateName} onChange={(e) => setStateName(e.target.value)} placeholder="e.g. Maharashtra" maxLength={80} />
-              </div>
-              <div id="field-postalCode">
-                <label className={LABEL} htmlFor="postalCode">Postal code</label>
-                <input id="postalCode" disabled={locked} inputMode="numeric" className={`${INPUT} disabled:bg-slate-50 disabled:text-slate-500${fe("postalCode")}`} value={postalCode} onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="422001" />
-                <FieldError message={errors.postalCode} />
-              </div>
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-4 mt-5">
-              <div>
-                <label className={LABEL} htmlFor="gate">Specific gate instructions / landmark note</label>
-                <input id="gate" className={INPUT} value={gateNote} onChange={(e) => setGateNote(e.target.value)} placeholder="e.g. Gate 3, opposite the metro pillar" />
-              </div>
-              <div id="field-contactInfo">
-                <label className={LABEL} htmlFor="phone">On-site gate contact &amp; WhatsApp *</label>
-                <div className="flex h-11 rounded-lg border border-slate-200 overflow-hidden focus-within:border-red-400 focus-within:ring-2 focus-within:ring-red-100">
-                  <span className="flex items-center gap-1.5 px-3 bg-slate-50 border-r border-slate-200 text-[13px] text-slate-700"><FiPhone size={13} /> +91</span>
-                  <input
-                    id="phone" inputMode="numeric" maxLength={10}
-                    value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
-                    className="flex-1 min-w-0 px-3.5 text-[14px] outline-none" placeholder="98230 44192"
-                  />
-                </div>
-                <FieldError message={errors.contactInfo} />
-              </div>
-            </div>
-          </SectionCard>
-
-          {/* Urgent + note */}
-          <section className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6">
-            <div className="rounded-xl border border-red-100 bg-red-50/70 p-4 flex items-start gap-4">
-              <span className="w-11 h-11 shrink-0 rounded-lg bg-red-500 text-white flex items-center justify-center text-[20px]"><FiZap /></span>
-              <div className="flex-1">
-                <h3 className="text-[15px] font-bold text-slate-900">Activate Urgent Hiring Priority</h3>
-                <p className="text-[12.5px] text-slate-600 mt-1">Marks the job as urgent and pins it to the top of the worker feed so it gets seen first.</p>
-              </div>
-              <button
-                type="button" role="switch" aria-checked={urgent} onClick={() => setUrgent((u) => !u)}
-                className={`relative w-12 h-7 rounded-full shrink-0 cursor-pointer transition-colors ${urgent ? "bg-red-500" : "bg-slate-300"}`}
-              >
-                <span className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${urgent ? "left-[22px]" : "left-0.5"}`} />
-              </button>
-            </div>
-
-          </section>
-        </div>
-
-        {/* ── Summary ────────────────────────────────────────────────── */}
-        <aside className="lg:sticky lg:top-24">
-          <div className="rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-[0_8px_30px_rgba(15,23,42,.08)]">
-            <div className="bg-[#0B1228] text-white p-5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold tracking-[0.1em] text-slate-300">ESTIMATED SUMMARY</span>
-                <span className={`text-[10px] font-bold rounded px-2 py-0.5 ${urgent ? "bg-red-500/20 text-red-300" : "bg-emerald-500/15 text-emerald-300"}`}>
-                  {urgent ? "URGENT" : "STANDARD"}
-                </span>
-              </div>
-              <h3 className="text-[22px] font-extrabold mt-2">{isEdit ? "Job Budget" : "Daily Gig Budget"}</h3>
-              <p className="text-[12.5px] text-slate-400 mt-1">Live calculation for this booking</p>
-            </div>
-
-            <div className="p-5">
+              <FieldError message={errors.location} />
               {locked && (
-                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-[12.5px] p-3">
-                  {heldWorkers} worker{heldWorkers > 1 ? "s hold" : " holds"} a position on this job. The title, category, pay, location, date, schedule and job type are locked so existing offers stay valid. You can still change the description, instructions, contact and number of workers (not below {heldWorkers}).
-                </div>
+                <p className="rounded-lg border border-slate-200 bg-slate-50 text-slate-600 text-[12px] px-3 py-2 mb-3">
+                  The address and map pin cannot be changed while workers hold a
+                  position on this job.
+                </p>
               )}
-              {posted && (
-                <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 text-[13px] p-3">
-                  <b>{isEdit ? "Changes saved ✅" : "Job posted ✅"}</b>
-                  <div className="mt-1">
-                    <Link href={isEdit && jobId ? `/employer-jobs/${jobId}` : "/employer-jobs"} className="text-emerald-700 font-semibold underline">{isEdit ? "View job details" : "View in My Jobs"}</Link>
-                  </div>
-                </div>
-              )}
+              <p className="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-[12px] px-3 py-2 mb-4">
+                <b>Pro Tip:</b> Always include the local chowk or labor naka
+                name so workers recognise the meeting spot immediately.
+              </p>
 
-              <dl className="text-[13.5px] text-slate-600 space-y-3">
-                <div className="flex justify-between gap-3">
-                  <dt>Worker pay (<b className="text-slate-800">{workers} worker{workers > 1 ? "s" : ""}</b> × ₹{wageNum.toLocaleString("en-IN")} / {PAY_UNITS.find((u) => u.value === salaryUnit)?.short.toLowerCase()})</dt>
-                  <dd className="font-semibold text-slate-900 whitespace-nowrap">{fmt(total)}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt>Shift</dt>
-                  <dd className="text-slate-900 text-right">{shiftInfo.title}</dd>
-                </div>
-                {overtime && Number(otRate) > 0 && (
-                  <div className="flex justify-between gap-3">
-                    <dt>Overtime (per worker)</dt>
-                    <dd className="text-slate-900">₹{Number(otRate)} / hour</dd>
+              {/* Map */}
+              <div className="isolate relative h-[300px] rounded-xl overflow-hidden border border-slate-200">
+                <MapContainer
+                  center={mapCenter}
+                  zoom={15}
+                  className="h-full w-full"
+                >
+                  {satellite ? (
+                    <TileLayer
+                      key="sat"
+                      url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                      attribution="Tiles &copy; Esri"
+                      eventHandlers={{
+                        tileerror: () => setTileErrors((n) => n + 1),
+                        tileload: () => setTileErrors(0),
+                      }}
+                    />
+                  ) : (
+                    <TileLayer
+                      key="map"
+                      url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                      eventHandlers={{
+                        tileerror: () => setTileErrors((n) => n + 1),
+                        tileload: () => setTileErrors(0),
+                      }}
+                    />
+                  )}
+                  <MapClickHandler onMapClick={movePin} />
+                  <MapMover center={mapCenter} />
+                  {pinPos && (
+                    <Marker
+                      position={[pinPos.lat, pinPos.lng]}
+                      icon={redPin}
+                      draggable
+                      eventHandlers={{
+                        dragend: (e) => {
+                          const ll = (e.target as L.Marker).getLatLng();
+                          movePin(ll.lat, ll.lng);
+                        },
+                      }}
+                    >
+                      <Tooltip permanent direction="bottom" offset={[0, 4]}>
+                        Drag to move gate pin
+                      </Tooltip>
+                    </Marker>
+                  )}
+                </MapContainer>
+
+                {tileErrors >= 4 && (
+                  <div
+                    role="alert"
+                    className="absolute top-3 left-3 right-3 z-[500] rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900 shadow"
+                  >
+                    Map images could not be loaded. Check your internet
+                    connection. You can still search the address.
                   </div>
                 )}
-                <div className="flex justify-between gap-3">
-                  <dt>Payment</dt>
-                  <dd className="text-slate-900 text-right">{SETTLEMENTS.find((s) => s.value === settlement)?.label}</dd>
+
+                {!pinPos && (
+                  <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[500] rounded-full bg-white/95 shadow px-3.5 py-1.5 text-[12px] font-semibold text-slate-700 pointer-events-none">
+                    Tap the map to drop the gate pin
+                  </div>
+                )}
+
+                <div className="absolute bottom-3 left-3 right-3 z-[500] flex items-center justify-between gap-3 rounded-lg bg-white/95 shadow px-3 py-2 text-[12px]">
+                  <span className="flex items-center gap-2 text-slate-700 min-w-0">
+                    <FiMapPin className="text-red-500 shrink-0" />
+                    <span className="truncate">
+                      {pinPos
+                        ? `${pinPos.lat.toFixed(4)}° N, ${pinPos.lng.toFixed(4)}° E (exact entrance)`
+                        : "No pin yet"}
+                    </span>
+                  </span>
+                  {pinPos &&
+                    !locked &&
+                    (pinConfirmed ? (
+                      <span className="shrink-0 flex items-center gap-1 font-bold text-emerald-600">
+                        <FiCheck /> Location confirmed
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setPinConfirmed(true)}
+                        className="shrink-0 rounded-md bg-emerald-600 px-2.5 py-1 font-bold text-white cursor-pointer hover:bg-emerald-700"
+                      >
+                        Confirm location
+                      </button>
+                    ))}
+                  <button
+                    type="button"
+                    onClick={() => setSatellite((s) => !s)}
+                    className="shrink-0 flex items-center gap-1.5 text-red-600 font-bold cursor-pointer"
+                  >
+                    {satellite ? <FiLayers /> : <FiMaximize2 />}{" "}
+                    {satellite ? "Map View" : "Full Satellite View"}
+                  </button>
                 </div>
-              </dl>
-
-              <div className="border-t border-slate-100 mt-5 pt-5 flex items-end justify-between gap-3">
-                <span className="text-[15px] font-bold text-slate-900">Total wage budget</span>
-                <span className="text-[30px] font-extrabold tracking-tight leading-none">{fmt(total).replace(/\.00$/, "")}</span>
               </div>
-              <p className="text-right text-[11.5px] text-slate-400 mt-1.5">Excludes overtime and any perks you provide</p>
 
-              {error && (
-                <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 text-red-700 text-[12.5px] p-3">{error}</div>
+              {locationNotice && (
+                <p
+                  role="status"
+                  className="m-0 mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900"
+                >
+                  {locationNotice}
+                </p>
               )}
 
-              <button
-                type="submit" disabled={loading}
-                className="mt-5 w-full h-12 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-[14.5px] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-              >
-                <FiSend /> {isEdit ? (loading ? "Saving…" : "Save Changes") : loading ? "Publishing…" : urgent ? "Publish & Dispatch Urgently" : "Publish Job"}
-              </button>
-              <Link
-                href={isEdit && jobId ? `/employer-jobs/${jobId}` : "/employer-dashboard"}
-                className="mt-3 w-full h-11 rounded-lg border border-slate-200 text-slate-700 font-semibold text-[13.5px] flex items-center justify-center no-underline hover:bg-slate-50"
-              >
-                Cancel
-              </Link>
-            </div>
-          </div>
-        </aside>
-      </form>
+              <div className="grid sm:grid-cols-3 gap-4 mt-5">
+                <div>
+                  <label className={LABEL} htmlFor="city">
+                    City / area
+                  </label>
+                  <input
+                    id="city"
+                    disabled={locked}
+                    className={`${INPUT} disabled:bg-slate-50 disabled:text-slate-500`}
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    placeholder="e.g. Nashik"
+                    maxLength={80}
+                  />
+                </div>
+                <div>
+                  <label className={LABEL} htmlFor="stateName">
+                    State
+                  </label>
+                  <input
+                    id="stateName"
+                    disabled={locked}
+                    className={`${INPUT} disabled:bg-slate-50 disabled:text-slate-500`}
+                    value={stateName}
+                    onChange={(e) => setStateName(e.target.value)}
+                    placeholder="e.g. Maharashtra"
+                    maxLength={80}
+                  />
+                </div>
+                <div id="field-postalCode">
+                  <label className={LABEL} htmlFor="postalCode">
+                    Postal code
+                  </label>
+                  <input
+                    id="postalCode"
+                    disabled={locked}
+                    inputMode="numeric"
+                    className={`${INPUT} disabled:bg-slate-50 disabled:text-slate-500${fe("postalCode")}`}
+                    value={postalCode}
+                    onChange={(e) =>
+                      setPostalCode(
+                        e.target.value.replace(/\D/g, "").slice(0, 6),
+                      )
+                    }
+                    placeholder="422001"
+                  />
+                  <FieldError message={errors.postalCode} />
+                </div>
+              </div>
 
-      <footer className="border-t border-slate-200 bg-white">
-        <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-5 flex items-center gap-3 text-[12.5px] text-slate-500">
-          <span className="bg-red-500 text-white font-extrabold text-[10px] rounded px-1.5 py-1">HM</span>
-          <span><b className="text-slate-700">HireMate</b> — On-demand daily wage work</span>
-        </div>
-      </footer>
-    </div>
+              <div className="grid sm:grid-cols-2 gap-4 mt-5">
+                <div>
+                  <label className={LABEL} htmlFor="gate">
+                    Specific gate instructions / landmark note
+                  </label>
+                  <input
+                    id="gate"
+                    className={INPUT}
+                    value={gateNote}
+                    onChange={(e) => setGateNote(e.target.value)}
+                    placeholder="e.g. Gate 3, opposite the metro pillar"
+                  />
+                </div>
+                <div id="field-contactInfo">
+                  <label className={LABEL} htmlFor="phone">
+                    On-site gate contact &amp; WhatsApp *
+                  </label>
+                  <div className="flex h-11 rounded-lg border border-slate-200 overflow-hidden focus-within:border-red-400 focus-within:ring-2 focus-within:ring-red-100">
+                    <span className="flex items-center gap-1.5 px-3 bg-slate-50 border-r border-slate-200 text-[13px] text-slate-700">
+                      <FiPhone size={13} /> +91
+                    </span>
+                    <input
+                      id="phone"
+                      inputMode="numeric"
+                      maxLength={10}
+                      value={phone}
+                      onChange={(e) =>
+                        setPhone(e.target.value.replace(/\D/g, ""))
+                      }
+                      className="flex-1 min-w-0 px-3.5 text-[14px] outline-none"
+                      placeholder="98230 44192"
+                    />
+                  </div>
+                  <FieldError message={errors.contactInfo} />
+                </div>
+              </div>
+            </SectionCard>
+
+            {/* Urgent + note */}
+            <section className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6">
+              <div className="rounded-xl border border-red-100 bg-red-50/70 p-4 flex items-start gap-4">
+                <span className="w-11 h-11 shrink-0 rounded-lg bg-red-500 text-white flex items-center justify-center text-[20px]">
+                  <FiZap />
+                </span>
+                <div className="flex-1">
+                  <h3 className="text-[15px] font-bold text-slate-900">
+                    Activate Urgent Hiring Priority
+                  </h3>
+                  <p className="text-[12.5px] text-slate-600 mt-1">
+                    Marks the job as urgent and pins it to the top of the worker
+                    feed so it gets seen first.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={urgent}
+                  onClick={() => setUrgent((u) => !u)}
+                  className={`relative w-12 h-7 rounded-full shrink-0 cursor-pointer transition-colors ${urgent ? "bg-red-500" : "bg-slate-300"}`}
+                >
+                  <span
+                    className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${urgent ? "left-[22px]" : "left-0.5"}`}
+                  />
+                </button>
+              </div>
+            </section>
+          </div>
+
+          {/* ── Summary ────────────────────────────────────────────────── */}
+          <aside className="lg:sticky lg:top-24">
+            <div className="rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-[0_8px_30px_rgba(15,23,42,.08)]">
+              <div className="bg-[#0B1228] text-white p-5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold tracking-[0.1em] text-slate-300">
+                    ESTIMATED SUMMARY
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold rounded px-2 py-0.5 ${urgent ? "bg-red-500/20 text-red-300" : "bg-emerald-500/15 text-emerald-300"}`}
+                  >
+                    {urgent ? "URGENT" : "STANDARD"}
+                  </span>
+                </div>
+                <h3 className="text-[22px] font-extrabold mt-2">
+                  {isEdit ? "Job Budget" : "Daily Gig Budget"}
+                </h3>
+                <p className="text-[12.5px] text-slate-400 mt-1">
+                  Live calculation for this booking
+                </p>
+              </div>
+
+              <div className="p-5">
+                {locked && (
+                  <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-[12.5px] p-3">
+                    {heldWorkers} worker{heldWorkers > 1 ? "s hold" : " holds"}{" "}
+                    a position on this job. The title, category, pay, location,
+                    date, schedule and job type are locked so existing offers
+                    stay valid. You can still change the description,
+                    instructions, contact and number of workers (not below{" "}
+                    {heldWorkers}).
+                  </div>
+                )}
+                {posted && (
+                  <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 text-[13px] p-3">
+                    <b>{isEdit ? "Changes saved ✅" : "Job posted ✅"}</b>
+                    <div className="mt-1">
+                      <Link
+                        href={
+                          isEdit && jobId
+                            ? `/employer-jobs/${jobId}`
+                            : "/employer-jobs"
+                        }
+                        className="text-emerald-700 font-semibold underline"
+                      >
+                        {isEdit ? "View job details" : "View in My Jobs"}
+                      </Link>
+                    </div>
+                  </div>
+                )}
+
+                <dl className="text-[13.5px] text-slate-600 space-y-3">
+                  <div className="flex justify-between gap-3">
+                    <dt>
+                      Worker pay (
+                      <b className="text-slate-800">
+                        {workers} worker{workers > 1 ? "s" : ""}
+                      </b>{" "}
+                      × ₹{wageNum.toLocaleString("en-IN")} /{" "}
+                      {PAY_UNITS.find(
+                        (u) => u.value === salaryUnit,
+                      )?.short.toLowerCase()}
+                      )
+                    </dt>
+                    <dd className="font-semibold text-slate-900 whitespace-nowrap">
+                      {fmt(total)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt>Shift</dt>
+                    <dd className="text-slate-900 text-right">
+                      {shiftInfo.title}
+                    </dd>
+                  </div>
+                  {overtime && Number(otRate) > 0 && (
+                    <div className="flex justify-between gap-3">
+                      <dt>Overtime (per worker)</dt>
+                      <dd className="text-slate-900">
+                        ₹{Number(otRate)} / hour
+                      </dd>
+                    </div>
+                  )}
+                  <div className="flex justify-between gap-3">
+                    <dt>Payment</dt>
+                    <dd className="text-slate-900 text-right">
+                      {SETTLEMENTS.find((s) => s.value === settlement)?.label}
+                    </dd>
+                  </div>
+                </dl>
+
+                <div className="border-t border-slate-100 mt-5 pt-5 flex items-end justify-between gap-3">
+                  <span className="text-[15px] font-bold text-slate-900">
+                    Total wage budget
+                  </span>
+                  <span className="text-[30px] font-extrabold tracking-tight leading-none">
+                    {fmt(total).replace(/\.00$/, "")}
+                  </span>
+                </div>
+                <p className="text-right text-[11.5px] text-slate-400 mt-1.5">
+                  Excludes overtime and any perks you provide
+                </p>
+
+                {error && (
+                  <div
+                    role="alert"
+                    className="mt-4 rounded-lg border border-red-200 bg-red-50 text-red-700 text-[12.5px] p-3"
+                  >
+                    {error}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="mt-5 w-full h-12 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-[14.5px] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                >
+                  <FiSend />{" "}
+                  {isEdit
+                    ? loading
+                      ? "Saving…"
+                      : "Save Changes"
+                    : loading
+                      ? "Publishing…"
+                      : urgent
+                        ? "Publish & Dispatch Urgently"
+                        : "Publish Job"}
+                </button>
+                <Link
+                  href={
+                    isEdit && jobId
+                      ? `/employer-jobs/${jobId}`
+                      : "/employer-dashboard"
+                  }
+                  className="mt-3 w-full h-11 rounded-lg border border-slate-200 text-slate-700 font-semibold text-[13.5px] flex items-center justify-center no-underline hover:bg-slate-50"
+                >
+                  Cancel
+                </Link>
+              </div>
+            </div>
+          </aside>
+        </form>
+
+        <footer className="border-t border-slate-200 bg-white">
+          <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-5 flex items-center gap-3 text-[12.5px] text-slate-500">
+            <span className="bg-red-500 text-white font-extrabold text-[10px] rounded px-1.5 py-1">
+              HM
+            </span>
+            <span>
+              <b className="text-slate-700">HireMate</b> — On-demand daily wage
+              work
+            </span>
+          </div>
+        </footer>
+      </div>
     </EmployerShell>
   );
 }

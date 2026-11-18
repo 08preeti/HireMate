@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isValidLatLng } from "@/lib/maps";
 
 export interface GeoFix {
   lat: number;
@@ -10,9 +11,21 @@ export interface GeoFix {
   timestamp: number;
 }
 
-export type GeoStatus = "idle" | "requesting" | "watching" | "denied" | "unavailable" | "timeout" | "unsupported";
+export type GeoStatus =
+  | "idle"
+  | "requesting"
+  | "watching"
+  | "denied"
+  | "unavailable"
+  | "timeout"
+  | "unsupported";
 
-const toFix = (p: GeolocationPosition): GeoFix => ({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy, timestamp: p.timestamp });
+const toFix = (p: GeolocationPosition): GeoFix => ({
+  lat: p.coords.latitude,
+  lng: p.coords.longitude,
+  accuracy: p.coords.accuracy,
+  timestamp: p.timestamp,
+});
 
 function statusFor(err: GeolocationPositionError): GeoStatus {
   if (err.code === err.PERMISSION_DENIED) return "denied";
@@ -29,18 +42,23 @@ interface Options {
  * The only place that touches navigator.geolocation. Nothing runs until start() is called, and
  * stop() (or unmounting) always clears the watch and the heartbeat.
  */
-export function useGeoWatch(onFix?: (fix: GeoFix) => void, { heartbeatMs = 0 }: Options = {}) {
+export function useGeoWatch(
+  onFix?: (fix: GeoFix) => void,
+  { heartbeatMs = 0 }: Options = {},
+) {
   const [status, setStatus] = useState<GeoStatus>("idle");
   const [fix, setFix] = useState<GeoFix | null>(null);
   const watchId = useRef<number | null>(null);
   const heartbeat = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastTimestamp = useRef(0);
   const onFixRef = useRef(onFix);
   useEffect(() => {
     onFixRef.current = onFix;
   }, [onFix]);
 
   const halt = useCallback(() => {
-    if (watchId.current !== null && typeof navigator !== "undefined") navigator.geolocation.clearWatch(watchId.current);
+    if (watchId.current !== null && typeof navigator !== "undefined")
+      navigator.geolocation.clearWatch(watchId.current);
     watchId.current = null;
     if (heartbeat.current) clearInterval(heartbeat.current);
     heartbeat.current = null;
@@ -48,6 +66,13 @@ export function useGeoWatch(onFix?: (fix: GeoFix) => void, { heartbeatMs = 0 }: 
 
   const accept = useCallback((p: GeolocationPosition) => {
     const next = toFix(p);
+    // Ignore impossible coordinates and readings older than one already accepted (the device can replay a cached fix).
+    if (
+      !isValidLatLng(next.lat, next.lng) ||
+      next.timestamp < lastTimestamp.current
+    )
+      return;
+    lastTimestamp.current = next.timestamp;
     setFix(next);
     setStatus("watching");
     onFixRef.current?.(next);
@@ -60,15 +85,27 @@ export function useGeoWatch(onFix?: (fix: GeoFix) => void, { heartbeatMs = 0 }: 
       return null;
     }
     halt();
+    lastTimestamp.current = 0;
     setStatus("requesting");
-    const first = await new Promise<GeolocationPosition | GeolocationPositionError>((resolve) =>
-      navigator.geolocation.getCurrentPosition(resolve, resolve, { enableHighAccuracy: true, timeout: 15_000, maximumAge: 5_000 }),
+    const first = await new Promise<
+      GeolocationPosition | GeolocationPositionError
+    >((resolve) =>
+      navigator.geolocation.getCurrentPosition(resolve, resolve, {
+        enableHighAccuracy: true,
+        timeout: 15_000,
+        maximumAge: 5_000,
+      }),
     );
     if ("code" in first) {
       setStatus(statusFor(first));
       return null;
     }
     const firstFix = toFix(first);
+    if (!isValidLatLng(firstFix.lat, firstFix.lng)) {
+      setStatus("unavailable");
+      return null;
+    }
+    lastTimestamp.current = firstFix.timestamp;
     setFix(firstFix);
     setStatus("watching");
 
@@ -84,7 +121,11 @@ export function useGeoWatch(onFix?: (fix: GeoFix) => void, { heartbeatMs = 0 }: 
     if (heartbeatMs > 0) {
       heartbeat.current = setInterval(() => {
         if (document.visibilityState !== "visible") return;
-        navigator.geolocation.getCurrentPosition(accept, () => {}, { enableHighAccuracy: true, maximumAge: 15_000, timeout: 15_000 });
+        navigator.geolocation.getCurrentPosition(accept, () => {}, {
+          enableHighAccuracy: true,
+          maximumAge: 15_000,
+          timeout: 15_000,
+        });
       }, heartbeatMs);
     }
     return firstFix;
@@ -94,6 +135,21 @@ export function useGeoWatch(onFix?: (fix: GeoFix) => void, { heartbeatMs = 0 }: 
     halt();
     setStatus("idle");
   }, [halt]);
+
+  // A hidden tab may have been throttled: read the position again the moment it is visible.
+  useEffect(() => {
+    if (status !== "watching") return;
+    const refresh = () => {
+      if (document.visibilityState === "visible")
+        navigator.geolocation.getCurrentPosition(accept, () => {}, {
+          enableHighAccuracy: true,
+          maximumAge: 10_000,
+          timeout: 15_000,
+        });
+    };
+    document.addEventListener("visibilitychange", refresh);
+    return () => document.removeEventListener("visibilitychange", refresh);
+  }, [status, accept]);
 
   useEffect(() => halt, [halt]);
 
