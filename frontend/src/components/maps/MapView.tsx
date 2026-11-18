@@ -17,6 +17,7 @@ const ICON_HTML: Record<MarkerKind, string> = {
   worker: `<div class="flex h-[40px] w-[40px] items-center justify-center rounded-full border-[3px] border-white bg-brand text-[18px] shadow-[0_2px_12px_rgba(0,100,145,0.5)]">🚗</div>`,
   workerStale: `<div class="flex h-[40px] w-[40px] items-center justify-center rounded-full border-[3px] border-white bg-slate-400 text-[18px] opacity-80 shadow-[0_2px_8px_rgba(0,0,0,0.3)]">🚗</div>`,
   destination: `<div class="flex h-[40px] w-[40px] items-center justify-center rounded-full border-[3px] border-white bg-danger text-[18px] shadow-[0_2px_12px_rgba(232,0,42,0.5)]">📍</div>`,
+  start: `<div class="flex h-[26px] w-[26px] items-center justify-center rounded-full border-[3px] border-white bg-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.35)]"><div class="h-[8px] w-[8px] rounded-full bg-white"></div></div>`,
   pin: `<div class="flex h-[40px] w-[40px] items-center justify-center rounded-full border-[3px] border-white bg-emerald-500 text-[18px] shadow-[0_2px_12px_rgba(16,185,129,0.5)]">📌</div>`,
 };
 
@@ -27,13 +28,72 @@ function iconFor(kind: MarkerKind): L.DivIcon {
     icon = L.divIcon({
       html: ICON_HTML[kind],
       className: "",
-      iconSize: [40, 40],
-      iconAnchor: [20, kind === "destination" || kind === "pin" ? 38 : 20],
+      iconSize: kind === "start" ? [26, 26] : [40, 40],
+      iconAnchor:
+        kind === "start"
+          ? [13, 13]
+          : [20, kind === "destination" || kind === "pin" ? 38 : 20],
       popupAnchor: [0, -34],
     });
     iconCache.set(kind, icon);
   }
   return icon;
+}
+
+const GLIDE_MIN_MS = 800;
+const GLIDE_MAX_MS = 6_000;
+
+/**
+ * A marker that glides to each new position instead of jumping. The glide lasts about as long as the gap since the
+ * previous update (so movement looks continuous between GPS fixes). It moves the Leaflet marker directly, with no
+ * React re-render per frame, and cancels its animation frame on unmount.
+ */
+function GlideMarker({ marker }: { marker: MapMarker }) {
+  const ref = useRef<L.Marker | null>(null);
+  const frame = useRef<number | null>(null);
+  const shown = useRef<LatLngTuple>(marker.position);
+  const lastUpdate = useRef(0);
+  const [lat, lng] = marker.position;
+
+  useEffect(() => {
+    const instance = ref.current;
+    if (!instance) return;
+    const now = performance.now();
+    const from = shown.current;
+    const gap = lastUpdate.current ? now - lastUpdate.current : 0;
+    lastUpdate.current = now;
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    if (!gap || (from[0] === lat && from[1] === lng)) {
+      instance.setLatLng([lat, lng]);
+      shown.current = [lat, lng];
+      return;
+    }
+    const duration = Math.min(GLIDE_MAX_MS, Math.max(GLIDE_MIN_MS, gap));
+    const step = (t: number) => {
+      const k = Math.min(1, (t - now) / duration);
+      const here: LatLngTuple = [
+        from[0] + (lat - from[0]) * k,
+        from[1] + (lng - from[1]) * k,
+      ];
+      instance.setLatLng(here);
+      shown.current = here;
+      frame.current = k < 1 ? requestAnimationFrame(step) : null;
+    };
+    frame.current = requestAnimationFrame(step);
+  }, [lat, lng]);
+
+  useEffect(
+    () => () => {
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+    },
+    [],
+  );
+
+  return (
+    <Marker ref={ref} position={shown.current} icon={iconFor(marker.kind)}>
+      {marker.label && <Popup>{marker.label}</Popup>}
+    </Marker>
+  );
 }
 
 /** Fits all markers into view on first render and whenever `focusKey` changes; afterwards it only re-fits when a marker would leave the screen. */
@@ -72,7 +132,10 @@ function Focus({
 interface Props {
   center: LatLngTuple;
   markers: MapMarker[];
+  /** The part of the route still to go (drawn strong). */
   route?: LatLngTuple[];
+  /** The part already travelled (drawn faded and dashed). */
+  routeDone?: LatLngTuple[];
   focusKey?: string | number;
   className?: string;
 }
@@ -81,6 +144,7 @@ export default function MapView({
   center,
   markers,
   route,
+  routeDone,
   focusKey,
   className = "absolute inset-0 h-full w-full",
 }: Props) {
@@ -107,6 +171,18 @@ export default function MapView({
             tileload: () => setTileErrors(0),
           }}
         />
+        {routeDone && routeDone.length > 1 && (
+          <Polyline
+            positions={routeDone}
+            pathOptions={{
+              color: "#94a3b8",
+              weight: 5,
+              opacity: 0.85,
+              dashArray: "2 9",
+              lineCap: "round",
+            }}
+          />
+        )}
         {route && route.length > 1 && (
           <>
             <Polyline
@@ -119,11 +195,15 @@ export default function MapView({
             />
           </>
         )}
-        {markers.map((m) => (
-          <Marker key={m.id} position={m.position} icon={iconFor(m.kind)}>
-            {m.label && <Popup>{m.label}</Popup>}
-          </Marker>
-        ))}
+        {markers.map((m) =>
+          m.kind === "worker" || m.kind === "workerStale" ? (
+            <GlideMarker key={m.id} marker={m} />
+          ) : (
+            <Marker key={m.id} position={m.position} icon={iconFor(m.kind)}>
+              {m.label && <Popup>{m.label}</Popup>}
+            </Marker>
+          ),
+        )}
         <Focus points={points} focusKey={focusKey} />
       </MapContainer>
 

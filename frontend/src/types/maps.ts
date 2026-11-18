@@ -10,6 +10,8 @@ export interface RouteInfo {
   durationSeconds: number;
   coordinates: LatLngTuple[];
   steps: string[];
+  /** [lat, lng] of each step's maneuver, same order as `steps`. */
+  stepLocations?: (LatLngTuple | null)[];
 }
 
 /** The latest position a worker chose to share for one application. */
@@ -18,6 +20,8 @@ export interface LiveLocation {
   lng: number;
   accuracy?: number | null;
   updatedAt?: string;
+  /** Where this sharing period began. */
+  start?: LatLng | null;
 }
 
 export type SharingState = "active" | "not_enabled" | "ended";
@@ -47,7 +51,28 @@ export interface ReversePlace {
   state: string;
 }
 
-export type MarkerKind = "worker" | "workerStale" | "destination" | "pin";
+export type MarkerKind =
+  | "worker"
+  | "workerStale"
+  | "destination"
+  | "pin"
+  | "start";
+
+export type LocationStatus =
+  | "live"
+  | "stale"
+  | "waiting"
+  | "off"
+  | "ended"
+  | "denied"
+  | "unavailable";
+export type RouteStatus =
+  | "idle"
+  | "calculating"
+  | "onRoute"
+  | "rerouting"
+  | "offRoute"
+  | "unavailable";
 
 export interface MapMarker {
   id: string;

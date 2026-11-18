@@ -3,10 +3,26 @@ import Application from "../models/Application.js";
 import Job from "../models/Job.js";
 import Worker from "../models/Worker.js";
 import { HttpError } from "../utils/httpError.js";
-import { JOURNEY_TRANSITIONS, validateReason } from "../validators/applicationValidators.js";
-import { EMPLOYER_CANCELLABLE, WORKER_CANCELLABLE, reasonRequired } from "../constants/workRules.js";
+import {
+  JOURNEY_TRANSITIONS,
+  validateReason,
+} from "../validators/applicationValidators.js";
+import {
+  EMPLOYER_CANCELLABLE,
+  WORKER_CANCELLABLE,
+  reasonRequired,
+} from "../constants/workRules.js";
 import { LOCATION_SHARING_STATUSES } from "../constants/locationRules.js";
-import { RESERVING_STATUSES, assertJobOpen, healJobStatus, reserveVacancy, releaseVacancy, runAtomic, withVacancyCountsFor } from "./vacancyService.js";
+import { publishChanged } from "./trackingHub.js";
+import {
+  RESERVING_STATUSES,
+  assertJobOpen,
+  healJobStatus,
+  reserveVacancy,
+  releaseVacancy,
+  runAtomic,
+  withVacancyCountsFor,
+} from "./vacancyService.js";
 import {
   notifyApplicationCreated,
   notifyApplicationDecision,
@@ -35,7 +51,8 @@ export const ownsApplication = (auth, application) =>
 
 // ── Employer side ───────────────────────────────────────────────────────────
 // Only these worker fields ever reach an employer. OTP and everything else stay server-side.
-const WORKER_FIELDS_FOR_EMPLOYER = "name phone skills location gender rating totalReviews";
+const WORKER_FIELDS_FOR_EMPLOYER =
+  "name phone skills location gender rating totalReviews";
 
 // Applies the privacy rules to one (plain) application before it goes to the employer:
 //  - phone numbers only after the employer has accepted (status not pending/declined/rejected)
@@ -56,8 +73,15 @@ function shapeForEmployer(application) {
 
 // Workers only ever see an employer's contact number once the employer has accepted them.
 export function shapeForWorker(application) {
-  const plain = typeof application.toObject === "function" ? application.toObject() : application;
-  if (UNDECIDED.includes(plain.status) && plain.job && typeof plain.job === "object") {
+  const plain =
+    typeof application.toObject === "function"
+      ? application.toObject()
+      : application;
+  if (
+    UNDECIDED.includes(plain.status) &&
+    plain.job &&
+    typeof plain.job === "object"
+  ) {
     delete plain.job.contactInfo;
   }
   return plain;
@@ -67,7 +91,8 @@ export function shapeForWorker(application) {
 async function attachJobCounts(applications) {
   await Promise.all(
     applications.map(async (a) => {
-      if (a.job && typeof a.job === "object") a.job = (await withVacancyCountsFor([a.job]))[0];
+      if (a.job && typeof a.job === "object")
+        a.job = (await withVacancyCountsFor([a.job]))[0];
     }),
   );
 }
@@ -99,14 +124,16 @@ export async function listLiveApplications(employerId) {
 
 // Employer accepts or declines a pending application for one of their own jobs.
 export async function decideApplication(employerId, applicationId, decision) {
-  if (!mongoose.isValidObjectId(applicationId)) throw new HttpError(400, "Invalid application id");
+  if (!mongoose.isValidObjectId(applicationId))
+    throw new HttpError(400, "Invalid application id");
 
   const application = await Application.findById(applicationId);
   if (!application) throw new HttpError(404, "Not found");
 
   const job = await Job.findById(application.job);
   const ownsIt =
-    application.employer.toString() === employerId && (!job || job.employer.toString() === employerId);
+    application.employer.toString() === employerId &&
+    (!job || job.employer.toString() === employerId);
   if (!ownsIt) throw new HttpError(403, "Not authorized");
   if (!job) throw new HttpError(404, "Job not found");
 
@@ -115,26 +142,50 @@ export async function decideApplication(employerId, applicationId, decision) {
   //
   // Accepting also reserves one vacancy. Reserve + status change run together in runAtomic: one MongoDB
   // transaction when available, otherwise the atomic reservation is given back if the status change fails.
-  const pendingFilter = { _id: application._id, employer: employerId, status: "pending" };
-  const alreadyDecided = () => new HttpError(409, `Application is already ${application.status.replace(/_/g, " ")}`);
+  const pendingFilter = {
+    _id: application._id,
+    employer: employerId,
+    status: "pending",
+  };
+  const alreadyDecided = () =>
+    new HttpError(
+      409,
+      `Application is already ${application.status.replace(/_/g, " ")}`,
+    );
 
   let decided;
   if (decision === "accepted") {
     decided = await runAtomic(async (session, onUndo) => {
       await reserveVacancy(job._id, session);
       onUndo(() => releaseVacancy(job._id));
-      const updated = await Application.findOneAndUpdate(pendingFilter, { $set: { status: decision }, $push: { timeline: entry(decision, "employer") } }, { new: true, session });
+      const updated = await Application.findOneAndUpdate(
+        pendingFilter,
+        {
+          $set: { status: decision },
+          $push: { timeline: entry(decision, "employer") },
+        },
+        { new: true, session },
+      );
       if (!updated) throw alreadyDecided();
       return updated;
     });
   } else {
-    decided = await Application.findOneAndUpdate(pendingFilter, { $set: { status: decision }, $push: { timeline: entry(decision, "employer") } }, { new: true });
+    decided = await Application.findOneAndUpdate(
+      pendingFilter,
+      {
+        $set: { status: decision },
+        $push: { timeline: entry(decision, "employer") },
+      },
+      { new: true },
+    );
     if (!decided) throw alreadyDecided();
   }
 
   await notifyApplicationDecision(decided, job, decision);
   if (decision === "accepted" && job.status === "active") {
-    const after = await Job.findById(job._id).select("status employer jobTitle");
+    const after = await Job.findById(job._id).select(
+      "status employer jobTitle",
+    );
     if (after?.status === "filled") await notifyJobFilled(after, decided);
   }
   return decided;
@@ -150,7 +201,8 @@ export async function applyToJob(workerId, jobId, { applicantName, message }) {
   const contact = worker.phone;
   if (!name || !contact) throw new HttpError(400, "Name and contact required");
 
-  if (!mongoose.isValidObjectId(jobId)) throw new HttpError(400, "Invalid job id");
+  if (!mongoose.isValidObjectId(jobId))
+    throw new HttpError(400, "Invalid job id");
   await healJobStatus(jobId); // a "filled" job with a free vacancy reopens
   const job = await Job.findById(jobId);
   if (!job) throw new HttpError(404, "Job not found");
@@ -182,11 +234,13 @@ export async function applyToJob(workerId, jobId, { applicantName, message }) {
 
 // Worker answers an offer (an application the employer accepted): accepted → confirmed | rejected.
 export async function respondToOffer(auth, applicationId, response) {
-  if (!mongoose.isValidObjectId(applicationId)) throw new HttpError(400, "Invalid application id");
+  if (!mongoose.isValidObjectId(applicationId))
+    throw new HttpError(400, "Invalid application id");
 
   const application = await Application.findById(applicationId);
   if (!application) throw new HttpError(404, "Not found");
-  if (!ownsApplication(auth, application)) throw new HttpError(403, "Not authorized");
+  if (!ownsApplication(auth, application))
+    throw new HttpError(403, "Not authorized");
 
   // Only one request can move the offer out of "accepted" (compare-and-set on the status), so a double
   // click or a second tab can never answer it twice (or notify twice). Rejecting also releases the
@@ -195,7 +249,10 @@ export async function respondToOffer(auth, applicationId, response) {
   const updated = await runAtomic(async (session, onUndo) => {
     const changed = await Application.findOneAndUpdate(
       { _id: application._id, status: "accepted" },
-      { $set: { status: response }, $push: { timeline: entry(response, "worker") } },
+      {
+        $set: { status: response },
+        $push: { timeline: entry(response, "worker") },
+      },
       { new: true, session },
     );
     if (!changed) {
@@ -208,7 +265,15 @@ export async function respondToOffer(auth, applicationId, response) {
       );
     }
     if (response === "rejected") {
-      onUndo(() => Application.updateOne({ _id: changed._id, status: "rejected" }, { $set: { status: "accepted" }, $pull: { timeline: { event: "rejected" } } }));
+      onUndo(() =>
+        Application.updateOne(
+          { _id: changed._id, status: "rejected" },
+          {
+            $set: { status: "accepted" },
+            $pull: { timeline: { event: "rejected" } },
+          },
+        ),
+      );
       await releaseVacancy(changed.job, session);
     }
     return changed;
@@ -224,22 +289,48 @@ export async function respondToOffer(auth, applicationId, response) {
 // vs employer cancel vs worker reject) exactly ONE wins and only the winner releases the vacancy.
 // Status change + release share a transaction when available; otherwise the status is reverted if the
 // release fails, so a vacancy is never lost or released twice.
-async function endApplication(application, newStatus, by, reason = "", extraFilter = {}) {
+async function endApplication(
+  application,
+  newStatus,
+  by,
+  reason = "",
+  extraFilter = {},
+) {
   const previous = application.status;
   const heldVacancy = RESERVING_STATUSES.includes(previous);
   return runAtomic(async (session, onUndo) => {
     const ended = await Application.findOneAndUpdate(
       { _id: application._id, status: previous, ...extraFilter },
       {
-        $set: { status: newStatus, locationConsent: false, ...(reason && { cancellationReason: reason }) },
+        $set: {
+          status: newStatus,
+          locationConsent: false,
+          ...(reason && { cancellationReason: reason }),
+        },
         $unset: { liveLocation: "", locationConsentAt: "" },
-        $push: { timeline: { ...entry(newStatus, by), ...(reason && { note: reason }) } },
+        $push: {
+          timeline: {
+            ...entry(newStatus, by),
+            ...(reason && { note: reason }),
+          },
+        },
       },
       { new: true, session },
     );
-    if (!ended) throw new HttpError(409, "Application status changed, please refresh");
+    if (!ended)
+      throw new HttpError(409, "Application status changed, please refresh");
+    publishChanged(ended._id);
     if (heldVacancy) {
-      onUndo(() => Application.updateOne({ _id: ended._id, status: newStatus }, { $set: { status: previous }, $unset: { cancellationReason: "" }, $pull: { timeline: { event: newStatus } } }));
+      onUndo(() =>
+        Application.updateOne(
+          { _id: ended._id, status: newStatus },
+          {
+            $set: { status: previous },
+            $unset: { cancellationReason: "" },
+            $pull: { timeline: { event: newStatus } },
+          },
+        ),
+      );
       await releaseVacancy(ended.job, session);
     }
     return ended;
@@ -248,53 +339,101 @@ async function endApplication(application, newStatus, by, reason = "", extraFilt
 
 // Worker withdraws their own application (pending, or an offer / confirmed job not yet started).
 export async function withdrawApplication(auth, applicationId, reasonInput) {
-  if (!mongoose.isValidObjectId(applicationId)) throw new HttpError(400, "Invalid application id");
+  if (!mongoose.isValidObjectId(applicationId))
+    throw new HttpError(400, "Invalid application id");
   const application = await Application.findById(applicationId);
   if (!application) throw new HttpError(404, "Not found");
-  if (!ownsApplication(auth, application)) throw new HttpError(403, "Not authorized");
+  if (!ownsApplication(auth, application))
+    throw new HttpError(403, "Not authorized");
   if (!WORKER_CANCELLABLE.includes(application.status)) {
-    throw new HttpError(409, `Cannot withdraw an application that is ${application.status.replace(/_/g, " ")}`);
+    throw new HttpError(
+      409,
+      `Cannot withdraw an application that is ${application.status.replace(/_/g, " ")}`,
+    );
   }
-  const reason = validateReason(reasonInput, { required: reasonRequired(application), label: "Reason for cancelling" });
-  const ended = await endApplication(application, "withdrawn", "worker", reason, { completionRequestedAt: null });
-  await notifyApplicationEnded(ended, await Job.findById(ended.job), "withdrawn");
+  const reason = validateReason(reasonInput, {
+    required: reasonRequired(application),
+    label: "Reason for cancelling",
+  });
+  const ended = await endApplication(
+    application,
+    "withdrawn",
+    "worker",
+    reason,
+    { completionRequestedAt: null },
+  );
+  await notifyApplicationEnded(
+    ended,
+    await Job.findById(ended.job),
+    "withdrawn",
+  );
   return ended;
 }
 
 // Employer cancels a hire they had accepted (before the job is completed).
-export async function cancelApplication(employerId, applicationId, reasonInput) {
-  if (!mongoose.isValidObjectId(applicationId)) throw new HttpError(400, "Invalid application id");
+export async function cancelApplication(
+  employerId,
+  applicationId,
+  reasonInput,
+) {
+  if (!mongoose.isValidObjectId(applicationId))
+    throw new HttpError(400, "Invalid application id");
   const application = await Application.findById(applicationId);
   if (!application) throw new HttpError(404, "Not found");
-  if (application.employer.toString() !== employerId) throw new HttpError(403, "Not authorized");
+  if (application.employer.toString() !== employerId)
+    throw new HttpError(403, "Not authorized");
   if (!EMPLOYER_CANCELLABLE.includes(application.status)) {
-    throw new HttpError(409, `Cannot cancel an application that is ${application.status.replace(/_/g, " ")}`);
+    throw new HttpError(
+      409,
+      `Cannot cancel an application that is ${application.status.replace(/_/g, " ")}`,
+    );
   }
-  const reason = validateReason(reasonInput, { required: reasonRequired(application), label: "Reason for cancelling" });
-  const ended = await endApplication(application, "cancelled", "employer", reason);
-  await notifyApplicationEnded(ended, await Job.findById(ended.job), "cancelled");
+  const reason = validateReason(reasonInput, {
+    required: reasonRequired(application),
+    label: "Reason for cancelling",
+  });
+  const ended = await endApplication(
+    application,
+    "cancelled",
+    "employer",
+    reason,
+  );
+  await notifyApplicationEnded(
+    ended,
+    await Job.findById(ended.job),
+    "cancelled",
+  );
   return ended;
 }
 
 // Employer opened a pending application: recorded once, and only while it is still pending.
 export async function markReviewed(employerId, applicationId) {
-  if (!mongoose.isValidObjectId(applicationId)) throw new HttpError(400, "Invalid application id");
-  const application = await Application.findById(applicationId).select("employer");
+  if (!mongoose.isValidObjectId(applicationId))
+    throw new HttpError(400, "Invalid application id");
+  const application =
+    await Application.findById(applicationId).select("employer");
   if (!application) throw new HttpError(404, "Not found");
-  if (application.employer.toString() !== employerId) throw new HttpError(403, "Not authorized");
+  if (application.employer.toString() !== employerId)
+    throw new HttpError(403, "Not authorized");
   await Application.updateOne(
-    { _id: application._id, status: "pending", "timeline.event": { $ne: "reviewed" } },
+    {
+      _id: application._id,
+      status: "pending",
+      "timeline.event": { $ne: "reviewed" },
+    },
     { $push: { timeline: entry("reviewed", "employer") } },
   );
 }
 
 // Worker moves through: confirmed → on_the_way → arrived. Completion is requested and verified in workLifecycleService.
 export async function updateApplicationStatus(auth, applicationId, status) {
-  if (!mongoose.isValidObjectId(applicationId)) throw new HttpError(400, "Invalid application id");
+  if (!mongoose.isValidObjectId(applicationId))
+    throw new HttpError(400, "Invalid application id");
 
   const application = await Application.findById(applicationId);
   if (!application) throw new HttpError(404, "Not found");
-  if (!ownsApplication(auth, application)) throw new HttpError(403, "Not authorized");
+  if (!ownsApplication(auth, application))
+    throw new HttpError(403, "Not authorized");
 
   const allowedFrom = JOURNEY_TRANSITIONS[status] || [];
   if (!allowedFrom.includes(application.status)) {
@@ -312,36 +451,63 @@ export async function updateApplicationStatus(auth, applicationId, status) {
     { $set: { status }, $push: { timeline: entry(status, "worker") } },
     { new: true },
   );
-  if (!updated) throw new HttpError(409, "Application status changed, please refresh");
+  if (!updated)
+    throw new HttpError(409, "Application status changed, please refresh");
+  publishChanged(updated._id);
   await notifyWorkerStatusChange(updated, status);
 }
 
 // Worker grants or withdraws consent to share live GPS for ONE of their own applications.
 // Granting is only possible while the job is confirmed / on the way / arrived; withdrawing always works.
 export async function setLocationConsent(auth, applicationId, consent) {
-  if (!mongoose.isValidObjectId(applicationId)) throw new HttpError(400, "Invalid application id");
+  if (!mongoose.isValidObjectId(applicationId))
+    throw new HttpError(400, "Invalid application id");
 
   const application = await Application.findById(applicationId);
   if (!application) throw new HttpError(404, "Not found");
-  if (!ownsApplication(auth, application)) throw new HttpError(403, "Not authorized");
+  if (!ownsApplication(auth, application))
+    throw new HttpError(403, "Not authorized");
 
   if (!consent) {
-    await Application.updateOne({ _id: application._id }, { $set: { locationConsent: false }, $unset: { liveLocation: "", locationConsentAt: "" } });
+    await Application.updateOne(
+      { _id: application._id },
+      {
+        $set: { locationConsent: false },
+        $unset: { liveLocation: "", locationConsentAt: "" },
+      },
+    );
+    publishChanged(application._id);
     return false;
   }
 
   // Atomic: the status must still allow sharing at the moment consent is stored.
   const updated = await Application.findOneAndUpdate(
-    { _id: application._id, isCompleted: false, status: { $in: LOCATION_SHARING } },
-    { $set: { locationConsent: true, locationConsentAt: new Date() }, $unset: { liveLocation: "" } },
+    {
+      _id: application._id,
+      isCompleted: false,
+      status: { $in: LOCATION_SHARING },
+    },
+    {
+      $set: { locationConsent: true, locationConsentAt: new Date() },
+      $unset: { liveLocation: "" },
+    },
     { new: true },
   );
-  if (!updated) throw new HttpError(409, "Location can only be shared for a confirmed, active job");
+  if (!updated)
+    throw new HttpError(
+      409,
+      "Location can only be shared for a confirmed, active job",
+    );
+  publishChanged(updated._id);
   return true;
 }
 
 export async function getRatingByName(name) {
-  const apps = await Application.find({ applicantName: name, isCompleted: true, rating: { $gt: 0 } });
+  const apps = await Application.find({
+    applicantName: name,
+    isCompleted: true,
+    rating: { $gt: 0 },
+  });
   if (!apps.length) return { rating: 0, total: 0 };
   const avg = apps.reduce((sum, a) => sum + (a.rating || 0), 0) / apps.length;
   return { rating: avg.toFixed(1), total: apps.length };

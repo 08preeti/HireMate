@@ -70,7 +70,7 @@ async function main() {
   }
 
   // Imported here so the matching rules above can be tested without a database.
-  const { env } = await import("../src/config/env.js");
+  const { connectDB } = await import("../src/config/db.js");
   const { default: Job } = await import("../src/models/Job.js");
   const { parsePhotoInput, resolvePhotos } =
     await import("../src/services/jobPhotos.js");
@@ -105,7 +105,7 @@ async function main() {
     return photo;
   };
 
-  await mongoose.connect(env.mongoUri);
+  await connectDB(); // same database as the server (never "test")
   const jobs = await Job.find(
     force
       ? {}

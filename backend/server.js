@@ -3,16 +3,23 @@ import { connectDB } from "./src/config/db.js";
 import app from "./src/app.js";
 import mongoose from "mongoose";
 import { startLocationCleanup } from "./src/services/locationService.js";
+import { attachTrackingSocket } from "./src/services/trackingSocket.js";
 
 connectDB()
   .then(() => {
     startLocationCleanup();
-    const server = app.listen(env.port, () => console.log(`🚀 Server running on http://localhost:${env.port}`));
+    const server = app.listen(env.port, () =>
+      console.log(`🚀 Server running on http://localhost:${env.port}`),
+    );
+    const io = attachTrackingSocket(server);
 
     // Render sends SIGTERM on every deploy: stop taking requests, then close the database.
     const shutdown = (signal) => {
       console.log(`${signal} received, shutting down`);
-      server.close(() => mongoose.connection.close().finally(() => process.exit(0)));
+      io.close();
+      server.close(() =>
+        mongoose.connection.close().finally(() => process.exit(0)),
+      );
       setTimeout(() => process.exit(1), 10_000).unref();
     };
     process.on("SIGTERM", () => shutdown("SIGTERM"));
