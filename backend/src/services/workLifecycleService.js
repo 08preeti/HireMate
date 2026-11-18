@@ -176,36 +176,6 @@ export async function rateApplication(
   return updated;
 }
 
-// Worker rates the employer. Only after completion, once per booking.
-export async function rateEmployer(auth, applicationId, { rating, review }) {
-  const application = await loadApplication(applicationId);
-  if (!ownsApplication(auth, application))
-    throw new HttpError(403, "Not authorized");
-  if (application.status !== "completed")
-    throw new HttpError(
-      409,
-      "You can rate the employer only after the work is completed",
-    );
-  if (application.employerRating)
-    throw new HttpError(409, "You have already rated this employer");
-
-  const updated = await Application.findOneAndUpdate(
-    { _id: application._id, status: "completed", employerRating: null },
-    {
-      $set: {
-        employerRating: rating,
-        employerReview: review,
-        employerRatedAt: new Date(),
-      },
-    },
-    { new: true },
-  );
-  if (!updated)
-    throw new HttpError(409, "You have already rated this employer");
-  await notifyReviewReceived(updated, "worker");
-  return updated;
-}
-
 // Ratings workers gave each employer, and how many jobs each has completed, from stored data only.
 export async function getEmployerSummaries(employerIds) {
   const ids = [...new Set(employerIds.map(String))].map(

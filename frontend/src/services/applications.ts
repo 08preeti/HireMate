@@ -21,10 +21,6 @@ export const withdrawApplication = (id: string, reason?: string): Promise<ApiErr
 export const requestCompletion = (id: string): Promise<ApiErrorBody> =>
   api.put<ApiErrorBody>(`/api/applications/completion-request/${id}`, {}, true);
 
-/** Worker rates the employer after the work is completed (once per booking). */
-export const rateEmployer = (id: string, body: { rating: number; review: string }): Promise<ApiErrorBody> =>
-  api.post<ApiErrorBody>(`/api/applications/employer-review/${id}`, body, true);
-
 /** Worker grants / withdraws consent to share live GPS with the employer for this application. */
 export const setLocationConsent = (id: string, consent: boolean): Promise<ApiErrorBody> =>
   api.put<ApiErrorBody>(`/api/applications/location-consent/${id}`, { consent }, true);

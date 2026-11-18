@@ -11,7 +11,7 @@ import {
   markReviewed,
   getRatingByName,
 } from "../services/applicationService.js";
-import { rateApplication, rateEmployer, requestCompletion, decideCompletion } from "../services/workLifecycleService.js";
+import { rateApplication, requestCompletion, decideCompletion } from "../services/workLifecycleService.js";
 import { validateApplyBody, validateCompletionDecision, validateDecision, validateLocationConsent, validateOfferResponse, validateReview, validateStatus } from "../validators/applicationValidators.js";
 import { sendError } from "../utils/httpError.js";
 
@@ -146,15 +146,6 @@ export async function completionDecision(req, res) {
   try {
     const application = await decideCompletion(req.auth.id, req.params.id, validateCompletionDecision(req.body));
     res.json({ success: true, status: application.status });
-  } catch (err) {
-    sendError(res, err, "Server error");
-  }
-}
-
-export async function reviewEmployer(req, res) {
-  try {
-    await rateEmployer(req.auth, req.params.id, validateReview(req.body));
-    res.json({ success: true });
   } catch (err) {
     sendError(res, err, "Server error");
   }

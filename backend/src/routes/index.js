@@ -9,6 +9,7 @@ import aiRoutes from "./aiRoutes.js";
 import sessionRoutes from "./sessionRoutes.js";
 import notificationRoutes from "./notificationRoutes.js";
 import locationRoutes from "./locationRoutes.js";
+import translateRoutes from "./translateRoutes.js";
 
 const router = Router();
 
@@ -23,5 +24,6 @@ router.use("/ai", aiRoutes);
 router.use("/auth", sessionRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/location", locationRoutes);
+router.use("/translate", translateRoutes);
 
 export default router;

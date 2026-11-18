@@ -6,6 +6,7 @@ import Link from "next/link";
 import { FiCamera, FiCheckCircle, FiEdit2, FiEye, FiMapPin, FiTrash2, FiX } from "react-icons/fi";
 import GenderPicker, { type Gender } from "@/components/ui/GenderPicker";
 import { toast } from "@/components/ui/Toast";
+import TranslatedText from "@/components/ui/TranslatedText";
 import { CARD, ErrorPanel, PageContainer, PageHeader, Stars } from "@/components/worker/WorkerUi";
 import { useAuth } from "@/context/AuthContext";
 import { useL } from "@/hooks/useL";
@@ -469,8 +470,8 @@ export default function WorkerProfile() {
             {reviews.slice(0, 5).map((a) => (
               <li key={a._id} className="rounded-xl border border-[#edf1f7] bg-[#f8fafd] px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-[14px] font-semibold text-[#0b1b3d]">{jobTitleOf(a, language)}</span><Stars value={a.rating!} size={14} /></div>
-                {a.review && <p className="mb-0 mt-1.5 text-[14px] italic text-[#1f2a44]">&ldquo;{a.review}&rdquo;</p>}
-                <p className="mb-0 mt-1 text-[12.5px] text-[#8a96ae]">{a.job?.companyName} {dateOf(a.updatedAt) && `• ${dateOf(a.updatedAt)}`}</p>
+                {a.review && <p className="mb-0 mt-1.5 text-[14px] italic text-[#1f2a44]">&ldquo;<TranslatedText text={a.review} />&rdquo;</p>}
+                <p className="mb-0 mt-1 text-[12.5px] text-[#8a96ae]">{a.job?.companyName} {dateOf(a.updatedAt, language) && `• ${dateOf(a.updatedAt, language)}`}</p>
               </li>
             ))}
           </ul>

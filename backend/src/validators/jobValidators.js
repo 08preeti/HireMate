@@ -3,7 +3,8 @@ import { JOB_TYPES, SALARY_UNITS, SHIFT_KEYS } from "../constants/jobRules.js";
 import { isValidCoordinate } from "../utils/geo.js";
 import { parsePhotoInput } from "../services/jobPhotos.js";
 
-const isBlank = (v) => v === undefined || v === null || (typeof v === "string" && v.trim() === "");
+const isBlank = (v) =>
+  v === undefined || v === null || (typeof v === "string" && v.trim() === "");
 const todayUtc = () => {
   const now = new Date();
   return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
@@ -28,11 +29,6 @@ const TEXT_LIMITS = {
   companyName: ["Company name", 120],
 };
 
-/**
- * Validates a job body and returns the cleaned fields that were supplied.
- * partial=true (editing): only supplied fields are checked. partial=false (creating): required fields must exist.
- * Throws HttpError(400) with { field, errors } so the form can show each message beside its input.
- */
 export function parseJobInput(body = {}, { partial = false } = {}) {
   const errors = {};
   const out = {};
@@ -48,13 +44,15 @@ export function parseJobInput(body = {}, { partial = false } = {}) {
       continue;
     }
     const value = (body[field] ?? "").trim();
-    if (value.length > max) fail(field, `${label} must be ${max} characters or fewer`);
+    if (value.length > max)
+      fail(field, `${label} must be ${max} characters or fewer`);
     out[field] = value;
   }
 
   if (has("description") && !has("summary")) {
     if (typeof body.description === "string") {
-      if (body.description.length > 4000) fail("description", "Description must be 4000 characters or fewer");
+      if (body.description.length > 4000)
+        fail("description", "Description must be 4000 characters or fewer");
       out.description = body.description.trim();
     }
   }
@@ -69,18 +67,24 @@ export function parseJobInput(body = {}, { partial = false } = {}) {
   if (!partial || has("salary")) {
     const raw = body.salary;
     const n = Number(raw);
-    if (isBlank(raw) || Number.isNaN(n)) fail("salary", "A valid pay amount is required");
+    if (isBlank(raw) || Number.isNaN(n))
+      fail("salary", "A valid pay amount is required");
     else if (n <= 0) fail("salary", "Pay must be greater than zero");
     else if (n > 10_000_000) fail("salary", "Pay is too large");
     else out.salary = n;
   }
 
   if (has("salaryUnit") && !isBlank(body.salaryUnit)) {
-    if (!SALARY_UNITS.includes(body.salaryUnit)) fail("salaryUnit", "Payment type must be hourly, daily, weekly or monthly");
+    if (!SALARY_UNITS.includes(body.salaryUnit))
+      fail(
+        "salaryUnit",
+        "Payment type must be hourly, daily, weekly or monthly",
+      );
     else out.salaryUnit = body.salaryUnit;
   }
   if (has("jobType") && !isBlank(body.jobType)) {
-    if (!JOB_TYPES.includes(body.jobType)) fail("jobType", "Choose a valid job type");
+    if (!JOB_TYPES.includes(body.jobType))
+      fail("jobType", "Choose a valid job type");
     else out.jobType = body.jobType;
   }
   if (has("shift") && !isBlank(body.shift)) {
@@ -90,7 +94,11 @@ export function parseJobInput(body = {}, { partial = false } = {}) {
 
   if (has("vacancies") && !isBlank(body.vacancies)) {
     const n = Number(body.vacancies);
-    if (!Number.isInteger(n) || n < 1 || n > 500) fail("vacancies", "Workers required must be a whole number between 1 and 500");
+    if (!Number.isInteger(n) || n < 1 || n > 500)
+      fail(
+        "vacancies",
+        "Workers required must be a whole number between 1 and 500",
+      );
     else out.vacancies = n;
   } else if (!partial) {
     out.vacancies = 1;
@@ -100,9 +108,13 @@ export function parseJobInput(body = {}, { partial = false } = {}) {
     if (isBlank(body.startDate)) out.startDate = null;
     else {
       const text = String(body.startDate);
-      const d = /^\d{4}-\d{2}-\d{2}/.test(text) ? new Date(`${text.slice(0, 10)}T00:00:00.000Z`) : new Date(NaN);
-      if (Number.isNaN(d.getTime())) fail("startDate", "Start date is not a valid date");
-      else if (!partial && d.getTime() < todayUtc() - 86_400_000) fail("startDate", "Start date cannot be in the past");
+      const d = /^\d{4}-\d{2}-\d{2}/.test(text)
+        ? new Date(`${text.slice(0, 10)}T00:00:00.000Z`)
+        : new Date(NaN);
+      if (Number.isNaN(d.getTime()))
+        fail("startDate", "Start date is not a valid date");
+      else if (!partial && d.getTime() < todayUtc() - 86_400_000)
+        fail("startDate", "Start date cannot be in the past");
       else out.startDate = d;
     }
   }
@@ -111,19 +123,27 @@ export function parseJobInput(body = {}, { partial = false } = {}) {
     if (isBlank(body.overtimeRate)) out.overtimeRate = 0;
     else {
       const n = Number(body.overtimeRate);
-      if (Number.isNaN(n) || n < 0 || n > 100_000) fail("overtimeRate", "Overtime rate must be between 0 and 100000");
+      if (Number.isNaN(n) || n < 0 || n > 100_000)
+        fail("overtimeRate", "Overtime rate must be between 0 and 100000");
       else out.overtimeRate = n;
     }
   }
 
   if (has("perkItems")) {
-    if (!Array.isArray(body.perkItems) || body.perkItems.length > 10 || body.perkItems.some((p) => typeof p !== "string" || !p.trim() || p.length > 60)) {
+    if (
+      !Array.isArray(body.perkItems) ||
+      body.perkItems.length > 10 ||
+      body.perkItems.some(
+        (p) => typeof p !== "string" || !p.trim() || p.length > 60,
+      )
+    ) {
       fail("perkItems", "Perks must be a short list of text items");
     } else out.perkItems = body.perkItems.map((p) => p.trim());
   }
 
   if (has("postalCode") && !isBlank(body.postalCode)) {
-    if (!/^\d{6}$/.test(String(body.postalCode).trim())) fail("postalCode", "Postal code must be 6 digits");
+    if (!/^\d{6}$/.test(String(body.postalCode).trim()))
+      fail("postalCode", "Postal code must be 6 digits");
     else out.postalCode = String(body.postalCode).trim();
   }
 
@@ -142,21 +162,24 @@ export function parseJobInput(body = {}, { partial = false } = {}) {
 
   if (has("contactInfo") && !isBlank(body.contactInfo)) {
     const compact = String(body.contactInfo).replace(/[\s-]/g, "");
-    if (!/^\+?\d{10,15}$/.test(compact)) fail("contactInfo", "Contact number must be 10 to 15 digits");
+    if (!/^\+?\d{10,15}$/.test(compact))
+      fail("contactInfo", "Contact number must be 10 to 15 digits");
     else out.contactInfo = compact;
   } else if (has("contactInfo")) {
     out.contactInfo = "";
   }
 
   if (has("isUrgent")) {
-    if (typeof body.isUrgent !== "boolean") fail("isUrgent", "Urgent must be true or false");
+    if (typeof body.isUrgent !== "boolean")
+      fail("isUrgent", "Urgent must be true or false");
     else out.isUrgent = body.isUrgent;
   }
 
   if (has("photos")) out.photos = parsePhotoInput(body.photos);
 
   const fields = Object.keys(errors);
-  if (fields.length) throw new HttpError(400, errors[fields[0]], { field: fields[0], errors });
+  if (fields.length)
+    throw new HttpError(400, errors[fields[0]], { field: fields[0], errors });
   return out;
 }
 
