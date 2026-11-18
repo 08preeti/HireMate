@@ -30,6 +30,17 @@ module.exports = {
           from: { opacity: "0", transform: "translateY(20px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
+        "fade-in": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+        "pop-in": {
+          from: { opacity: "0", transform: "translateY(16px) scale(.97)" },
+          to: { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        "draw-check": {
+          to: { strokeDashoffset: "0" },
+        },
         "pulse-soft": {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: ".4" },
@@ -46,6 +57,9 @@ module.exports = {
       animation: {
         "slide-in": "slide-in .3s ease",
         "slide-up": "slide-up .4s ease",
+        "fade-in": "fade-in .2s ease-out",
+        "pop-in": "pop-in .28s cubic-bezier(.2,.8,.2,1)",
+        "draw-check": "draw-check .4s ease-out .25s forwards",
         "pulse-mic": "pulse-mic 1s ease-in-out infinite",
         "pulse-soft": "pulse-soft 1.5s infinite",
       },

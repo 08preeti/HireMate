@@ -86,9 +86,8 @@ export default function WorkDetailsPanel({ app, work, onClose }: { app: Applicat
 
           {app.status === "completed" && (
             <Section title={tr("aw_yourRating")}>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3">
                 <Field label={tr("aw_yourRating")} value={app.rating ? `★ ${app.rating}/5${app.review ? ` — ${app.review}` : ""}` : tr("aw_notRated")} />
-                <Field label={tr("aw_theirRating")} value={app.employerRating ? `★ ${app.employerRating}/5${app.employerReview ? ` — ${app.employerReview}` : ""}` : tr("aw_notRated")} />
               </div>
             </Section>
           )}

@@ -36,6 +36,7 @@ import JobPhotoGallery from "@/components/ui/JobPhotoGallery";
 import { jobPhotoUrls } from "@/lib/jobPhotos";
 import { ROLE_LOGIN } from "@/config/routes";
 import JobRouteMap from "./JobRouteMap";
+import ApplicationSentDialog from "./ApplicationSentDialog";
 import { haversine } from "@/lib/geo";
 import { isValidLatLng } from "@/lib/maps";
 import { speakWithEnd, stopSpeaking } from "@/lib/speech";
@@ -1136,45 +1137,15 @@ export default function JobDetails() {
       )}
 
       {/* Applied Success Screen */}
-      {appliedSuccess && (
-        <div className="fixed inset-0 bg-[rgba(0,0,0,.5)] flex items-center justify-center z-[9999] p-5">
-          <div className="bg-white rounded-[20px] p-8 w-full max-w-[380px] text-center">
-            <div className="text-[64px] mb-4">🎉</div>
-            <div className="text-[22px] font-extrabold text-emerald-500 mb-2">
-              {L("Application Sent!", "आवेदन भेज दिया!", "अर्ज पाठवला!")}
-            </div>
-            <div className="text-[14px] text-gray-500 mb-2 leading-[1.6]">
-              {language === "hi"
-                ? `${job.companyName || "नियोक्ता"} को आपका आवेदन मिल गया है।`
-                : language === "mr"
-                  ? `${job.companyName || "नियोक्ता"} ला तुमचा अर्ज मिळाला आहे.`
-                  : `Your application has been sent to ${job.companyName || "the employer"}.`}
-            </div>
-            <div className="text-[13px] text-brand font-semibold mb-6 bg-brand-light rounded-[10px] py-2.5 px-3.5">
-              📞{" "}
-              {L(
-                "The employer will call you soon",
-                "नियोक्ता जल्द कॉल करेगा",
-                "नियोक्ता लवकरच कॉल करेल",
-              )}
-            </div>
-            <div className="flex gap-2.5">
-              <button
-                onClick={() => setAppliedSuccess(false)}
-                className="flex-1 py-[13px] px-0 bg-gray-100 rounded-xl font-semibold cursor-pointer"
-              >
-                {L("Close", "बंद करें", "बंद करा")}
-              </button>
-              <button
-                onClick={() => router.push("/my-jobs")}
-                className="flex-[2] py-[13px] px-0 bg-brand text-white rounded-xl font-bold text-[15px] cursor-pointer"
-              >
-                {L("View My Jobs", "मेरे काम देखें", "माझी कामे पहा")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ApplicationSentDialog
+        open={appliedSuccess}
+        jobTitle={title}
+        company={job?.companyName}
+        location={location}
+        L={L}
+        onClose={() => setAppliedSuccess(false)}
+        onViewJobs={() => router.push("/my-jobs")}
+      />
 
       {/* Report Modal */}
       {showReport && (

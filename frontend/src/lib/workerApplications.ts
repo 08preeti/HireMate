@@ -46,7 +46,7 @@ export const eventAt = (a: Application, event: TimelineEventName): string | unde
 
 export const completedAtOf = (a: Application): string | undefined => a.completedAt || eventAt(a, "completed");
 
-export const workDateOf = (a: Application): string => dateOf(a.job?.startDate) || dateOf(eventAt(a, "arrived")) || dateOf(eventAt(a, "confirmed"));
+export const workDateOf = (a: Application, language?: Language): string => dateOf(a.job?.startDate, language) || dateOf(eventAt(a, "arrived"), language) || dateOf(eventAt(a, "confirmed"), language);
 
 export const mapsUrlOf = (a: Application): string | null =>
   typeof a.job?.latitude === "number" && typeof a.job?.longitude === "number" ? `https://www.google.com/maps/search/?api=1&query=${a.job.latitude},${a.job.longitude}` : null;
@@ -60,8 +60,11 @@ export const inr = (n: number): string => `₹${n.toLocaleString("en-IN")}`;
 
 export const timeOf = (iso?: string): number => (iso ? new Date(iso).getTime() : 0);
 
-export const dateOf = (iso?: string): string =>
-  iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "";
+const LOCALES: Record<string, string> = { hi: "hi-IN", mr: "mr-IN" };
+
+/** Short date in the active UI language (falls back to en-GB). */
+export const dateOf = (iso?: string, language?: Language): string =>
+  iso ? new Date(iso).toLocaleDateString((language && LOCALES[language]) || "en-GB", { day: "numeric", month: "short", year: "numeric" }) : "";
 
 export const jobTitleOf = (a: Application, language: Language): string =>
   localizedTradeLabel(a.job?.jobTitle?.[language] || a.job?.jobTitle?.en || "", language);

@@ -81,9 +81,6 @@ export default function EmployerWorkCard({ app, work, onOpen, onTrack }: Props) 
         {app.status === "completed" && (
           <div className="flex gap-1.5"><dt className="text-slate-400">{tr("aw_yourRating")}:</dt><dd className="m-0">{app.rating ? `★ ${app.rating}/5` : tr("aw_notRated")}</dd></div>
         )}
-        {app.status === "completed" && app.employerRating ? (
-          <div className="flex gap-1.5"><dt className="text-slate-400">{tr("aw_theirRating")}:</dt><dd className="m-0">★ {app.employerRating}/5</dd></div>
-        ) : null}
         {!active && app.cancellationReason && <div className="flex gap-1.5 sm:col-span-2"><dt className="text-slate-400">{tr("aw_cancelledReason")}:</dt><dd className="m-0 break-words">{app.cancellationReason}</dd></div>}
       </dl>
 

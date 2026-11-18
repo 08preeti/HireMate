@@ -14,7 +14,6 @@ import {
   ratingByName,
   completionRequest,
   completionDecision,
-  reviewEmployer,
 } from "../controllers/applicationController.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { requireRole } from "../middleware/requireRole.js";
@@ -40,7 +39,6 @@ router.put("/status/:id", ...workerOnly, updateStatus);
 router.put("/location-consent/:id", ...workerOnly, locationConsent);
 router.put("/withdraw/:id", ...workerOnly, withdraw);
 router.put("/completion-request/:id", ...workerOnly, completionRequest);
-router.post("/employer-review/:id", ...workerOnly, reviewEmployer);
 router.post("/:jobId/apply", ...workerOnly, apply);
 
 export default router;

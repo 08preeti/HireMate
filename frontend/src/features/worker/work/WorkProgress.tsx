@@ -23,7 +23,7 @@ function currentStep(a: Application): number {
 
 /** Where the work is now. Dates under a step are real server timestamps, never guesses. */
 export default function WorkProgress({ app }: { app: Application }) {
-  const { L } = useL();
+  const { L, language } = useL();
   const current = currentStep(app);
   return (
     <ol className="m-0 grid list-none grid-cols-5 gap-1 p-0" aria-label={L("Work progress", "काम की प्रगति", "कामाची प्रगती")}>
@@ -37,7 +37,7 @@ export default function WorkProgress({ app }: { app: Application }) {
               {done ? <FiCheck size={14} aria-hidden="true" /> : i + 1}
             </span>
             <span className={`text-[11px] leading-tight ${done || here ? "font-semibold text-[#33415f]" : "text-[#8a96ae]"}`}>{L(step.en, step.hi, step.mr)}</span>
-            {at && <span className="text-[10.5px] leading-tight text-[#8a96ae]">{dateOf(at)}</span>}
+            {at && <span className="text-[10.5px] leading-tight text-[#8a96ae]">{dateOf(at, language)}</span>}
           </li>
         );
       })}

@@ -46,7 +46,7 @@ export default function ApplicationCard({ app, actions, onOpen }: Props) {
           <div className="flex items-center gap-2"><FiUser size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><dt className="sr-only">{L("Employer", "नियोक्ता", "मालक")}</dt><dd className="m-0 truncate">{employer || "—"}</dd></div>
           <div className="flex items-center gap-2"><FiMapPin size={15} className="shrink-0 text-[#e11d48]" aria-hidden="true" /><dt className="sr-only">{L("Location", "स्थान", "ठिकाण")}</dt><dd className="m-0 truncate">{location || "—"}</dd></div>
           <div className="flex items-center gap-2"><FiCreditCard size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><dt className="sr-only">{L("Payment", "भुगतान", "पेमेंट")}</dt><dd className="m-0">{inr(salaryOf(app))}{method ? ` • ${paymentMethodLabel(method, language)}` : ""}</dd></div>
-          <div className="flex items-center gap-2"><FiCalendar size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><dt className="sr-only">{L("Applied on", "आवेदन तिथि", "अर्जाची तारीख")}</dt><dd className="m-0">{L("Applied", "आवेदन", "अर्ज")} {dateOf(app.createdAt) || "—"}</dd></div>
+          <div className="flex items-center gap-2"><FiCalendar size={15} className="shrink-0 text-[#5b6a88]" aria-hidden="true" /><dt className="sr-only">{L("Applied on", "आवेदन तिथि", "अर्जाची तारीख")}</dt><dd className="m-0">{L("Applied", "आवेदन", "अर्ज")} {dateOf(app.createdAt, language) || "—"}</dd></div>
         </dl>
 
         <div className="mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-[#edf1f7] pt-4">

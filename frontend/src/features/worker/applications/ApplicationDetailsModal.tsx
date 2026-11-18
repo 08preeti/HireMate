@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { FiX } from "react-icons/fi";
 import ApplicationTimeline from "@/components/ui/ApplicationTimeline";
+import TranslatedText from "@/components/ui/TranslatedText";
 import { Stars } from "@/components/worker/WorkerUi";
 import { useL } from "@/hooks/useL";
 import { paymentMethodLabel } from "@/i18n/formatters";
@@ -59,20 +60,18 @@ export default function ApplicationDetailsModal({ app, onClose }: { app: Applica
           {description && <Row label={L("Job description", "काम का विवरण", "कामाचे वर्णन")}>{description}</Row>}
           <Row label={L("Location", "स्थान", "ठिकाण")}>{jobLocationOf(app, language) || "—"}</Row>
           <Row label={L("Payment", "भुगतान", "पेमेंट")}>{inr(salaryOf(app))}{job?.paymentMethod ? ` • ${paymentMethodLabel(job.paymentMethod, language)}` : ""}</Row>
-          {workDateOf(app) && <Row label={L("Work date", "काम की तिथि", "कामाची तारीख")}>{workDateOf(app)}</Row>}
+          {workDateOf(app, language) && <Row label={L("Work date", "काम की तिथि", "कामाची तारीख")}>{workDateOf(app, language)}</Row>}
           {scheduleOf(app) && <Row label={L("Work schedule", "काम का समय", "कामाची वेळ")}>{scheduleOf(app)}</Row>}
           {completedAtOf(app) && <Row label={L("Completed on", "पूरा होने की तिथि", "पूर्ण झाल्याची तारीख")}>{new Date(completedAtOf(app)!).toLocaleString(language === "hi" ? "hi-IN" : language === "mr" ? "mr-IN" : "en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</Row>}
           {app.cancellationReason && <Row label={L("Cancellation reason", "रद्द करने का कारण", "रद्द करण्याचे कारण")}>{app.cancellationReason}</Row>}
           {app.completionRejection?.reason && app.status === "arrived" && !app.completionRequestedAt && <Row label={L("Employer did not accept completion", "नियोक्ता ने पूरा होना स्वीकार नहीं किया", "मालकाने पूर्णत्व स्वीकारले नाही")}>{app.completionRejection.reason}</Row>}
-          {offerDate && <Row label={L("Offer received", "ऑफर मिली", "ऑफर मिळाली")}>{dateOf(offerDate)}</Row>}
+          {offerDate && <Row label={L("Offer received", "ऑफर मिली", "ऑफर मिळाली")}>{dateOf(offerDate, language)}</Row>}
           {typeof total === "number" && <Row label={L("Vacancies", "रिक्तियां", "जागा")}>{available ?? total} / {total} {L("available", "उपलब्ध", "उपलब्ध")}</Row>}
-          <Row label={L("Applied on", "आवेदन तिथि", "अर्जाची तारीख")}>{dateOf(app.createdAt) || "—"}</Row>
-          <Row label={L("Last updated", "अंतिम अपडेट", "शेवटचा बदल")}>{dateOf(app.updatedAt) || "—"}</Row>
+          <Row label={L("Applied on", "आवेदन तिथि", "अर्जाची तारीख")}>{dateOf(app.createdAt, language) || "—"}</Row>
+          <Row label={L("Last updated", "अंतिम अपडेट", "शेवटचा बदल")}>{dateOf(app.updatedAt, language) || "—"}</Row>
           {app.message && <Row label={L("Your message", "आपका संदेश", "तुमचा संदेश")}>{app.message}</Row>}
           {(app.rating ?? 0) > 0 && <Row label={L("Rating you received", "आपको मिली रेटिंग", "तुम्हाला मिळालेले रेटिंग")}><Stars value={app.rating!} /></Row>}
-          {app.review && <Row label={L("Review you received", "आपको मिली समीक्षा", "तुम्हाला मिळालेले पुनरावलोकन")}>{app.review}</Row>}
-          {(app.employerRating ?? 0) > 0 && <Row label={L("Your rating of the employer", "नियोक्ता को आपकी रेटिंग", "मालकाला तुमचे रेटिंग")}><Stars value={app.employerRating!} /></Row>}
-          {app.employerReview && <Row label={L("Your review of the employer", "नियोक्ता पर आपकी समीक्षा", "मालकावर तुमचे पुनरावलोकन")}>{app.employerReview}</Row>}
+          {app.review && <Row label={L("Review you received", "आपको मिली समीक्षा", "तुम्हाला मिळालेले पुनरावलोकन")}><TranslatedText text={app.review} /></Row>}
         </dl>
 
         <h3 className="mb-3 mt-5 text-[12.5px] font-bold uppercase tracking-wider text-[#5b6a88]">{L("Application timeline", "आवेदन की समयरेखा", "अर्जाची टाइमलाइन")}</h3>

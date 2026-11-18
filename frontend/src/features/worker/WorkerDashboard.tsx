@@ -214,7 +214,7 @@ export default function WorkerDashboard() {
 
         <SectionCard title={L("Recently completed", "हाल में पूरे हुए", "अलीकडे पूर्ण झालेले")} href="/work-history" linkLabel={viewAll}>
           {appSection(sections.completed, "/work-history", L("No completed work yet.", "अभी तक कोई काम पूरा नहीं।", "अजून काम पूर्ण नाही."))}
-          {sections.completed.length > 0 && <p className="mb-0 mt-3 text-[12.5px] text-[#8a96ae]">{L("Last completed", "अंतिम पूर्ण", "शेवटचे पूर्ण")}: {dateOf(sections.completed[0].updatedAt)}</p>}
+          {sections.completed.length > 0 && <p className="mb-0 mt-3 text-[12.5px] text-[#8a96ae]">{L("Last completed", "अंतिम पूर्ण", "शेवटचे पूर्ण")}: {dateOf(sections.completed[0].updatedAt, language)}</p>}
         </SectionCard>
 
         <SectionCard title={L("Recent notifications", "हाल की सूचनाएं", "अलीकडील सूचना")} href="/worker-notifications" linkLabel={viewAll}>
