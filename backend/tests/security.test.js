@@ -102,10 +102,13 @@ test("security headers are set on every response", () => {
   assert.equal(res.headers["X-Frame-Options"], "DENY");
 });
 
+import { fileURLToPath } from "url";
+const projectDir = fileURLToPath(new URL("..", import.meta.url));
+
 const boot = (extra) =>
   spawnSync(process.execPath, ["--input-type=module", "-e", 'const { env } = await import("./src/config/env.js"); console.log(JSON.stringify({ cors: env.corsOrigins, proxy: env.trustProxy }));'], {
-    cwd: new URL("..", import.meta.url).pathname,
-    env: { PATH: process.env.PATH, MONGODB_URI: "mongodb://x/y", JWT_SECRET: "a".repeat(40), ...extra },
+    cwd: projectDir,
+    env: { PATH: process.env.PATH, MONGODB_URI: "mongodb://x/y", JWT_SECRET: "a".repeat(40), FRONTEND_URL: "", ...extra },
     encoding: "utf8",
   });
 

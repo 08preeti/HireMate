@@ -34,3 +34,14 @@
     animation: none;
   }
 }
+
+/* ── Uber Dark Navigation Map Tiles ── */
+/* Smooth CSS filter that turns standard OpenStreetMap tiles into high-contrast midnight navigation without third-party API keys or watermarks */
+.dark-map-tiles .leaflet-tile {
+  filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(115%) !important;
+}
+
+.dark-map-tiles .leaflet-container {
+  background-color: #0b132b !important;
+}
+

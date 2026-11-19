@@ -11,42 +11,90 @@ import {
   useMap,
 } from "react-leaflet";
 import { useL } from "@/hooks/useL";
-import type { LatLngTuple, MapMarker, MarkerKind } from "@/types";
+import type { LatLngTuple, MapMarker, MapTheme, MarkerKind } from "@/types";
 
-const ICON_HTML: Record<MarkerKind, string> = {
-  worker: `<div class="flex h-[40px] w-[40px] items-center justify-center rounded-full border-[3px] border-white bg-brand text-[18px] shadow-[0_2px_12px_rgba(0,100,145,0.5)]">🚗</div>`,
-  workerStale: `<div class="flex h-[40px] w-[40px] items-center justify-center rounded-full border-[3px] border-white bg-slate-400 text-[18px] opacity-80 shadow-[0_2px_8px_rgba(0,0,0,0.3)]">🚗</div>`,
-  destination: `<div class="flex h-[40px] w-[40px] items-center justify-center rounded-full border-[3px] border-white bg-danger text-[18px] shadow-[0_2px_12px_rgba(232,0,42,0.5)]">📍</div>`,
-  start: `<div class="flex h-[26px] w-[26px] items-center justify-center rounded-full border-[3px] border-white bg-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.35)]"><div class="h-[8px] w-[8px] rounded-full bg-white"></div></div>`,
-  pin: `<div class="flex h-[40px] w-[40px] items-center justify-center rounded-full border-[3px] border-white bg-emerald-500 text-[18px] shadow-[0_2px_12px_rgba(16,185,129,0.5)]">📌</div>`,
-};
+/** Generates modern Uber-style DivIcons with heading rotation and glowing radar accents. */
+function iconForMarker(m: MapMarker): L.DivIcon {
+  if (m.kind === "worker" || m.kind === "workerStale") {
+    const heading = m.heading ?? 0;
+    const speed = m.speed ?? null;
+    const isStale = m.kind === "workerStale";
+    const bg = isStale ? "bg-slate-700" : "bg-[#0b132b]";
+    const border = isStale ? "border-slate-400" : "border-[#00e5ff]";
+    const speedHtml =
+      speed && speed > 2
+        ? `<div style="position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); white-space: nowrap; border-radius: 6px; background: rgba(0,0,0,0.85); padding: 1px 5px; font-size: 10px; font-weight: 800; color: #fff; font-family: monospace; box-shadow: 0 2px 6px rgba(0,0,0,0.4);">${speed} km/h</div>`
+        : "";
+    const pingHtml = !isStale
+      ? `<div style="position: absolute; width: 50px; height: 50px; border-radius: 9999px; background: rgba(0,229,255,0.22); animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite; pointer-events: none;"></div>`
+      : "";
 
-const iconCache = new Map<MarkerKind, L.DivIcon>();
-function iconFor(kind: MarkerKind): L.DivIcon {
-  let icon = iconCache.get(kind);
-  if (!icon) {
-    icon = L.divIcon({
-      html: ICON_HTML[kind],
-      className: "",
-      iconSize: kind === "start" ? [26, 26] : [40, 40],
-      iconAnchor:
-        kind === "start"
-          ? [13, 13]
-          : [20, kind === "destination" || kind === "pin" ? 38 : 20],
-      popupAnchor: [0, -34],
+    return L.divIcon({
+      className: "uber-worker-marker",
+      html: `
+        <div style="position: relative; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;">
+          ${pingHtml}
+          <div class="${bg} ${border}" style="position: relative; width: 40px; height: 40px; border-radius: 9999px; border-width: 2.5px; border-style: solid; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(0,0,0,0.5);">
+            <div style="transform: rotate(${heading}deg); transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1); display: flex; align-items: center; justify-content: center;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: #00e5ff; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));">
+                <polygon points="12 2 19 21 12 17 5 21 12 2" fill="#00e5ff" fill-opacity="0.9"></polygon>
+              </svg>
+            </div>
+          </div>
+          ${speedHtml}
+        </div>
+      `,
+      iconSize: [50, 50],
+      iconAnchor: [25, 25],
+      popupAnchor: [0, -26],
     });
-    iconCache.set(kind, icon);
   }
-  return icon;
+
+  if (m.kind === "destination" || m.kind === "pin") {
+    const labelHtml = m.label
+      ? `<div style="position: absolute; top: -28px; left: 50%; transform: translateX(-50%); white-space: nowrap; border-radius: 9999px; background: #0b132b; border: 1.5px solid #334155; padding: 2px 9px; font-size: 11px; font-weight: 800; color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.35); pointer-events: none;">${m.label}</div>`
+      : "";
+
+    return L.divIcon({
+      className: "uber-dest-marker",
+      html: `
+        <div style="position: relative; width: 44px; height: 50px; display: flex; flex-direction: column; align-items: center;">
+          ${labelHtml}
+          <div style="width: 38px; height: 38px; border-radius: 9999px; background: linear-gradient(135deg, #e11d48, #be123c); border: 2.5px solid #ffffff; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(225,29,72,0.5); color: #fff;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+              <circle cx="12" cy="10" r="3" fill="#fff"></circle>
+            </svg>
+          </div>
+          <div style="width: 4px; height: 9px; background: #be123c; border-bottom-left-radius: 2px; border-bottom-right-radius: 2px;"></div>
+        </div>
+      `,
+      iconSize: [44, 50],
+      iconAnchor: [22, 50],
+      popupAnchor: [0, -48],
+    });
+  }
+
+  // Start waypoint
+  return L.divIcon({
+    className: "uber-start-marker",
+    html: `
+      <div style="width: 26px; height: 26px; border-radius: 9999px; background: #0f172a; border: 2.5px solid #ffffff; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.35);">
+        <div style="width: 8px; height: 8px; border-radius: 9999px; background: #10b981;"></div>
+      </div>
+    `,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+    popupAnchor: [0, -16],
+  });
 }
 
 const GLIDE_MIN_MS = 800;
 const GLIDE_MAX_MS = 6_000;
 
 /**
- * A marker that glides to each new position instead of jumping. The glide lasts about as long as the gap since the
- * previous update (so movement looks continuous between GPS fixes). It moves the Leaflet marker directly, with no
- * React re-render per frame, and cancels its animation frame on unmount.
+ * A marker that glides to each new position instead of jumping.
+ * Automatically updates its orientation (heading) and speed badge as position changes.
  */
 function GlideMarker({ marker }: { marker: MapMarker }) {
   const ref = useRef<L.Marker | null>(null);
@@ -54,6 +102,14 @@ function GlideMarker({ marker }: { marker: MapMarker }) {
   const shown = useRef<LatLngTuple>(marker.position);
   const lastUpdate = useRef(0);
   const [lat, lng] = marker.position;
+
+  // Update icon whenever heading, speed, kind or label changes
+  useEffect(() => {
+    const instance = ref.current;
+    if (instance) {
+      instance.setIcon(iconForMarker(marker));
+    }
+  }, [marker.heading, marker.speed, marker.kind, marker.label]);
 
   useEffect(() => {
     const instance = ref.current;
@@ -90,19 +146,21 @@ function GlideMarker({ marker }: { marker: MapMarker }) {
   );
 
   return (
-    <Marker ref={ref} position={shown.current} icon={iconFor(marker.kind)}>
+    <Marker ref={ref} position={shown.current} icon={iconForMarker(marker)}>
       {marker.label && <Popup>{marker.label}</Popup>}
     </Marker>
   );
 }
 
-/** Fits all markers into view on first render and whenever `focusKey` changes; afterwards it only re-fits when a marker would leave the screen. */
+/** Fits all markers into view on initial render or when focusKey changes */
 function Focus({
   points,
   focusKey,
+  disableAutoRefit,
 }: {
   points: LatLngTuple[];
   focusKey?: string | number;
+  disableAutoRefit?: boolean;
 }) {
   const map = useMap();
   const lastKey = useRef<string | number | undefined>(undefined);
@@ -111,21 +169,55 @@ function Focus({
 
   useEffect(() => {
     if (!points.length) return;
-    const refit = !fitted.current || lastKey.current !== focusKey;
-    const outside = points.some((p) => !map.getBounds().pad(-0.1).contains(p));
-    if (!refit && !outside) return;
+    const keyChanged = lastKey.current !== focusKey;
+    const refit = !fitted.current || keyChanged;
+    if (!refit) {
+      if (disableAutoRefit) return;
+      const outside = points.some((p) => !map.getBounds().pad(-0.1).contains(p));
+      if (!outside) return;
+    }
     fitted.current = true;
     lastKey.current = focusKey;
     if (points.length === 1)
       map.setView(points[0], Math.max(map.getZoom(), 16), { animate: true });
     else
       map.fitBounds(L.latLngBounds(points), {
-        padding: [48, 48],
+        padding: [56, 56],
         maxZoom: 17,
         animate: true,
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signature, focusKey, map]);
+  }, [signature, focusKey, map, disableAutoRefit]);
+  return null;
+}
+
+/** Automatically follows the worker marker when active, and notifies when user manually pans */
+function FollowCamera({
+  target,
+  enabled,
+  onUserPan,
+}: {
+  target: LatLngTuple | null;
+  enabled: boolean;
+  onUserPan?: () => void;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    const handleDrag = () => {
+      onUserPan?.();
+    };
+    map.on("dragstart", handleDrag);
+    return () => {
+      map.off("dragstart", handleDrag);
+    };
+  }, [map, onUserPan]);
+
+  useEffect(() => {
+    if (!enabled || !target) return;
+    map.panTo(target, { animate: true, duration: 0.8 });
+  }, [target, enabled, map]);
+
   return null;
 }
 
@@ -138,6 +230,9 @@ interface Props {
   routeDone?: LatLngTuple[];
   focusKey?: string | number;
   className?: string;
+  theme?: MapTheme;
+  followWorker?: boolean;
+  onUserPan?: () => void;
 }
 
 export default function MapView({
@@ -147,6 +242,9 @@ export default function MapView({
   routeDone,
   focusKey,
   className = "absolute inset-0 h-full w-full",
+  theme = "day",
+  followWorker = false,
+  onUserPan,
 }: Props) {
   const { L: t } = useL();
   const [tileKey, setTileKey] = useState(0);
@@ -154,8 +252,20 @@ export default function MapView({
   const points = useMemo(() => markers.map((m) => m.position), [markers]);
   const tilesDown = tileErrors >= 4;
 
+  const workerMarker = useMemo(
+    () => markers.find((m) => m.kind === "worker" || m.kind === "workerStale"),
+    [markers],
+  );
+
+  const tileUrl = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+  const tileAttribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+
   return (
-    <div className="relative isolate h-full min-h-[240px] w-full">
+    <div
+      className={`relative isolate h-full min-h-[240px] w-full ${
+        theme === "night" ? "bg-[#0b132b] dark-map-tiles" : "bg-slate-100"
+      }`}
+    >
       <MapContainer
         center={center}
         zoom={15}
@@ -163,48 +273,85 @@ export default function MapView({
         className={className}
       >
         <TileLayer
-          key={tileKey}
-          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          key={`${tileKey}-${theme}`}
+          url={tileUrl}
+          attribution={tileAttribution}
           eventHandlers={{
             tileerror: () => setTileErrors((n) => n + 1),
             tileload: () => setTileErrors(0),
           }}
         />
+
+        {/* Traveled route polyline (muted slate) */}
         {routeDone && routeDone.length > 1 && (
           <Polyline
             positions={routeDone}
             pathOptions={{
-              color: "#94a3b8",
+              color: theme === "night" ? "#475569" : "#94a3b8",
               weight: 5,
-              opacity: 0.85,
-              dashArray: "2 9",
+              opacity: 0.8,
+              dashArray: "3 8",
               lineCap: "round",
             }}
           />
         )}
+
+        {/* Uber Glowing Route Polyline */}
         {route && route.length > 1 && (
           <>
+            {/* Dark casing halo underneath */}
             <Polyline
               positions={route}
-              pathOptions={{ color: "#006491", weight: 10, opacity: 0.25 }}
+              pathOptions={{
+                color: theme === "night" ? "#0f172a" : "#1e293b",
+                weight: 11,
+                opacity: 0.45,
+                lineCap: "round",
+                lineJoin: "round",
+              }}
             />
+            {/* Electric cyan glow */}
             <Polyline
               positions={route}
-              pathOptions={{ color: "#006491", weight: 5, opacity: 0.9 }}
+              pathOptions={{
+                color: theme === "night" ? "#06b6d4" : "#0284c7",
+                weight: 8,
+                opacity: 0.55,
+                lineCap: "round",
+                lineJoin: "round",
+              }}
+            />
+            {/* Core vibrant path */}
+            <Polyline
+              positions={route}
+              pathOptions={{
+                color: theme === "night" ? "#22d3ee" : "#006491",
+                weight: 5,
+                opacity: 1,
+                lineCap: "round",
+                lineJoin: "round",
+              }}
             />
           </>
         )}
+
+        {/* Markers */}
         {markers.map((m) =>
           m.kind === "worker" || m.kind === "workerStale" ? (
             <GlideMarker key={m.id} marker={m} />
           ) : (
-            <Marker key={m.id} position={m.position} icon={iconFor(m.kind)}>
+            <Marker key={m.id} position={m.position} icon={iconForMarker(m)}>
               {m.label && <Popup>{m.label}</Popup>}
             </Marker>
           ),
         )}
-        <Focus points={points} focusKey={focusKey} />
+
+        <Focus points={points} focusKey={focusKey} disableAutoRefit={followWorker} />
+        <FollowCamera
+          target={workerMarker ? workerMarker.position : null}
+          enabled={followWorker}
+          onUserPan={onUserPan}
+        />
       </MapContainer>
 
       {tilesDown && (
