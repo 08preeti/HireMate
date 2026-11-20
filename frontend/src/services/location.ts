@@ -33,10 +33,17 @@ export const getTrackedRoute = (applicationId: string): Promise<RouteInfo> =>
   api.get(`/api/location/applications/${applicationId}/track/route`, true);
 
 // Employer: address search / reverse lookup (proxied and rate-limited by the server).
+// `near` biases results toward where the employer is looking (like Google Maps does).
 export const searchPlaces = (
   q: string,
+  near?: LatLng | null,
 ): Promise<{ results: PlaceSuggestion[] }> =>
-  api.get(`/api/location/search?q=${encodeURIComponent(q)}`, true);
+  api.get(
+    `/api/location/search?q=${encodeURIComponent(q)}${
+      near ? `&lat=${near.lat}&lng=${near.lng}` : ""
+    }`,
+    true,
+  );
 
 export const reversePlace = (lat: number, lng: number): Promise<ReversePlace> =>
   api.get(`/api/location/reverse?lat=${lat}&lng=${lng}`, true);
