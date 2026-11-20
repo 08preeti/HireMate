@@ -173,7 +173,9 @@ function Focus({
     const refit = !fitted.current || keyChanged;
     if (!refit) {
       if (disableAutoRefit) return;
-      const outside = points.some((p) => !map.getBounds().pad(-0.1).contains(p));
+      const outside = points.some(
+        (p) => !map.getBounds().pad(-0.1).contains(p),
+      );
       if (!outside) return;
     }
     fitted.current = true;
@@ -258,7 +260,8 @@ export default function MapView({
   );
 
   const tileUrl = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-  const tileAttribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+  const tileAttribution =
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 
   return (
     <div
@@ -346,7 +349,11 @@ export default function MapView({
           ),
         )}
 
-        <Focus points={points} focusKey={focusKey} disableAutoRefit={followWorker} />
+        <Focus
+          points={points}
+          focusKey={focusKey}
+          disableAutoRefit={followWorker}
+        />
         <FollowCamera
           target={workerMarker ? workerMarker.position : null}
           enabled={followWorker}
