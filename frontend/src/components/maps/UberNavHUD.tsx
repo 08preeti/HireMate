@@ -47,7 +47,11 @@ function getManeuverIcon(step: ManeuverInfo | null) {
   const mod = (step.modifier || "").toLowerCase();
   const text = (step.text || "").toLowerCase();
 
-  if (mod.includes("u-turn") || mod.includes("uturn") || text.includes("u-turn")) {
+  if (
+    mod.includes("u-turn") ||
+    mod.includes("uturn") ||
+    text.includes("u-turn")
+  ) {
     return <FiCornerUpLeft size={28} className="text-amber-400 rotate-180" />;
   }
   if (mod.includes("sharp left") || text.includes("sharp left")) {
@@ -56,10 +60,18 @@ function getManeuverIcon(step: ManeuverInfo | null) {
   if (mod.includes("sharp right") || text.includes("sharp right")) {
     return <FiCornerUpRight size={28} className="text-amber-400" />;
   }
-  if (mod.includes("slight left") || text.includes("slight left") || text.includes("slightly left")) {
+  if (
+    mod.includes("slight left") ||
+    text.includes("slight left") ||
+    text.includes("slightly left")
+  ) {
     return <FiArrowUpLeft size={28} className="text-emerald-400" />;
   }
-  if (mod.includes("slight right") || text.includes("slight right") || text.includes("slightly right")) {
+  if (
+    mod.includes("slight right") ||
+    text.includes("slight right") ||
+    text.includes("slightly right")
+  ) {
     return <FiArrowUpRight size={28} className="text-emerald-400" />;
   }
   if (mod.includes("left") || text.includes("turn left")) {
@@ -68,10 +80,18 @@ function getManeuverIcon(step: ManeuverInfo | null) {
   if (mod.includes("right") || text.includes("turn right")) {
     return <FiCornerUpRight size={28} className="text-emerald-400" />;
   }
-  if (mod.includes("roundabout") || text.includes("roundabout") || text.includes("rotary")) {
+  if (
+    mod.includes("roundabout") ||
+    text.includes("roundabout") ||
+    text.includes("rotary")
+  ) {
     return <FiRepeat size={28} className="text-cyan-400" />;
   }
-  if (text.includes("reached") || text.includes("destination") || text.includes("arrived")) {
+  if (
+    text.includes("reached") ||
+    text.includes("destination") ||
+    text.includes("arrived")
+  ) {
     return (
       <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white font-bold text-sm">
         ✓
@@ -116,7 +136,8 @@ export default function UberNavHUD({
           speechText = `In ${formatDistance(dist)}, ${currentStep.text}`;
         }
       }
-      const bcp = language === "hi" ? "hi-IN" : language === "mr" ? "mr-IN" : "en-IN";
+      const bcp =
+        language === "hi" ? "hi-IN" : language === "mr" ? "mr-IN" : "en-IN";
       speak(speechText, bcp);
     }
   }, [currentStep?.text, currentStep?.inMeters, voiceEnabled, language]);
@@ -148,7 +169,11 @@ export default function UberNavHUD({
               <div className="flex items-center gap-2">
                 <span className="h-2 w-2 animate-ping rounded-full bg-cyan-400" />
                 <span className="text-[15px] font-bold text-cyan-300">
-                  {L("Recalculating route…", "नया रूट ढूँढ रहे हैं…", "नवीन मार्ग शोधत आहे…")}
+                  {L(
+                    "Recalculating route…",
+                    "नया रूट ढूँढ रहे हैं…",
+                    "नवीन मार्ग शोधत आहे…",
+                  )}
                 </span>
               </div>
             ) : currentStep ? (
@@ -165,13 +190,20 @@ export default function UberNavHUD({
                 </div>
                 {nextStep && nextStep.inMeters > 0 && (
                   <div className="mt-1 truncate text-[12px] font-medium text-slate-400">
-                    <span className="text-slate-300">{L("Then", "फिर", "मग")}:</span> {nextStep.text}
+                    <span className="text-slate-300">
+                      {L("Then", "फिर", "मग")}:
+                    </span>{" "}
+                    {nextStep.text}
                   </div>
                 )}
               </>
             ) : (
               <div className="text-[15px] font-medium text-slate-300">
-                {L("Proceed to route…", "रूट की ओर बढ़ें…", "मार्गाकडे पुढे जा…")}
+                {L(
+                  "Proceed to route…",
+                  "रूट की ओर बढ़ें…",
+                  "मार्गाकडे पुढे जा…",
+                )}
               </div>
             )}
           </div>
@@ -181,9 +213,15 @@ export default function UberNavHUD({
             <button
               type="button"
               onClick={onToggleVoice}
-              title={voiceEnabled ? L("Mute voice", "आवाज़ बंद करें", "आवाज बंद करा") : L("Unmute voice", "आवाज़ चालू करें", "आवाज चालू करा")}
+              title={
+                voiceEnabled
+                  ? L("Mute voice", "आवाज़ बंद करें", "आवाज बंद करा")
+                  : L("Unmute voice", "आवाज़ चालू करें", "आवाज चालू करा")
+              }
               className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${
-                voiceEnabled ? "bg-cyan-500/20 text-cyan-300" : "text-slate-400 hover:text-white"
+                voiceEnabled
+                  ? "bg-cyan-500/20 text-cyan-300"
+                  : "text-slate-400 hover:text-white"
               }`}
             >
               {voiceEnabled ? <FiVolume2 size={18} /> : <FiVolumeX size={18} />}
@@ -191,10 +229,18 @@ export default function UberNavHUD({
             <button
               type="button"
               onClick={onToggleTheme}
-              title={theme === "night" ? L("Day mode", "दिन मोड", "दिवस मोड") : L("Night mode", "रात मोड", "रात्र मोड")}
+              title={
+                theme === "night"
+                  ? L("Day mode", "दिन मोड", "दिवस मोड")
+                  : L("Night mode", "रात मोड", "रात्र मोड")
+              }
               className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:text-white transition"
             >
-              {theme === "night" ? <FiSun size={17} className="text-amber-300" /> : <FiMoon size={17} />}
+              {theme === "night" ? (
+                <FiSun size={17} className="text-amber-300" />
+              ) : (
+                <FiMoon size={17} />
+              )}
             </button>
           </div>
         </div>
@@ -209,7 +255,13 @@ export default function UberNavHUD({
               className="pointer-events-auto flex items-center gap-2 rounded-full border border-cyan-500/40 bg-[#0b132b]/95 px-3.5 py-1.5 text-[12.5px] font-bold text-cyan-300 shadow-lg backdrop-blur hover:bg-[#1c2541] transition animate-bounce"
             >
               <FiCrosshair size={14} className="text-cyan-400" />
-              <span>{L("Re-center on me", "मेरी लोकेशन पर आएँ", "माझ्या स्थानावर या")}</span>
+              <span>
+                {L(
+                  "Re-center on me",
+                  "मेरी लोकेशन पर आएँ",
+                  "माझ्या स्थानावर या",
+                )}
+              </span>
             </button>
           )}
 
@@ -218,7 +270,11 @@ export default function UberNavHUD({
             <button
               type="button"
               onClick={onFitOverview}
-              title={L("Fit entire route", "पूरा रूट देखें", "संपूर्ण मार्ग पहा")}
+              title={L(
+                "Fit entire route",
+                "पूरा रूट देखें",
+                "संपूर्ण मार्ग पहा",
+              )}
               className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-700/80 bg-[#0b132b]/90 text-slate-300 shadow-md backdrop-blur hover:text-white"
             >
               <FiMaximize2 size={16} />
