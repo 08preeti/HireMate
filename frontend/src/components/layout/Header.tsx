@@ -18,6 +18,8 @@ export default function Header() {
   const router = useRouter();
   const { language, setLanguage } = useLanguage();
   const t = translations[language];
+  const L = (en: string, hi: string, mr: string) =>
+    language === "mr" ? mr : language === "hi" ? hi : en;
 
   // ONE active role (or none) comes from AuthContext; the nav below shows only that role's links.
   const { role, loading, logout } = useAuth();
