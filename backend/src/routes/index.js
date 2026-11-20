@@ -10,6 +10,7 @@ import sessionRoutes from "./sessionRoutes.js";
 import notificationRoutes from "./notificationRoutes.js";
 import locationRoutes from "./locationRoutes.js";
 import translateRoutes from "./translateRoutes.js";
+import assistantRoutes from "./assistantRoutes.js";
 
 const router = Router();
 
@@ -25,5 +26,6 @@ router.use("/auth", sessionRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/location", locationRoutes);
 router.use("/translate", translateRoutes);
+router.use("/assistant", assistantRoutes);
 
 export default router;

@@ -14,6 +14,7 @@ import { COMPLETION_LABELS, profileCompletion } from "@/lib/profileCompletion";
 import { dateOf, isCompleted, jobTitleOf, splitSkills } from "@/lib/workerApplications";
 import { ApiError } from "@/services/api";
 import { getMyJobs, getWorkerProfile, updateWorkerProfile } from "@/services/workers";
+import { onAssistantDataChanged } from "@/lib/assistantEvents";
 import type { Application, Worker } from "@/types";
 import ProfileDocuments from "./profile/ProfileDocuments";
 import { localizedTradeLabel } from "@/i18n/jobLabels";
@@ -127,6 +128,12 @@ export default function WorkerProfile() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // The assistant saved a profile change (after the user confirmed it): show the fresh profile.
+  useEffect(
+    () => onAssistantDataChanged("profile", ({ worker: fresh }) => { if (fresh?._id) setWorker(fresh); }),
+    [],
+  );
 
   const completion = useMemo(() => profileCompletion(worker), [worker]);
   const reviews = useMemo(

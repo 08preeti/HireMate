@@ -6,6 +6,7 @@ import { FiAlertCircle, FiCheckCircle, FiMapPin, FiPlus, FiSearch } from "react-
 import EmployerShell from "@/components/layout/EmployerShell";
 import { useEmployerT, type EmployerKey } from "@/i18n/employerText";
 import { getMyJobs } from "@/services/jobs";
+import { onAssistantDataChanged } from "@/lib/assistantEvents";
 import type { EmployerJob, JobStatus } from "@/types";
 import VacancyMeter from "./jobs/VacancyMeter";
 import { JOB_STATUS_ORDER, JOB_TYPE_LABEL, STATUS_LABEL, STATUS_TAB_LABEL, STATUS_TONE, jobStatusOf } from "./jobs/jobHelpers";
@@ -40,6 +41,9 @@ export default function MyJobs() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // The assistant published a job (after the employer confirmed it): show it in the list.
+  useEffect(() => onAssistantDataChanged("jobs", () => void load()), [load]);
 
   const { request, dialog, busyId, notice, clearNotice } = useJobActions(load);
 
