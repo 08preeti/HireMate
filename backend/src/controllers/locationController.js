@@ -9,6 +9,7 @@ import { reversePlace, searchPlaces } from "../services/mapProviderService.js";
 import {
   parseCoordinates,
   parseLocationUpdate,
+  parseSearchBias,
   parseSearchQuery,
 } from "../validators/locationValidators.js";
 import { sendError } from "../utils/httpError.js";
@@ -68,7 +69,12 @@ export async function routePreview(req, res) {
 
 export async function search(req, res) {
   try {
-    res.json({ results: await searchPlaces(parseSearchQuery(req.query.q)) });
+    res.json({
+      results: await searchPlaces(
+        parseSearchQuery(req.query.q),
+        parseSearchBias(req.query),
+      ),
+    });
   } catch (err) {
     sendError(res, err, "Address search failed");
   }

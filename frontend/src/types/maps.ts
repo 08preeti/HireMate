@@ -55,6 +55,7 @@ export interface PlaceSuggestion {
   short: string;
   lat: number;
   lng: number;
+  source?: string;
 }
 
 export interface ReversePlace {

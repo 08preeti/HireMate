@@ -65,6 +65,7 @@ interface LocationSuggestion {
   short: string;
   lat: number;
   lng: number;
+  source?: string;
 }
 
 fixLeafletIcons();
@@ -103,8 +104,11 @@ function MapClickHandler({
 }
 
 // Address search and reverse lookup go through the HireMate server (cached and rate limited per provider policy).
-async function searchLocations(query: string): Promise<LocationSuggestion[]> {
-  return (await searchPlaces(query)).results;
+async function searchLocations(
+  query: string,
+  near?: LatLng | null,
+): Promise<LocationSuggestion[]> {
+  return (await searchPlaces(query, near)).results;
 }
 
 async function reverseGeocode(
@@ -572,6 +576,7 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
   const [location, setLocation] = useState("");
   const [suggestions, setSuggestions] = useState<LocationSuggestion[]>([]);
   const [searching, setSearching] = useState(false);
+  const searchSeq = useRef(0);
   const [showDropdown, setShowDropdown] = useState(false);
   const [pinPos, setPinPos] = useState<LatLng | null>(null);
   const [mapCenter, setMapCenter] = useState<[number, number]>(DEFAULT_CENTER);
@@ -829,15 +834,22 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
       return;
     }
     debounceRef.current = setTimeout(async () => {
+      const requestId = ++searchSeq.current;
       setSearching(true);
       try {
-        const res = await searchLocations(value.trim());
+        // Bias to the pin if there is one, else the map centre (Nashik by default)
+        const res = await searchLocations(
+          value.trim(),
+          pinPos ?? { lat: mapCenter[0], lng: mapCenter[1] },
+        );
+        if (requestId !== searchSeq.current) return; // a newer search replaced this one
         setSuggestions(res);
         if (!res.length)
           setSearchNotice(
             "No place found for that search. Try a nearby landmark or tap the map to drop the pin.",
           );
       } catch (err) {
+        if (requestId !== searchSeq.current) return;
         setSuggestions([]);
         setSearchNotice(
           err instanceof ApiError && err.message
@@ -845,10 +857,12 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
             : "Address search is not reachable. Check your internet connection, or tap the map to drop the pin.",
         );
       } finally {
-        setSearching(false);
-        setShowDropdown(true);
+        if (requestId === searchSeq.current) {
+          setSearching(false);
+          setShowDropdown(true);
+        }
       }
-    }, 500);
+    }, 300);
   };
 
   const selectSuggestion = (item: LocationSuggestion) => {
@@ -1758,6 +1772,8 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
                       ))}
                       <li className="py-2 px-4 text-[11px] text-slate-400 border-t border-slate-100 bg-slate-50 rounded-b-xl">
                         🗺️ OpenStreetMap
+                        {suggestions.some((x) => x.source === "geoapify") &&
+                          " · Powered by Geoapify"}
                       </li>
                     </ul>
                   )}

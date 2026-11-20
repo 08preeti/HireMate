@@ -78,10 +78,10 @@ export function normalizePhoton(data) {
   return (data?.features ?? []).flatMap((f) => {
     const p = f.properties ?? {};
     const [lng, lat] = f.geometry?.coordinates ?? [];
+    const street = [p.housenumber, p.street].filter(Boolean).join(" ");
     const parts = unique([
       p.name,
-      p.housenumber,
-      p.street,
+      street,
       p.suburb || p.neighbourhood || p.district,
       p.city || p.town || p.village,
       p.state,
@@ -92,10 +92,46 @@ export function normalizePhoton(data) {
   });
 }
 
+export function normalizeGeoapify(data) {
+  return (data?.features ?? []).flatMap((f) => {
+    const p = f.properties ?? {};
+    const lat = Number(p.lat ?? f.geometry?.coordinates?.[1]);
+    const lng = Number(p.lon ?? f.geometry?.coordinates?.[0]);
+    const street = [p.housenumber, p.street].filter(Boolean).join(" ");
+    const parts = unique([
+      p.name,
+      street,
+      p.suburb || p.neighbourhood || p.district,
+      p.city || p.town || p.village || p.county,
+      p.state,
+    ]);
+    const label = parts.length
+      ? parts.join(", ")
+      : String(p.formatted ?? "")
+          .split(",")
+          .slice(0, 4)
+          .join(",");
+    return Number.isFinite(lat) && Number.isFinite(lng) && label
+      ? [
+          {
+            label,
+            short: p.name || parts[0] || label.split(",")[0],
+            lat,
+            lng,
+            source: "geoapify",
+          },
+        ]
+      : [];
+  });
+}
+
 export function normalizeNominatim(items) {
   return (Array.isArray(items) ? items : []).flatMap((item) => {
     const a = item.address ?? {};
+    // Keep the place's own name (hospital, shop, hotel...) so it matches what the employer typed.
+    const placeName = item.name || item.namedetails?.name || "";
     const parts = unique([
+      placeName,
       a.road || a.pedestrian || a.footway,
       a.neighbourhood || a.suburb || a.quarter,
       a.village || a.town || a.city_district,
@@ -117,54 +153,137 @@ export function normalizeNominatim(items) {
   });
 }
 
-function dedupe(results) {
-  const out = [];
-  for (const r of results) {
-    if (
-      !out.some(
-        (u) =>
-          Math.abs(u.lat - r.lat) < 0.0015 && Math.abs(u.lng - r.lng) < 0.0015,
-      )
-    )
-      out.push(r);
-  }
-  return out.slice(0, 9);
+const norm = (t) =>
+  String(t ?? "")
+    .toLowerCase()
+    .trim();
+
+function metersBetween(a, b) {
+  const R = 6371000;
+  const rad = (d) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
 }
+
+// Two rows are the same place when they sit on top of each other, or are close AND share a name.
+// (The old rule dropped anything within ~150 m, which hid different hospitals/shops on the same road.)
+function samePlace(a, b) {
+  const d = metersBetween(a, b);
+  if (d < 25) return true;
+  if (d > 250) return false;
+  const na = norm(a.short);
+  const nb = norm(b.short);
+  return !!na && !!nb && (na === nb || na.includes(nb) || nb.includes(na));
+}
+
+function dedupe(results, limit) {
+  const out = [];
+  for (const r of results) if (!out.some((u) => samePlace(u, r))) out.push(r);
+  return out.slice(0, limit);
+}
+
+// Google-style ordering: places containing every typed word first, then nearest to the map, then provider order.
+function rank(results, query, bias) {
+  const tokens = norm(query)
+    .split(/[\s,]+/)
+    .filter(Boolean);
+  const scored = results.map((r, i) => {
+    const hay = norm(r.label);
+    const hits = tokens.filter((t) => hay.includes(t)).length;
+    const full = hits === tokens.length ? 0 : 1;
+    const startsWith = norm(r.short).startsWith(tokens[0] ?? "") ? 0 : 1;
+    const dist = bias ? metersBetween(bias, r) : 0;
+    return { r, i, full, startsWith, band: Math.floor(dist / 15000), hits };
+  });
+  scored.sort(
+    (x, y) =>
+      x.full - y.full ||
+      x.band - y.band ||
+      x.startsWith - y.startsWith ||
+      y.hits - x.hits ||
+      x.i - y.i,
+  );
+  return scored.map((x) => x.r);
+}
+
+const SEARCH_LIMIT = 10;
+const OSM_WAIT_MS = 3_000;
+const TIMED_OUT = Symbol("timed-out");
 
 export async function searchPlaces(
   query,
-  { fetchImpl = fetch, gapMs = NOMINATIM_GAP_MS } = {},
+  { lat, lng, fetchImpl = fetch, gapMs = NOMINATIM_GAP_MS } = {},
 ) {
-  const key = `search:${query.toLowerCase()}`;
+  const bias =
+    Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+  const key = `search:${query.toLowerCase()}:${bias ? `${bias.lat.toFixed(1)},${bias.lng.toFixed(1)}` : "-"}`;
   const cached = cacheGet(key);
   if (cached) return cached;
 
+  // Photon is built for type-ahead and handles half-typed words; bias it toward where the employer is looking.
+  const biasParams = bias
+    ? `&lat=${bias.lat.toFixed(5)}&lon=${bias.lng.toFixed(5)}&location_bias_scale=0.4`
+    : "";
   const photon = getJson(
-    `${env.maps.photonUrl}/api/?q=${encodeURIComponent(query)}&limit=8&lang=en&bbox=68.1,8.0,97.4,37.6`,
+    `${env.maps.photonUrl}/api/?q=${encodeURIComponent(query)}&limit=${SEARCH_LIMIT}&lang=en&bbox=68.1,8.0,97.4,37.6${biasParams}`,
     { fetchImpl, label: "Address search" },
   )
     .then(normalizePhoton)
     .catch((err) => err);
-  const osm = nominatimSlot(gapMs)
+
+  // Nominatim is slower (1 request/second policy), so it only gets a short window to add extra matches.
+  const viewbox = bias
+    ? `&viewbox=${(bias.lng - 0.6).toFixed(4)},${(bias.lat + 0.6).toFixed(4)},${(bias.lng + 0.6).toFixed(4)},${(bias.lat - 0.6).toFixed(4)}`
+    : "";
+  const osmRequest = nominatimSlot(gapMs)
     .then(() =>
       getJson(
-        `${env.maps.nominatimUrl}/search?q=${encodeURIComponent(query)}&format=json&limit=8&addressdetails=1&countrycodes=in&accept-language=en`,
+        `${env.maps.nominatimUrl}/search?q=${encodeURIComponent(query)}&format=json&limit=${SEARCH_LIMIT}&addressdetails=1&namedetails=1&countrycodes=in&accept-language=en${viewbox}`,
         { fetchImpl, label: "Address search" },
       ),
     )
     .then(normalizeNominatim)
     .catch((err) => err);
+  let timer;
+  const osm = Promise.race([
+    osmRequest,
+    new Promise((resolve) => {
+      timer = setTimeout(() => resolve(TIMED_OUT), OSM_WAIT_MS);
+    }),
+  ]).finally(() => clearTimeout(timer));
 
-  const [a, b] = await Promise.all([photon, osm]);
-  const lists = [a, b].filter(Array.isArray);
+  // Optional third source: Geoapify (free key). Strong type-ahead, and it understands "near me" bias.
+  const geoapify = env.maps.geoapifyKey
+    ? Promise.race([
+        getJson(
+          `${env.maps.geoapifyUrl}/v1/geocode/autocomplete?text=${encodeURIComponent(query)}&format=geojson&limit=${SEARCH_LIMIT}&lang=en&filter=countrycode:in${bias ? `&bias=proximity:${bias.lng.toFixed(5)},${bias.lat.toFixed(5)}` : ""}&apiKey=${env.maps.geoapifyKey}`,
+          { fetchImpl, label: "Address search" },
+        )
+          .then(normalizeGeoapify)
+          .catch((err) => err),
+        new Promise((resolve) => {
+          const t = setTimeout(() => resolve(TIMED_OUT), OSM_WAIT_MS);
+          t.unref?.();
+        }),
+      ])
+    : Promise.resolve(null);
+
+  const [a, b, g] = await Promise.all([photon, osm, geoapify]);
+  const osmLate = b === TIMED_OUT || g === TIMED_OUT;
+  // Geoapify first so it wins ties; Photon and Nominatim fill in what it misses.
+  const lists = [g, a, b].filter(Array.isArray);
   if (!lists.length)
     throw a instanceof HttpError
       ? a
       : new HttpError(503, "Address search is not available right now.", {
           code: "PROVIDER_UNAVAILABLE",
         });
-  const results = dedupe(lists.flat());
-  cacheSet(key, results);
+  const results = dedupe(rank(lists.flat(), query, bias), SEARCH_LIMIT);
+  if (!osmLate) cacheSet(key, results);
   return results;
 }
 

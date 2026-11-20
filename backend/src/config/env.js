@@ -60,6 +60,11 @@ export const env = {
       process.env.OSRM_URL || "https://router.project-osrm.org"
     ).replace(/\/$/, ""),
     contactEmail: process.env.MAP_CONTACT_EMAIL || "",
+    // Optional free key from geoapify.com (3,000 requests/day, no card). Adds a stronger autocomplete source.
+    geoapifyKey: process.env.GEOAPIFY_API_KEY || "",
+    geoapifyUrl: (
+      process.env.GEOAPIFY_URL || "https://api.geoapify.com"
+    ).replace(/\/$/, ""),
   },
   twilio: {
     accountSid: process.env.TWILIO_ACCOUNT_SID,
