@@ -3,6 +3,16 @@ import type { LatLng } from "./auth";
 
 export type LatLngTuple = [number, number];
 
+export interface DetailedStep {
+  instruction: string;
+  type: string;
+  modifier?: string;
+  distanceMeters: number;
+  durationSeconds: number;
+  streetName?: string;
+  location?: LatLngTuple | null;
+}
+
 /** A route from the routing provider: real distance / duration and a [lat, lng] polyline. */
 export interface RouteInfo {
   destination: LatLng;
@@ -12,6 +22,7 @@ export interface RouteInfo {
   steps: string[];
   /** [lat, lng] of each step's maneuver, same order as `steps`. */
   stepLocations?: (LatLngTuple | null)[];
+  detailedSteps?: DetailedStep[];
 }
 
 /** The latest position a worker chose to share for one application. */
@@ -19,6 +30,8 @@ export interface LiveLocation {
   lat: number;
   lng: number;
   accuracy?: number | null;
+  heading?: number | null;
+  speed?: number | null;
   updatedAt?: string;
   /** Where this sharing period began. */
   start?: LatLng | null;
@@ -74,9 +87,14 @@ export type RouteStatus =
   | "offRoute"
   | "unavailable";
 
+export type MapTheme = "day" | "night";
+
 export interface MapMarker {
   id: string;
   position: LatLngTuple;
   kind: MarkerKind;
   label?: string;
+  sublabel?: string;
+  heading?: number | null;
+  speed?: number | null;
 }

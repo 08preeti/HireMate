@@ -261,6 +261,17 @@ export function parseOsrmRoute(data) {
       lng,
     ]),
     steps: (route.legs?.[0]?.steps ?? []).map(describeStep).slice(0, 60),
+    detailedSteps: (route.legs?.[0]?.steps ?? []).slice(0, 60).map((s) => ({
+      instruction: describeStep(s),
+      type: s.maneuver?.type || "turn",
+      modifier: s.maneuver?.modifier || "straight",
+      distanceMeters: Math.round(s.distance || 0),
+      durationSeconds: Math.round(s.duration || 0),
+      streetName: s.name || "",
+      location: s.maneuver?.location
+        ? [s.maneuver.location[1], s.maneuver.location[0]]
+        : null,
+    })),
     // [lat, lng] of each maneuver, same order as `steps`, so a client can tell which step is still ahead.
     stepLocations: (route.legs?.[0]?.steps ?? [])
       .slice(0, 60)

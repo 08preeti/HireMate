@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isValidLatLng } from "@/lib/maps";
+import { calculateBearing, haversine } from "@/lib/geo";
 
 export interface GeoFix {
   lat: number;
   lng: number;
   accuracy: number;
+  heading?: number | null;
+  speed?: number | null;
   /** When the device took the reading (ms since epoch). */
   timestamp: number;
 }
@@ -20,12 +23,38 @@ export type GeoStatus =
   | "timeout"
   | "unsupported";
 
-const toFix = (p: GeolocationPosition): GeoFix => ({
-  lat: p.coords.latitude,
-  lng: p.coords.longitude,
-  accuracy: p.coords.accuracy,
-  timestamp: p.timestamp,
-});
+const toFix = (p: GeolocationPosition, prev?: GeoFix | null): GeoFix => {
+  let heading =
+    Number.isFinite(p.coords.heading) && p.coords.heading !== null && p.coords.heading >= 0
+      ? p.coords.heading
+      : null;
+  let speed =
+    Number.isFinite(p.coords.speed) && p.coords.speed !== null && p.coords.speed >= 0
+      ? Math.round(p.coords.speed * 3.6) // m/s to km/h
+      : null;
+
+  if (prev && isValidLatLng(prev.lat, prev.lng)) {
+    const km = haversine(prev.lat, prev.lng, p.coords.latitude, p.coords.longitude);
+    const dtSeconds = (p.timestamp - prev.timestamp) / 1000;
+    if (heading === null && km > 0.003) {
+      heading = Math.round(calculateBearing(prev.lat, prev.lng, p.coords.latitude, p.coords.longitude));
+    } else if (heading === null && prev.heading !== undefined) {
+      heading = prev.heading;
+    }
+    if (speed === null && dtSeconds > 0.5 && dtSeconds < 30) {
+      speed = Math.round(km / (dtSeconds / 3600));
+    }
+  }
+
+  return {
+    lat: p.coords.latitude,
+    lng: p.coords.longitude,
+    accuracy: p.coords.accuracy,
+    heading,
+    speed,
+    timestamp: p.timestamp,
+  };
+};
 
 function statusFor(err: GeolocationPositionError): GeoStatus {
   if (err.code === err.PERMISSION_DENIED) return "denied";
@@ -48,6 +77,7 @@ export function useGeoWatch(
 ) {
   const [status, setStatus] = useState<GeoStatus>("idle");
   const [fix, setFix] = useState<GeoFix | null>(null);
+  const lastFixRef = useRef<GeoFix | null>(null);
   const watchId = useRef<number | null>(null);
   const heartbeat = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastTimestamp = useRef(0);
@@ -65,7 +95,7 @@ export function useGeoWatch(
   }, []);
 
   const accept = useCallback((p: GeolocationPosition) => {
-    const next = toFix(p);
+    const next = toFix(p, lastFixRef.current);
     // Ignore impossible coordinates and readings older than one already accepted (the device can replay a cached fix).
     if (
       !isValidLatLng(next.lat, next.lng) ||
@@ -73,6 +103,7 @@ export function useGeoWatch(
     )
       return;
     lastTimestamp.current = next.timestamp;
+    lastFixRef.current = next;
     setFix(next);
     setStatus("watching");
     onFixRef.current?.(next);
@@ -100,12 +131,13 @@ export function useGeoWatch(
       setStatus(statusFor(first));
       return null;
     }
-    const firstFix = toFix(first);
+    const firstFix = toFix(first, lastFixRef.current);
     if (!isValidLatLng(firstFix.lat, firstFix.lng)) {
       setStatus("unavailable");
       return null;
     }
     lastTimestamp.current = firstFix.timestamp;
+    lastFixRef.current = firstFix;
     setFix(firstFix);
     setStatus("watching");
 

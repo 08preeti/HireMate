@@ -140,7 +140,15 @@ export default function JobRouteMap({ jobId, dest, label, active, onClose, logge
 
   const markers = useMemo<MapMarker[]>(() => {
     const list: MapMarker[] = [{ id: "job", kind: "destination", position: [dest.lat, dest.lng], label }];
-    if (live && shown) list.push({ id: "me", kind: "worker", position: shown, label: L("You are here", "आप यहाँ हैं", "तुम्ही येथे आहात") });
+    if (live && shown)
+      list.push({
+        id: "me",
+        kind: "worker",
+        position: shown,
+        heading: fix?.heading ?? null,
+        speed: fix?.speed ?? null,
+        label: L("You are here", "आप यहाँ हैं", "तुम्ही येथे आहात"),
+      });
     return list;
   }, [dest.lat, dest.lng, label, live, shown, L]);
 

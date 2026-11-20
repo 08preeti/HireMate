@@ -116,6 +116,8 @@ export default function LiveTrackingPanel({ apps, initialId, onClose }: Props) {
         id: "worker",
         kind: stale ? "workerStale" : "worker",
         position: [location.lat, location.lng],
+        heading: location.heading ?? null,
+        speed: location.speed ?? null,
         label: name,
       });
     return out;

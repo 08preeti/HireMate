@@ -18,6 +18,8 @@ export default function Header() {
   const router = useRouter();
   const { language, setLanguage } = useLanguage();
   const t = translations[language];
+  const L = (en: string, hi: string, mr: string) =>
+    language === "mr" ? mr : language === "hi" ? hi : en;
 
   // ONE active role (or none) comes from AuthContext; the nav below shows only that role's links.
   const { role, loading, logout } = useAuth();
@@ -31,13 +33,10 @@ export default function Header() {
     router.push(ROLE_SELECT);
   };
 
-  // Role selection and sign-in/sign-up screens are standalone: no header there.
+  // Standalone, shell and bare navigation/onboarding paths: no header there.
   if (isStandalonePath(pathname)) return null;
-
-  const L = (en: string, hi: string, mr: string): string =>
-    language === "hi" ? hi : language === "mr" ? mr : en;
-
   if (SHELL_PATHS.some((p) => pathname.startsWith(p))) return null;
+  if (pathname.startsWith("/navigate") || pathname.startsWith("/onboarding")) return null;
 
   return (
     <div className="bg-brand py-3 px-5 flex items-center justify-between flex-wrap gap-2.5 font-plain">

@@ -2,33 +2,41 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { FiArrowLeft, FiExternalLink } from "react-icons/fi";
-import LocationSharePanel from "@/components/maps/LocationSharePanel";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FiArrowLeft, FiMaximize2, FiMinimize2 } from "react-icons/fi";
 import MapViewLazy from "@/components/maps/MapViewLazy";
-import NavigationPanel from "@/components/maps/NavigationPanel";
+import UberNavHUD, { type ManeuverInfo } from "@/components/maps/UberNavHUD";
+import UberTripSheet from "@/components/maps/UberTripSheet";
 import { useGeoWatch } from "@/hooks/useGeoWatch";
 import { useL } from "@/hooks/useL";
 import { useLiveRoute } from "@/hooks/useLiveRoute";
 import { useWakeLock } from "@/hooks/useWakeLock";
-import { haversine } from "@/lib/geo";
-import { formatDistance, formatDuration, googleMapsDirectionsUrl, isValidLatLng } from "@/lib/maps";
-import { jobLocationOf, jobTitleOf } from "@/lib/workerApplications";
+import { calculateBearing, haversine } from "@/lib/geo";
+import { isValidLatLng } from "@/lib/maps";
+import { locateOnRoute, measureRoute } from "@/lib/routeProgress";
+import { jobLocationOf } from "@/lib/workerApplications";
 import { requestCompletion, setLocationConsent, updateApplicationStatus } from "@/services/applications";
 import { getRouteToJob } from "@/services/location";
-import type { LatLng, LocationStatus, MapMarker } from "@/types";
+import type { LatLng, LatLngTuple, LocationStatus, MapMarker, MapTheme, RouteInfo } from "@/types";
 import { useWorkerApplications } from "./useApplicationActions";
 
 const ACTIVE = ["confirmed", "on_the_way", "arrived"];
-const NEAR_SITE_KM = 0.1;
+const NEAR_SITE_KM = 0.15; // 150 meters
 
 function Frame({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto flex min-h-screen max-w-[520px] flex-col items-center justify-center gap-4 p-8 text-center">{children}</div>;
+  return (
+    <div className="mx-auto flex min-h-screen max-w-[520px] flex-col items-center justify-center gap-4 p-8 text-center bg-slate-50">
+      {children}
+    </div>
+  );
 }
 
 function Back({ label }: { label: string }) {
   return (
-    <Link href="/active-work" className="rounded-lg bg-brand px-5 py-3 text-[15px] font-semibold text-white no-underline">
+    <Link
+      href="/active-work"
+      className="rounded-xl bg-brand px-6 py-3 text-[15px] font-bold text-white no-underline shadow-md hover:bg-brand/90 transition"
+    >
       {label}
     </Link>
   );
@@ -45,47 +53,250 @@ export default function JobNavigation() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [tripStart, setTripStart] = useState<LatLng | null>(null);
 
-  const job = app?.job;
-  const dest = useMemo<LatLng | null>(() => (isValidLatLng(job?.latitude, job?.longitude) ? { lat: job!.latitude as number, lng: job!.longitude as number } : null), [job]);
-  const eligible = !!app && ACTIVE.includes(app.status ?? "") && !app.isCompleted;
-  const here: LatLng | null = geo.fix ? { lat: geo.fix.lat, lng: geo.fix.lng } : null;
-  const address = app ? jobLocationOf(app, language) : "";
-  const navigating = geo.status === "watching";
+  // Uber navigation states
+  const [theme, setTheme] = useState<MapTheme>("day");
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [followWorker, setFollowWorker] = useState(true);
+  const [overviewKey, setOverviewKey] = useState(0);
+  const [isSheetExpanded, setIsSheetExpanded] = useState(false);
 
-  // The first route is requested at once; after that only when the worker leaves the route (see useLiveRoute).
+  // Simulation / Demo Mode State
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simIndex, setSimIndex] = useState(0);
+  const [simSpeed, setSimSpeed] = useState(1);
+  const [simHeading, setSimHeading] = useState(0);
+  const simTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const job = app?.job;
+  const dest = useMemo<LatLng | null>(
+    () =>
+      isValidLatLng(job?.latitude, job?.longitude)
+        ? { lat: job!.latitude as number, lng: job!.longitude as number }
+        : null,
+    [job],
+  );
+
+  const eligible = !!app && ACTIVE.includes(app.status ?? "") && !app.isCompleted;
+  const address = app ? jobLocationOf(app, language) : "";
+  const liveGPSNavigating = geo.status === "watching";
+  const navigating = liveGPSNavigating || isSimulating;
+
+  // Auto-start GPS watching when entering navigation if not already active
+  useEffect(() => {
+    if (eligible && geo.status === "idle" && !isSimulating) {
+      void geo.start();
+    }
+  }, [eligible, geo.status, isSimulating, geo]);
+
+  // Route calculation hook
+  const effectiveGpsPosition = useMemo(() => {
+    if (!geo.fix) return null;
+    return {
+      lat: geo.fix.lat,
+      lng: geo.fix.lng,
+      accuracy: geo.fix.accuracy,
+      heading: geo.fix.heading,
+      speed: geo.fix.speed,
+    };
+  }, [geo.fix]);
+
   const live = useLiveRoute({
-    position: geo.fix,
+    position: effectiveGpsPosition,
     destination: dest,
-    enabled: eligible && navigating,
+    enabled: eligible && (navigating || isSimulating),
     fetchRoute: (from) => getRouteToJob(appId ?? "", from),
   });
-  const { info: routeInfo, progress, next: nextStep } = live;
 
-  // Where this navigation session began; cleared when navigation stops.
+  const { info: routeInfo, progress } = live;
+
+  // Route coordinates
+  const routeCoords: LatLngTuple[] = useMemo(() => {
+    return routeInfo?.coordinates ?? [];
+  }, [routeInfo?.coordinates]);
+
+  // Handle Simulation Stepping
+  useEffect(() => {
+    if (!isSimulating || !routeCoords.length) {
+      if (simTimerRef.current) clearInterval(simTimerRef.current);
+      return;
+    }
+
+    const intervalMs = Math.max(300, Math.round(900 / simSpeed));
+    simTimerRef.current = setInterval(() => {
+      setSimIndex((prev) => {
+        const next = prev + 1;
+        if (next >= routeCoords.length) {
+          setIsSimulating(false);
+          return routeCoords.length - 1;
+        }
+        // Calculate heading to next waypoint
+        if (next < routeCoords.length - 1) {
+          const cur = routeCoords[next];
+          const nxt = routeCoords[next + 1];
+          const deg = calculateBearing(cur[0], cur[1], nxt[0], nxt[1]);
+          setSimHeading(Math.round(deg));
+        }
+        return next;
+      });
+    }, intervalMs);
+
+    return () => {
+      if (simTimerRef.current) clearInterval(simTimerRef.current);
+    };
+  }, [isSimulating, routeCoords, simSpeed]);
+
+  // Simulated position
+  const simPosition: LatLngTuple | null = useMemo(() => {
+    if (!isSimulating || !routeCoords.length) return null;
+    return routeCoords[Math.min(simIndex, routeCoords.length - 1)] ?? null;
+  }, [isSimulating, routeCoords, simIndex]);
+
+  // Current effective position of worker
+  const currentPos: LatLngTuple | null = useMemo(() => {
+    if (isSimulating && simPosition) return simPosition;
+    if (geo.fix) return [geo.fix.lat, geo.fix.lng];
+    return null;
+  }, [isSimulating, simPosition, geo.fix]);
+
+  const currentHeading = useMemo(() => {
+    if (isSimulating) return simHeading;
+    return geo.fix?.heading ?? 0;
+  }, [isSimulating, simHeading, geo.fix?.heading]);
+
+  const currentSpeedKmh = useMemo(() => {
+    if (isSimulating) return 32 * simSpeed;
+    return geo.fix?.speed ?? 0;
+  }, [isSimulating, simSpeed, geo.fix?.speed]);
+
+  // Initial trip start
   useEffect(() => {
     if (!navigating) setTripStart(null);
-    else if (!tripStart && here) setTripStart(here);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigating, here?.lat, here?.lng]);
+    else if (!tripStart && currentPos) setTripStart({ lat: currentPos[0], lng: currentPos[1] });
+  }, [navigating, tripStart, currentPos]);
 
   useWakeLock(eligible && navigating);
 
-  const routeProblem =
-    live.problem === "notFound"
-      ? L("No driving route was found. Use Google Maps below.", "ड्राइविंग रूट नहीं मिला। नीचे Google Maps का उपयोग करें।", "ड्रायव्हिंग मार्ग सापडला नाही. खाली Google Maps वापरा.")
-      : live.problem === "busy"
-        ? L("Too many route requests. Please wait a moment.", "रूट के बहुत अनुरोध। कृपया थोड़ा रुकें।", "मार्गाच्या खूप विनंत्या. कृपया थोडे थांबा.")
-        : live.problem === "offline"
-          ? L("No internet connection. The route will update when you are back online.", "इंटरनेट नहीं है। इंटरनेट लौटने पर रूट अपडेट होगा।", "इंटरनेट नाही. इंटरनेट आल्यावर मार्ग अपडेट होईल.")
-          : live.problem
-            ? L("The routing service is not available right now. You can still use Google Maps below.", "रूटिंग सेवा अभी उपलब्ध नहीं है। आप नीचे Google Maps का उपयोग कर सकते हैं।", "रूटिंग सेवा सध्या उपलब्ध नाही. तुम्ही खाली Google Maps वापरू शकता.")
-            : null;
+  // Turn-by-turn instruction parsing
+  const measured = useMemo(() => (routeInfo ? measureRoute(routeInfo.coordinates) : null), [routeInfo]);
 
-  useEffect(() => {
-    if (!eligible) geo.stop();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eligible]);
+  const upcomingInstructions = useMemo<{ current: ManeuverInfo | null; subsequent: ManeuverInfo | null }>(() => {
+    if (!measured || !routeInfo || !currentPos) {
+      return { current: null, subsequent: null };
+    }
+    const loc = locateOnRoute(measured, currentPos);
+    if (!loc) return { current: null, subsequent: null };
+    const alongMeters = loc.alongMeters;
 
+    const locations = routeInfo.stepLocations;
+    const detailed = routeInfo.detailedSteps;
+    const found: ManeuverInfo[] = [];
+
+    for (let i = 1; i < routeInfo.steps.length; i++) {
+      const at = locations?.[i];
+      if (!at) continue;
+      const stepPos = locateOnRoute(measured, at);
+      if (stepPos && stepPos.alongMeters > alongMeters + 15) {
+        const stepDetail = detailed?.[i];
+        found.push({
+          text: routeInfo.steps[i],
+          inMeters: Math.round(stepPos.alongMeters - alongMeters),
+          modifier: stepDetail?.modifier,
+          type: stepDetail?.type,
+          streetName: stepDetail?.streetName,
+        });
+        if (found.length >= 2) break;
+      }
+    }
+
+    if (!found.length && routeInfo.steps.length > 0) {
+      found.push({ text: routeInfo.steps[routeInfo.steps.length - 1], inMeters: 0 });
+    }
+
+    return {
+      current: found[0] ?? null,
+      subsequent: found[1] ?? null,
+    };
+  }, [measured, routeInfo, currentPos]);
+
+  // Distance and progress calculations
+  const remainingMeters = useMemo(() => {
+    if (isSimulating && measured && simPosition) {
+      const pos = locateOnRoute(measured, simPosition);
+      if (pos) return Math.max(0, Math.round(measured.totalMeters - pos.alongMeters));
+    }
+    return progress?.remainingMeters ?? (routeInfo?.distanceMeters ?? null);
+  }, [isSimulating, measured, simPosition, progress?.remainingMeters, routeInfo?.distanceMeters]);
+
+  const remainingSeconds = useMemo(() => {
+    if (isSimulating && remainingMeters !== null && routeInfo?.distanceMeters) {
+      const frac = remainingMeters / Math.max(1, routeInfo.distanceMeters);
+      return Math.round((routeInfo.durationSeconds || 600) * frac);
+    }
+    return progress?.remainingSeconds ?? (routeInfo?.durationSeconds ?? null);
+  }, [isSimulating, remainingMeters, routeInfo?.distanceMeters, routeInfo?.durationSeconds, progress?.remainingSeconds]);
+
+  const progressPercent = useMemo(() => {
+    if (!measured || measured.totalMeters <= 0 || !currentPos) return 0;
+    const pos = locateOnRoute(measured, currentPos);
+    if (!pos) return 0;
+    return Math.min(100, Math.max(0, (pos.alongMeters / measured.totalMeters) * 100));
+  }, [measured, currentPos]);
+
+  // Check near site
+  const straightKm = currentPos && dest ? haversine(currentPos[0], currentPos[1], dest.lat, dest.lng) : null;
+  const nearSite = straightKm !== null && straightKm <= NEAR_SITE_KM;
+
+  // Active Map Markers
+  const markers = useMemo<MapMarker[]>(() => {
+    if (!dest) return [];
+    const list: MapMarker[] = [
+      {
+        id: "dest",
+        kind: "destination",
+        position: [dest.lat, dest.lng],
+        label: address || L("Work Location", "काम की जगह", "कामाचे ठिकाण"),
+      },
+    ];
+
+    if (tripStart && navigating) {
+      list.push({
+        id: "start",
+        kind: "start",
+        position: [tripStart.lat, tripStart.lng],
+        label: L("Start", "शुरू", "सुरू"),
+      });
+    }
+
+    if (currentPos) {
+      list.push({
+        id: "worker-live",
+        kind: "worker",
+        position: currentPos,
+        heading: currentHeading,
+        speed: currentSpeedKmh,
+        label: L("You are here", "आप यहाँ हैं", "तुम्ही येथे आहात"),
+      });
+    }
+
+    return list;
+  }, [dest, address, tripStart, navigating, currentPos, currentHeading, currentSpeedKmh, L]);
+
+  // Active / Done polyline coordinates
+  const activeRemainingPolyline: LatLngTuple[] | undefined = useMemo(() => {
+    if (isSimulating && routeCoords.length > 0) {
+      return routeCoords.slice(Math.min(simIndex, routeCoords.length - 1));
+    }
+    return progress?.remaining ?? routeInfo?.coordinates;
+  }, [isSimulating, routeCoords, simIndex, progress?.remaining, routeInfo?.coordinates]);
+
+  const activeDonePolyline: LatLngTuple[] | undefined = useMemo(() => {
+    if (isSimulating && routeCoords.length > 0) {
+      return routeCoords.slice(0, Math.min(simIndex + 1, routeCoords.length));
+    }
+    return progress?.done;
+  }, [isSimulating, routeCoords, simIndex, progress?.done]);
+
+  // Actions
   const act = async (fn: () => Promise<unknown>, after?: () => void) => {
     setActionBusy(true);
     setActionError(null);
@@ -94,121 +305,232 @@ export default function JobNavigation() {
       after?.();
       state.reload();
     } catch (err) {
-      setActionError(err instanceof Error && err.message ? err.message : L("Could not update. Please try again.", "अपडेट नहीं हो सका। कृपया फिर कोशिश करें।", "अपडेट करता आले नाही. कृपया पुन्हा प्रयत्न करा."));
+      setActionError(
+        err instanceof Error && err.message
+          ? err.message
+          : L("Could not update. Please try again.", "अपडेट नहीं हो सका। कृपया फिर कोशिश करें।", "अपडेट करता आले नाही. कृपया पुन्हा प्रयत्न करा.")
+      );
     } finally {
       setActionBusy(false);
     }
   };
 
+  const handleUpdateStatus = (newStatus: "on_the_way" | "arrived") => {
+    if (!app) return;
+    void act(
+      () => updateApplicationStatus(app._id, newStatus),
+      () => {
+        if (newStatus === "on_the_way") {
+          void geo.start();
+          setFollowWorker(true);
+        }
+      }
+    );
+  };
+
+  const handleRequestCompletion = () => {
+    if (!app) return;
+    void act(
+      () => requestCompletion(app._id),
+      () => void setLocationConsent(app._id, false).catch(() => {})
+    );
+  };
+
+  // Simulation controls
+  const handleToggleSimulation = useCallback(() => {
+    if (!routeCoords.length) return;
+    setIsSimulating(true);
+    setFollowWorker(true);
+  }, [routeCoords.length]);
+
+  const handlePauseSimulation = useCallback(() => {
+    setIsSimulating(false);
+  }, []);
+
+  const handleResetSimulation = useCallback(() => {
+    setIsSimulating(false);
+    setSimIndex(0);
+    setFollowWorker(true);
+  }, []);
+
+  const handleRecenter = useCallback(() => {
+    setFollowWorker(true);
+  }, []);
+
+  const handleFitOverview = useCallback(() => {
+    setFollowWorker(false);
+    setOverviewKey((k) => k + 1);
+  }, []);
+
   const backLabel = L("Back to Active Work", "सक्रिय काम पर वापस", "सक्रिय कामाकडे परत");
 
-  if (!appId) return <Frame><h2 className="m-0">{L("No job selected", "कोई काम चुना नहीं गया", "कोणतेही काम निवडलेले नाही")}</h2><p className="m-0 text-gray-600">{L("Open navigation from one of your active jobs.", "अपने किसी सक्रिय काम से नेविगेशन खोलें।", "तुमच्या सक्रिय कामातून नेव्हिगेशन उघडा.")}</p><Back label={backLabel} /></Frame>;
-  if (state.loading) return <Frame><p className="m-0 text-gray-600">{L("Loading your job…", "आपका काम लोड हो रहा है…", "तुमचे काम लोड होत आहे…")}</p></Frame>;
-  if (state.error && !app) return <Frame><p role="alert" className="m-0 text-rose-700">{L("Could not load your job.", "आपका काम लोड नहीं हो सका।", "तुमचे काम लोड करता आले नाही.")}</p><button type="button" onClick={state.reload} className="cursor-pointer rounded-lg border border-slate-300 bg-white px-5 py-3 text-[15px] font-semibold">{L("Try again", "फिर कोशिश करें", "पुन्हा प्रयत्न करा")}</button></Frame>;
-  if (!app) return <Frame><h2 className="m-0">{L("Job not found", "काम नहीं मिला", "काम सापडले नाही")}</h2><Back label={backLabel} /></Frame>;
+  if (!appId) {
+    return (
+      <Frame>
+        <h2 className="m-0 text-[20px] font-bold text-slate-800">{L("No job selected", "कोई काम चुना नहीं गया", "कोणतेही काम निवडलेले नाही")}</h2>
+        <p className="m-0 text-slate-600">{L("Open navigation from one of your active jobs.", "अपने किसी सक्रिय काम से नेविगेशन खोलें।", "तुमच्या सक्रिय कामातून नेव्हिगेशन उघडा.")}</p>
+        <Back label={backLabel} />
+      </Frame>
+    );
+  }
+
+  if (state.loading) {
+    return (
+      <Frame>
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand border-t-transparent" />
+        <p className="m-0 text-[15px] font-semibold text-slate-600">{L("Loading navigation…", "नेविगेशन लोड हो रहा है…", "नेव्हिगेशन लोड होत आहे…")}</p>
+      </Frame>
+    );
+  }
+
+  if (state.error && !app) {
+    return (
+      <Frame>
+        <p role="alert" className="m-0 text-rose-700 font-semibold">{L("Could not load your job.", "आपका काम लोड नहीं हो सका।", "तुमचे काम लोड करता आले नाही.")}</p>
+        <button type="button" onClick={state.reload} className="cursor-pointer rounded-xl border border-slate-300 bg-white px-5 py-3 text-[15px] font-bold shadow-sm">
+          {L("Try again", "फिर कोशिश करें", "पुन्हा प्रयत्न करा")}
+        </button>
+      </Frame>
+    );
+  }
+
+  if (!app) {
+    return (
+      <Frame>
+        <h2 className="m-0 text-[20px] font-bold text-slate-800">{L("Job not found", "काम नहीं मिला", "काम सापडले नाही")}</h2>
+        <Back label={backLabel} />
+      </Frame>
+    );
+  }
+
   if (!eligible) {
     return (
       <Frame>
-        <h2 className="m-0">{L("Navigation is not available", "नेविगेशन उपलब्ध नहीं है", "नेव्हिगेशन उपलब्ध नाही")}</h2>
-        <p className="m-0 text-gray-600">{L("Navigation works for confirmed jobs that are still active. This job is completed, cancelled or not confirmed yet.", "नेविगेशन उन पक्के किए गए कामों के लिए है जो अभी चालू हैं। यह काम पूरा, रद्द या अभी पक्का नहीं है।", "नेव्हिगेशन निश्चित केलेल्या आणि सुरू असलेल्या कामांसाठी आहे. हे काम पूर्ण, रद्द किंवा अजून निश्चित नाही.")}</p>
+        <h2 className="m-0 text-[20px] font-bold text-slate-800">{L("Navigation is not available", "नेविगेशन उपलब्ध नहीं है", "नेव्हिगेशन उपलब्ध नाही")}</h2>
+        <p className="m-0 text-slate-600">
+          {L(
+            "Navigation works for confirmed jobs that are currently active. This job is completed or not active.",
+            "नेविगेशन चालू कामों के लिए है। यह काम पूरा या सक्रिय नहीं है।",
+            "नेव्हिगेशन सध्या सुरू असलेल्या कामांसाठी आहे. हे काम पूर्ण किंवा सक्रिय नाही."
+          )}
+        </p>
         <Back label={backLabel} />
       </Frame>
     );
   }
+
   if (!dest) {
-    const q = encodeURIComponent(address || "");
     return (
       <Frame>
-        <h2 className="m-0">{L("This job has no map pin", "इस काम की मैप पिन नहीं है", "या कामाला नकाशा पिन नाही")}</h2>
-        <p className="m-0 text-gray-600">{L("The employer did not pin the exact location, so a route cannot be calculated.", "नियोक्ता ने सही जगह पिन नहीं की, इसलिए रूट नहीं बन सकता।", "मालकाने अचूक ठिकाण पिन केलेले नाही, त्यामुळे मार्ग काढता येत नाही.")}</p>
-        {address && <a href={`https://www.google.com/maps/search/?api=1&query=${q}`} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-slate-300 bg-white px-5 py-3 text-[15px] font-semibold text-[#1a73e8] no-underline">{L("Search the address in Google Maps", "पते को Google Maps में खोजें", "पत्ता Google Maps मध्ये शोधा")}</a>}
+        <h2 className="m-0 text-[20px] font-bold text-slate-800">{L("This job has no map pin", "इस काम की मैप पिन नहीं है", "या कामाला नकाशा पिन नाही")}</h2>
+        <p className="m-0 text-slate-600">
+          {L("The employer did not specify a GPS location for this job.", "नियोक्ता ने इस काम का सही GPS लोकेशन नहीं दिया।", "मालकाने या कामाचे GPS स्थान दिलेले नाही.")}
+        </p>
         <Back label={backLabel} />
       </Frame>
     );
   }
 
-  const markers: MapMarker[] = [{ id: "dest", kind: "destination", position: [dest.lat, dest.lng], label: address || L("Job location", "काम की जगह", "कामाचे ठिकाण") }];
-  if (tripStart && navigating) markers.push({ id: "start", kind: "start", position: [tripStart.lat, tripStart.lng], label: L("Where you started", "जहाँ से शुरू किया", "जिथून सुरू केले") });
-  if (here) markers.push({ id: "me", kind: "worker", position: [here.lat, here.lng], label: L("You are here", "आप यहाँ हैं", "तुम्ही येथे आहात") });
-  const straightKm = here ? haversine(here.lat, here.lng, dest.lat, dest.lng) : null;
-  const nearSite = straightKm !== null && straightKm <= NEAR_SITE_KM;
-  const remainingMeters = progress?.remainingMeters ?? null;
-  const remainingSeconds = progress?.remainingSeconds ?? null;
-  const locationStatus: LocationStatus = geo.status === "denied" ? "denied" : geo.status === "unavailable" || geo.status === "timeout" || geo.status === "unsupported" ? "unavailable" : navigating ? "live" : geo.status === "requesting" ? "waiting" : "off";
-
-  const geoMessage =
+  const locationStatus: LocationStatus =
     geo.status === "denied"
-      ? L("Location permission is blocked. Allow location for this site in your browser settings, then try again.", "लोकेशन की अनुमति बंद है। ब्राउज़र सेटिंग में अनुमति देकर फिर कोशिश करें।", "लोकेशन परवानगी बंद आहे. ब्राउझर सेटिंगमध्ये परवानगी देऊन पुन्हा प्रयत्न करा.")
-      : geo.status === "unavailable"
-        ? L("Your phone could not find its location. Turn on GPS and try again.", "आपका फ़ोन लोकेशन नहीं ढूँढ सका। GPS चालू करके फिर कोशिश करें।", "तुमचा फोन ठिकाण शोधू शकला नाही. GPS चालू करून पुन्हा प्रयत्न करा.")
-        : geo.status === "timeout"
-          ? L("Getting your location is taking too long. Move to an open area.", "लोकेशन मिलने में बहुत समय लग रहा है। खुली जगह जाएं।", "ठिकाण मिळण्यास खूप वेळ लागत आहे. मोकळ्या जागी जा.")
-          : geo.status === "unsupported"
-            ? L("This browser cannot read your location.", "यह ब्राउज़र आपकी लोकेशन नहीं पढ़ सकता।", "हा ब्राउझर तुमचे ठिकाण वाचू शकत नाही.")
-            : "";
+      ? "denied"
+      : geo.status === "unavailable" || geo.status === "timeout" || geo.status === "unsupported"
+        ? "unavailable"
+        : navigating
+          ? "live"
+          : geo.status === "requesting"
+            ? "waiting"
+            : "off";
 
-  const PRIMARY = "w-full cursor-pointer rounded-[14px] py-4 text-[16px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50";
+  const mapCenter: LatLngTuple = currentPos ?? [dest.lat, dest.lng];
 
   return (
-    <div className="flex h-screen flex-col bg-[#f8f9fa]">
-      <div className="z-[500] flex shrink-0 items-center justify-between gap-3 bg-brand px-4 py-3 text-white shadow">
-        <Link href="/active-work" aria-label={L("Back", "वापस", "परत")} className="flex items-center text-white"><FiArrowLeft size={22} /></Link>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] font-bold">{jobTitleOf(app, language)}</div>
-          <div className="text-[12.5px] opacity-90">
-            {progress && remainingMeters !== null && remainingSeconds !== null ? `${formatDistance(remainingMeters)} · ${formatDuration(remainingSeconds)}` : navigating ? (live.fetching ? L("Calculating route…", "रूट निकाला जा रहा है…", "मार्ग काढत आहे…") : L("Route not available yet", "रूट अभी उपलब्ध नहीं", "मार्ग अजून उपलब्ध नाही")) : L("Navigation not started", "नेविगेशन शुरू नहीं हुआ", "नेव्हिगेशन सुरू नाही")}
-          </div>
-        </div>
-        {live.status === "rerouting" && <span className="text-[12px] opacity-80">{L("Updating…", "अपडेट हो रहा है…", "अपडेट होत आहे…")}</span>}
+    <div className="relative flex h-screen w-full flex-col overflow-hidden bg-slate-900 select-none">
+      {/* Top Floating Back Button (Uber minimalist back icon) */}
+      <div className="absolute left-3 top-3 z-[1100]">
+        <Link
+          href="/active-work"
+          aria-label={L("Back to active jobs", "वापस", "परत")}
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-[#0b132b]/90 text-white shadow-lg backdrop-blur-md border border-slate-700/80 hover:bg-slate-800 transition"
+        >
+          <FiArrowLeft size={20} />
+        </Link>
       </div>
 
-      {nextStep && navigating && <div className="shrink-0 bg-[#1a1a2e] px-4 py-2.5 text-[14px] text-white"><b>{L("Next", "अगला", "पुढे")}:</b> {nextStep.text}{nextStep.inMeters > 0 ? ` · ${formatDistance(nextStep.inMeters)}` : ""}</div>}
+      {/* Uber Turn-by-Turn Top HUD */}
+      <UberNavHUD
+        currentStep={upcomingInstructions.current}
+        nextStep={upcomingInstructions.subsequent}
+        routeStatus={live.status}
+        theme={theme}
+        voiceEnabled={voiceEnabled}
+        isFollowing={followWorker}
+        onToggleTheme={() => setTheme((t) => (t === "day" ? "night" : "day"))}
+        onToggleVoice={() => setVoiceEnabled((v) => !v)}
+        onRecenter={handleRecenter}
+        onFitOverview={handleFitOverview}
+      />
 
+      {/* Main Map Canvas */}
       <div className="relative min-h-0 flex-1">
-        <MapViewLazy center={markers[markers.length - 1].position} markers={markers} route={progress?.remaining ?? routeInfo?.coordinates} routeDone={progress?.done} focusKey={navigating ? "nav" : "idle"} />
-        <a href={googleMapsDirectionsUrl(dest, here ?? undefined)} target="_blank" rel="noopener noreferrer" className="absolute right-3 top-3 z-[500] flex items-center gap-1.5 rounded-lg border border-[#ddd] bg-white px-3 py-2 text-[12.5px] font-semibold text-[#1a73e8] no-underline shadow">
-          <FiExternalLink aria-hidden="true" /> {L("Open in Google Maps", "Google Maps में खोलें", "Google Maps मध्ये उघडा")}
-        </a>
-      </div>
+        <MapViewLazy
+          center={mapCenter}
+          markers={markers}
+          route={activeRemainingPolyline}
+          routeDone={activeDonePolyline}
+          focusKey={overviewKey}
+          theme={theme}
+          followWorker={followWorker}
+          onUserPan={() => setFollowWorker(false)}
+        />
 
-      <div className="z-[500] max-h-[55vh] shrink-0 overflow-y-auto rounded-t-3xl bg-white px-5 pb-8 pt-4 shadow-[0_-4px_24px_rgba(0,0,0,0.12)]">
-        <div className="mb-1 text-[15px] font-bold text-[#1a1a1a]">{address || L("Job location", "काम की जगह", "कामाचे ठिकाण")}</div>
-        {here && !routeInfo && straightKm !== null && <div className="mb-2 text-[13px] text-gray-500">{L("Straight-line distance", "सीधी दूरी", "सरळ अंतर")}: {formatDistance(straightKm * 1000)}</div>}
-        {routeProblem && <div role="alert" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">{routeProblem}{routeInfo ? ` ${L("Showing the last route.", "आखिरी रूट दिखाया जा रहा है।", "शेवटचा मार्ग दाखवला आहे.")}` : ""}</div>}
-        {geoMessage && <div role="alert" className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-800">{geoMessage}</div>}
-        {actionError && <div role="alert" className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-800">{actionError}</div>}
-        {nearSite && app.status !== "arrived" && <div role="status" className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] text-emerald-800">{L("You are close to the site. Tap “I have arrived” when you reach it.", "आप साइट के पास हैं। पहुँचकर “मैं पहुँच गया” दबाएं।", "तुम्ही साइटजवळ आहात. पोहोचल्यावर “मी पोहोचलो” दाबा.")}</div>}
-
-        {navigating && (
-          <div className="mb-3">
-            <NavigationPanel distanceMeters={remainingMeters} etaSeconds={remainingSeconds} locationStatus={locationStatus} routeStatus={live.status} destination={address || undefined} updatedAt={geo.fix?.timestamp ?? null} />
-          </div>
-        )}
-
-        {!navigating ? (
-          <button type="button" disabled={geo.status === "requesting"} onClick={() => void geo.start()} className={`${PRIMARY} bg-brand`}>
-            {geo.status === "requesting" ? L("Getting your location…", "आपकी लोकेशन ली जा रही है…", "तुमचे ठिकाण मिळवत आहे…") : L("Start navigation", "नेविगेशन शुरू करें", "नेव्हिगेशन सुरू करा")}
+        {/* Floating Toggle Button on Map to expand/collapse bottom section */}
+        <div className="absolute right-3 bottom-3 z-[990]">
+          <button
+            type="button"
+            onClick={() => setIsSheetExpanded((v) => !v)}
+            className="flex items-center gap-1.5 rounded-full border border-slate-700/70 bg-[#0b132b]/90 px-3.5 py-2 text-[12px] font-bold text-white shadow-xl backdrop-blur hover:bg-slate-800 transition"
+          >
+            {isSheetExpanded ? (
+              <>
+                <FiMaximize2 size={13} className="text-cyan-400" />
+                <span>{L("Full Map", "फुल मैप", "पूर्ण नकाशा")}</span>
+              </>
+            ) : (
+              <>
+                <FiMinimize2 size={13} className="text-cyan-400" />
+                <span>{L("Show Details", "विवरण देखें", "तपशील पहा")}</span>
+              </>
+            )}
           </button>
-        ) : (
-          <button type="button" onClick={geo.stop} className="w-full cursor-pointer rounded-[14px] border border-slate-300 bg-white py-3 text-[15px] font-semibold text-slate-700">
-            {L("Stop navigation", "नेविगेशन बंद करें", "नेव्हिगेशन थांबवा")}
-          </button>
-        )}
-        <p className="mb-0 mt-2 text-center text-[12px] text-gray-500">{L("Text directions only. For voice turn-by-turn, open Google Maps.", "सिर्फ़ टेक्स्ट दिशा-निर्देश। आवाज़ वाले दिशा-निर्देश के लिए Google Maps खोलें।", "फक्त मजकूर दिशा. आवाजी दिशांसाठी Google Maps उघडा.")}</p>
-
-        <LocationSharePanel app={app} />
-
-        <div className="mt-4 flex flex-col gap-3">
-          {app.status === "confirmed" && <button type="button" disabled={actionBusy} onClick={() => void act(() => updateApplicationStatus(app._id, "on_the_way"))} className={`${PRIMARY} bg-amber-500`}>{L("I am on the way", "मैं रास्ते में हूँ", "मी मार्गावर आहे")}</button>}
-          {(app.status === "confirmed" || app.status === "on_the_way") && <button type="button" disabled={actionBusy} onClick={() => void act(() => updateApplicationStatus(app._id, "arrived"))} className={`${PRIMARY} bg-emerald-500`}>{L("I have arrived", "मैं पहुँच गया", "मी पोहोचलो")}</button>}
-          {app.status === "arrived" && !app.completionRequestedAt && (
-            <button type="button" disabled={actionBusy} onClick={() => void act(() => requestCompletion(app._id), () => void setLocationConsent(app._id, false).catch(() => {}))} className={`${PRIMARY} bg-violet-500`}>{L("Work is finished", "काम पूरा हुआ", "काम पूर्ण झाले")}</button>
-          )}
-          {app.status === "arrived" && app.completionRequestedAt && (
-            <div className="rounded-[14px] border-2 border-emerald-500 bg-green-50 py-4 text-center text-[15px] font-bold text-emerald-800">{L("Waiting for the employer to confirm", "नियोक्ता की पुष्टि का इंतज़ार", "मालकाच्या पुष्टीची प्रतीक्षा")}</div>
-          )}
         </div>
       </div>
+
+      {/* Uber Bottom HUD Sheet */}
+      <UberTripSheet
+        app={app}
+        distanceMeters={remainingMeters}
+        etaSeconds={remainingSeconds}
+        speedKmh={currentSpeedKmh}
+        progressPercent={progressPercent}
+        nearSite={nearSite}
+        locationStatus={locationStatus}
+        routeStatus={live.status}
+        destination={dest}
+        currentPosition={currentPos ? { lat: currentPos[0], lng: currentPos[1] } : null}
+        actionBusy={actionBusy}
+        actionError={actionError}
+        isExpanded={isSheetExpanded}
+        onToggleExpanded={() => setIsSheetExpanded((v) => !v)}
+        onUpdateStatus={handleUpdateStatus}
+        onRequestCompletion={handleRequestCompletion}
+        isSimulating={isSimulating}
+        simSpeed={simSpeed}
+        onToggleSimulation={handleToggleSimulation}
+        onPauseSimulation={handlePauseSimulation}
+        onSetSimSpeed={setSimSpeed}
+        onResetSimulation={handleResetSimulation}
+      />
     </div>
   );
 }
