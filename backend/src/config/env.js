@@ -66,6 +66,15 @@ export const env = {
       process.env.GEOAPIFY_URL || "https://api.geoapify.com"
     ).replace(/\/$/, ""),
   },
+  // Assistant LLM. Optional: without a key the assistant reports itself unavailable and the rest of the app is unaffected.
+  ai: {
+    provider: process.env.AI_PROVIDER || "anthropic",
+    apiKey: process.env.ANTHROPIC_API_KEY || "",
+    model: process.env.AI_MODEL || "claude-haiku-5-5",
+    baseUrl: (process.env.AI_BASE_URL || "https://api.anthropic.com").replace(/\/$/, ""),
+    timeoutMs: Number(process.env.AI_TIMEOUT_MS) || 30000,
+    maxOutputTokens: Number(process.env.AI_MAX_OUTPUT_TOKENS) || 700,
+  },
   twilio: {
     accountSid: process.env.TWILIO_ACCOUNT_SID,
     authToken: process.env.TWILIO_AUTH_TOKEN,

@@ -3,6 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import { AuthProvider } from "@/context/AuthContext";
 import { LanguageProvider } from "@/context/LanguageContext";
+import { AssistantProvider } from "@/context/AssistantProvider";
 import { ToastProvider } from "@/components/ui/Toast";
 import { API_URL } from "@/config/env";
 
@@ -31,7 +32,9 @@ export default function Providers({ children }: { children: ReactNode }) {
   return (
     <LanguageProvider>
       <AuthProvider>
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          <AssistantProvider>{children}</AssistantProvider>
+        </ToastProvider>
       </AuthProvider>
     </LanguageProvider>
   );

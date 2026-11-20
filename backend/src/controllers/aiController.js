@@ -4,10 +4,23 @@ import { sendError } from "../utils/httpError.js";
 export async function suggestions(req, res) {
   try {
     const { skills, location } = req.body;
-    if (typeof skills !== "string" || typeof location !== "string" || !skills.trim() || !location.trim()) return res.status(400).json({ error: "Skills and location are required" });
+    if (
+      typeof skills !== "string" ||
+      typeof location !== "string" ||
+      !skills.trim() ||
+      !location.trim()
+    )
+      return res
+        .status(400)
+        .json({ error: "Skills and location are required" });
     res.json(await buildSuggestions(skills, location));
   } catch (err) {
-    sendError(res, err, "Could not generate suggestions. Please try again.", "error");
+    sendError(
+      res,
+      err,
+      "Could not generate suggestions. Please try again.",
+      "error",
+    );
   }
 }
 
