@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Poppins } from "next/font/google";
 import {
   LuArrowLeft,
   LuArrowRight,
@@ -25,11 +24,6 @@ import { workerSendOtp, workerVerifyOtp } from "@/services/auth";
 import { updateWorkerProfile } from "@/services/workers";
 import { HERO_PEOPLE } from "@/features/home/homeAssets";
 import type { Language, WorkerSession } from "@/types";
-
-const poppins = Poppins({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-});
 
 const INPUT =
   "w-full rounded-xl border-[1.5px] border-[#dbe4f0] bg-white px-4 py-3 text-[15px] text-[#0d2250] outline-none transition placeholder:text-[#a9b3c5] focus:border-[#1a6cf0] focus:shadow-[0_0_0_4px_rgba(26,108,240,0.12)]";
@@ -368,7 +362,7 @@ export default function WorkerLogin() {
 
   return (
     <div
-      className={`${poppins.className} min-h-screen bg-white lg:grid lg:h-screen lg:grid-cols-2 lg:overflow-hidden`}
+      className="font-poppins min-h-screen bg-white lg:grid lg:h-screen lg:grid-cols-2 lg:overflow-hidden"
     >
       {/* ───────── Left: brand panel (desktop only) ───────── */}
       <aside className="relative hidden overflow-hidden bg-[linear-gradient(180deg,#f3f7ff_0%,#fbfcff_100%)] px-[clamp(32px,4.5vw,80px)] py-8 lg:flex lg:min-h-0 lg:flex-col">

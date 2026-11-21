@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Poppins } from "next/font/google";
 import {
   FiArrowRight, FiBookmark, FiBox, FiBriefcase, FiChevronDown, FiCoffee, FiCreditCard, FiDroplet, FiHome, FiLayers,
   FiImage, FiMapPin, FiNavigation, FiPenTool, FiPhoneCall, FiSearch, FiSettings, FiShare2, FiShield, FiSliders, FiStar, FiSun,
@@ -20,8 +19,6 @@ import { jobPhotoUrl } from "@/lib/jobPhotos";
 import { getJobs } from "@/services/jobs";
 import { getMyJobs } from "@/services/workers";
 import type { Job, Language, LatLng } from "@/types";
-
-const poppins = Poppins({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"] });
 
 const SAVED_KEY = "hm_saved_jobs";
 const RADIUS_OPTIONS = [0, 5, 10, 25, 50] as const; // 0 = any distance
@@ -200,11 +197,11 @@ export default function Jobs() {
   const clearAll = () => { setFilterCategory(""); setFilterSkill(""); setFilterType(""); setFilterUrgent(false); setFilterPayment(""); setFilterMinSalary(0); setSavedOnly(false); setArea(""); setSort("default"); };
 
   if (loading) return (
-    <div className={`${poppins.className} p-10 text-center text-[16px] text-gray-500`}>{t.loading}</div>
+    <div className="font-poppins p-10 text-center text-[16px] text-gray-500">{t.loading}</div>
   );
 
   if (loadError) return (
-    <div className={`${poppins.className} p-10 text-center`} role="alert">
+    <div className="font-poppins p-10 text-center" role="alert">
       <p className="text-[15px] font-semibold text-[#0d2250]">{L("Could not load jobs.", "नौकरियां लोड नहीं हो सकीं।", "नोकऱ्या लोड करता आल्या नाहीत.")}</p>
       <button onClick={() => { setLoadError(false); setLoading(true); getJobs().then((d) => { setJobs(d); setLoading(false); }).catch(() => { setLoadError(true); setLoading(false); }); }} className="mt-3 cursor-pointer rounded-lg bg-[#1f6bff] px-5 py-2.5 text-[14px] font-semibold text-white">{L("Try again", "फिर कोशिश करें", "पुन्हा प्रयत्न करा")}</button>
     </div>
@@ -214,7 +211,7 @@ export default function Jobs() {
   const idle = "border-[#e3eaf5] bg-white text-[#0d2250] hover:border-[#bcd0f1]";
 
   return (
-    <div className={`${poppins.className} mx-auto max-w-[1180px] px-4 py-5 text-[#0d2250] sm:px-6`}>
+    <div className="font-poppins mx-auto max-w-[1180px] px-4 py-5 text-[#0d2250] sm:px-6">
 
       {/* ── Title + location/radius ── */}
       <div className="mb-5 flex flex-wrap items-start justify-between gap-4">

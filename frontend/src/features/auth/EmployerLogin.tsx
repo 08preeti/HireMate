@@ -3,7 +3,6 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Poppins } from "next/font/google";
 import { LuArrowLeft, LuArrowRight, LuBriefcase, LuEye, LuEyeOff, LuLock, LuMail, LuShieldCheck, LuUsers } from "react-icons/lu";
 import type { IconType } from "react-icons";
 import { useLanguage } from "@/context/LanguageContext";
@@ -13,8 +12,6 @@ import { ROLE_HOME } from "@/config/routes";
 import { ApiError } from "@/services/api";
 import { employerLogin } from "@/services/auth";
 import type { EmployerLoginForm } from "@/types";
-
-const poppins = Poppins({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"] });
 
 const LABEL = "mb-1.5 block text-[13px] font-semibold text-[#0d2250]";
 const FIELD =
@@ -67,7 +64,7 @@ export default function EmployerLogin() {
   );
 
   return (
-    <div className={`${poppins.className} min-h-screen bg-white lg:grid lg:h-screen lg:grid-cols-2 lg:overflow-hidden`}>
+    <div className="font-poppins min-h-screen bg-white lg:grid lg:h-screen lg:grid-cols-2 lg:overflow-hidden">
       {/* ───────── Left: brand panel (desktop only) ───────── */}
       <aside className="relative hidden overflow-hidden bg-[linear-gradient(180deg,#f3f7ff_0%,#eef4fd_100%)] px-[clamp(32px,4.5vw,80px)] py-8 lg:block">
         <div className="pointer-events-none absolute -right-28 -top-40 h-[340px] w-[340px] rounded-full bg-[#dbe8fb]/70" />

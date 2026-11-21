@@ -1,296 +1,352 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useAssistant, type AssistantCard } from "@/context/AssistantProvider";
-import { useAuth } from "@/context/AuthContext";
-import { useL } from "@/hooks/useL";
+import React, { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useAssistant } from "@/context/AssistantContext";
+import { AssistantOrb } from "./AssistantOrb";
+import { EnvironmentCard } from "./EnvironmentCard";
+import { AssistantConfirmationModal } from "./AssistantConfirmationModal";
 
-function ConfirmationCard({
-  card,
-  onConfirm,
-  onCancel,
-}: {
-  card: AssistantCard;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  const { L } = useL();
-  const expired = card.state === "pending" && Date.now() > card.expiresAt;
-  const active = card.state === "pending" && !expired;
-  const status =
-    card.state === "done"
-      ? L("Done", "हो गया", "झाले")
-      : card.state === "cancelled"
-        ? L("Cancelled", "रद्द किया", "रद्द केले")
-        : card.state === "failed"
-          ? L("Not completed", "पूरा नहीं हुआ", "पूर्ण झाले नाही")
-          : expired
-            ? L(
-                "Expired — ask me again",
-                "समय समाप्त — फिर से कहें",
-                "वेळ संपली — पुन्हा सांगा",
-              )
-            : "";
-  return (
-    <div
-      className="ml-0 mt-2 max-w-[92%] rounded-2xl border border-[#c9d8f3] bg-white p-3 shadow-sm"
-      role="group"
-      aria-label={card.title}
-    >
-      <div className="text-[13.5px] font-bold text-[#0b1b3d]">{card.title}</div>
-      <dl className="m-0 mt-2 space-y-1">
-        {card.details.map((d) => (
-          <div key={d.label} className="flex gap-2 text-[13px]">
-            <dt className="w-24 shrink-0 text-[#5b6a88]">{d.label}</dt>
-            <dd className="m-0 min-w-0 break-words text-[#0b1b3d]">
-              {d.value}
-            </dd>
-          </div>
-        ))}
-      </dl>
-      {status ? (
-        <p className="m-0 mt-3 text-[12.5px] font-semibold text-[#5b6a88]">
-          {status}
-        </p>
-      ) : (
-        <div className="mt-3 flex gap-2">
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={!active}
-            className={`rounded-xl border-0 px-3.5 py-2 text-[13px] font-semibold text-white disabled:opacity-60 ${card.danger ? "bg-[#d64545] hover:bg-[#b93a3a]" : "bg-[#1f6bff] hover:bg-[#1859d6]"}`}
-          >
-            {card.state === "confirming"
-              ? L("Working…", "प्रक्रिया जारी…", "प्रक्रिया सुरू…")
-              : card.confirmLabel}
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={!active}
-            className="rounded-xl border border-[#d5e0f3] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#44546f] hover:bg-[#f1f5fc] disabled:opacity-60"
-          >
-            {L("Cancel", "रद्द करें", "रद्द करा")}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function AssistantPanel() {
-  const { L } = useL();
-  const { role } = useAuth();
+export function AssistantPanel() {
   const {
+    isOpen,
+    isMinimized,
+    orbState,
     messages,
-    busy,
-    available,
-    send,
-    confirmCard,
-    cancelCard,
-    clear,
-    setOpen,
+    activeTranscript,
+    continuousVoice,
+    isMuted,
+    isListening,
+    isSpeaking,
+    weather,
+    briefing,
+    pendingConfirmation,
+    closeAssistant,
+    toggleMinimize,
+    toggleContinuousVoice,
+    toggleMute,
+    startListening,
+    stopListening,
+    sendMessage,
+    confirmPendingAction,
+    cancelPendingAction,
+    loadDailyBriefing,
+    loadWeather,
+    speakText,
+    stopSpeaking,
   } = useAssistant();
-  const [draft, setDraft] = useState("");
-  const endRef = useRef<HTMLDivElement>(null);
 
+  const [input, setInput] = useState("");
+  const [showWeatherDetail, setShowWeatherDetail] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto scroll to bottom of messages
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, busy]);
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, activeTranscript, pendingConfirmation]);
 
-  const suggestions =
-    role === "employer"
-      ? [
-          L(
-            "Summarise my recruitment",
-            "मेरी भर्ती का सारांश दो",
-            "माझ्या भरतीचा सारांश द्या",
-          ),
-          L(
-            "Show my posted jobs",
-            "मेरी पोस्ट की गई नौकरियां दिखाओ",
-            "माझ्या पोस्ट केलेल्या नोकऱ्या दाखवा",
-          ),
-          L("Any new applications?", "कोई नए आवेदन?", "नवीन अर्ज आहेत का?"),
-          L("Post a new job", "नई नौकरी पोस्ट करो", "नवीन नोकरी पोस्ट करा"),
-        ]
-      : [
-          L(
-            "Find jobs near me",
-            "मेरे पास नौकरियां खोजो",
-            "माझ्या जवळच्या नोकऱ्या शोधा",
-          ),
-          L(
-            "How complete is my profile?",
-            "मेरी प्रोफ़ाइल कितनी पूरी है?",
-            "माझी प्रोफाइल किती पूर्ण आहे?",
-          ),
-          L(
-            "What's the status of my applications?",
-            "मेरे आवेदनों की स्थिति?",
-            "माझ्या अर्जांची स्थिती?",
-          ),
-          L(
-            "Update my skills",
-            "मेरी स्किल्स अपडेट करो",
-            "माझी कौशल्ये अपडेट करा",
-          ),
-        ];
+  if (!isOpen) return null;
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    const text = draft;
-    setDraft("");
-    void send(text);
+  const handleSend = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!input.trim()) return;
+    const text = input.trim();
+    setInput("");
+    await sendMessage(text);
   };
 
-  return (
-    <section
-      role="dialog"
-      aria-label={L(
-        "HireMate assistant",
-        "हायरमेट असिस्टेंट",
-        "हायरमेट असिस्टंट",
-      )}
-      className={`fixed inset-x-3 z-[920] flex max-h-[70vh] flex-col overflow-hidden rounded-2xl border border-[#dbe5f5] bg-white shadow-[0_20px_60px_rgba(7,18,41,0.35)] sm:inset-x-auto sm:right-6 sm:w-[380px] ${role === "worker" ? "bottom-[13.5rem] sm:bottom-[13.5rem] lg:bottom-[9.5rem]" : "bottom-36 sm:bottom-24"}`}
-    >
-      <header className="flex items-center gap-3 bg-gradient-to-r from-[#071229] to-[#12306b] px-4 py-3 text-white">
-        <div className="min-w-0 flex-1">
-          <div className="text-[15px] font-bold leading-tight">
-            HireMate JARVIS
-          </div>
-          <div className="text-[12px] text-white/70">
-            {L(
-              "Your Personal AI Companion",
-              "आपका निजी AI साथी",
-              "तुमचा वैयक्तिक AI साथी",
-            )}
-          </div>
+  const handleChipClick = async (query: string) => {
+    await sendMessage(query);
+  };
+
+  // Minimized Floating Pill
+  if (isMinimized) {
+    return (
+      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 p-2 rounded-full bg-slate-900/95 border border-cyan-500/40 shadow-2xl backdrop-blur-xl animate-fade-in">
+        <AssistantOrb state={orbState} size={40} onClick={toggleMinimize} />
+        <div className="cursor-pointer pr-3" onClick={toggleMinimize}>
+          <div className="text-xs font-bold text-cyan-300">HireMate JARVIS</div>
+          <div className="text-[10px] text-slate-400 capitalize">{orbState}...</div>
         </div>
-        {messages.length > 0 && (
-          <button
-            type="button"
-            onClick={clear}
-            className="rounded-lg border-0 bg-white/10 px-2.5 py-1 text-[12px] text-white hover:bg-white/20"
-          >
-            {L("Clear", "साफ़ करें", "पुसा")}
-          </button>
-        )}
         <button
           type="button"
-          onClick={() => setOpen(false)}
-          aria-label={L("Minimize", "छोटा करें", "लहान करा")}
-          className="h-8 w-8 rounded-lg border-0 bg-white/10 text-[18px] leading-none text-white hover:bg-white/20"
+          onClick={closeAssistant}
+          className="text-slate-400 hover:text-white text-xs px-2 py-1 rounded-full bg-slate-800"
+          aria-label="Close"
         >
-          ×
+          ✕
         </button>
-      </header>
+      </div>
+    );
+  }
 
-      <div
-        className="flex-1 space-y-3 overflow-y-auto bg-[#f6f9ff] px-4 py-4"
-        aria-live="polite"
-      >
-        {available === false && (
-          <p className="m-0 rounded-xl bg-[#fff4e5] px-3 py-2 text-[13px] text-[#8a5200]">
-            {L(
-              "The assistant isn't available right now. The rest of HireMate works as usual.",
-              "असिस्टेंट अभी उपलब्ध नहीं है। हायरमेट का बाकी हिस्सा सामान्य रूप से काम करता है।",
-              "असिस्टंट सध्या उपलब्ध नाही. हायरमेटचा उर्वरित भाग नेहमीप्रमाणे चालतो.",
-            )}
-          </p>
-        )}
-        {messages.length === 0 && (
+  return (
+    <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 w-[95vw] sm:w-[420px] max-w-[440px] h-[640px] max-h-[85vh] flex flex-col rounded-2xl bg-slate-950/95 border border-cyan-500/30 shadow-[0_10px_40px_rgba(0,0,0,0.8),0_0_20px_rgba(0,240,255,0.15)] backdrop-blur-2xl text-slate-100 overflow-hidden animate-fade-in font-sans">
+      {/* Top Futuristic Header */}
+      <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border-b border-cyan-500/20 select-none">
+        <div className="flex items-center gap-2.5">
+          <AssistantOrb state={orbState} size={32} />
           <div>
-            <p className="m-0 mb-3 text-[14px] text-[#44546f]">
-              {role === "employer"
-                ? L(
-                    "Hi! Ask me about your jobs and applicants, ask me to post a job, or tell me where you want to go.",
-                    "नमस्ते! अपनी नौकरियों और आवेदकों के बारे में पूछें, नौकरी पोस्ट करने को कहें, या बताएं कहाँ जाना है।",
-                    "नमस्कार! तुमच्या नोकऱ्या आणि अर्जदारांबद्दल विचारा, नोकरी पोस्ट करायला सांगा, किंवा कुठे जायचे ते सांगा.",
-                  )
-                : L(
-                    "Hi! Ask me about jobs, your profile or your applications, ask me to update your profile, or tell me where you want to go.",
-                    "नमस्ते! नौकरियों, प्रोफ़ाइल या आवेदनों के बारे में पूछें, प्रोफ़ाइल अपडेट करने को कहें, या बताएं कहाँ जाना है।",
-                    "नमस्कार! नोकऱ्या, प्रोफाइल किंवा अर्जांबद्दल विचारा, प्रोफाइल अपडेट करायला सांगा, किंवा कुठे जायचे ते सांगा.",
-                  )}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {suggestions.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  disabled={busy || available === false}
-                  onClick={() => void send(s)}
-                  className="rounded-full border border-[#c9d8f3] bg-white px-3 py-1.5 text-[13px] text-[#1f4fb8] hover:bg-[#eaf1ff] disabled:opacity-50"
-                >
-                  {s}
-                </button>
-              ))}
+            <div className="flex items-center gap-1.5">
+              <span className="font-extrabold text-sm tracking-wider bg-gradient-to-r from-cyan-400 via-sky-300 to-blue-400 bg-clip-text text-transparent">
+                HIREMATE JARVIS
+              </span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded font-semibold bg-cyan-950 text-cyan-400 border border-cyan-800/60 uppercase">
+                AI Companion
+              </span>
+            </div>
+            <div className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Voice & Context Active</span>
             </div>
           </div>
-        )}
-        {messages.map((m) => (
-          <div key={m.id}>
-            <div
-              className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-              <div
-                className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-[14px] leading-relaxed ${m.role === "user" ? "bg-[#1f6bff] text-white" : m.error ? "bg-[#fdecec] text-[#a32020]" : "bg-white text-[#0b1b3d] shadow-sm"}`}
-              >
-                {m.text}
-              </div>
-            </div>
-            {m.cards?.map((c) => (
-              <ConfirmationCard
-                key={c.token}
-                card={c}
-                onConfirm={() => void confirmCard(m.id, c.token)}
-                onCancel={() => void cancelCard(m.id, c.token)}
-              />
-            ))}
-          </div>
-        ))}
-        {busy && (
-          <div
-            className="flex justify-start"
-            role="status"
-            aria-label={L("Thinking", "सोच रहा हूँ", "विचार करत आहे")}
+        </div>
+
+        {/* Action Controls */}
+        <div className="flex items-center gap-1 text-slate-400">
+          {/* Continuous Voice Mode Toggle */}
+          <button
+            type="button"
+            onClick={toggleContinuousVoice}
+            title={continuousVoice ? "Continuous Voice: ON" : "Continuous Voice: OFF"}
+            className={`p-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+              continuousVoice
+                ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-[0_0_8px_rgba(0,240,255,0.4)]"
+                : "hover:bg-slate-800 hover:text-slate-200"
+            }`}
           >
-            <div className="flex gap-1 rounded-2xl bg-white px-3.5 py-3 shadow-sm">
-              {[0, 150, 300].map((d) => (
-                <span
-                  key={d}
-                  className="h-2 w-2 animate-bounce rounded-full bg-[#1f6bff] motion-reduce:animate-none"
-                  style={{ animationDelay: `${d}ms` }}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-        <div ref={endRef} />
+            🎙️
+          </button>
+
+          {/* Mute Audio Toggle */}
+          <button
+            type="button"
+            onClick={toggleMute}
+            title={isMuted ? "Unmute Assistant Voice" : "Mute Assistant Voice"}
+            className={`p-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+              isMuted ? "bg-rose-500/20 text-rose-300" : "hover:bg-slate-800 hover:text-slate-200"
+            }`}
+          >
+            {isMuted ? "🔇" : "🔊"}
+          </button>
+
+          {/* Minimize Button */}
+          <button
+            type="button"
+            onClick={toggleMinimize}
+            title="Minimize"
+            className="p-1.5 rounded-lg hover:bg-slate-800 hover:text-slate-200 text-xs transition-colors cursor-pointer"
+          >
+            —
+          </button>
+
+          {/* Close Button */}
+          <button
+            type="button"
+            onClick={closeAssistant}
+            title="Close"
+            className="p-1.5 rounded-lg hover:bg-slate-800 hover:text-rose-400 text-xs transition-colors cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
-      <form
-        onSubmit={submit}
-        className="flex gap-2 border-t border-[#e6edf8] bg-white p-3"
-      >
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          maxLength={1000}
-          disabled={available === false}
-          placeholder={L("Type a message…", "संदेश लिखें…", "संदेश लिहा…")}
-          aria-label={L("Message", "संदेश", "संदेश")}
-          className="min-w-0 flex-1 rounded-xl border border-[#d5e0f3] px-3 py-2 text-[14px] outline-none focus:border-[#1f6bff]"
-        />
-        <button
-          type="submit"
-          disabled={busy || !draft.trim() || available === false}
-          className="rounded-xl border-0 bg-[#1f6bff] px-4 py-2 text-[14px] font-semibold text-white hover:bg-[#1859d6] disabled:opacity-50"
-        >
-          {L("Send", "भेजें", "पाठवा")}
-        </button>
-      </form>
-    </section>
+      {/* Weather Header Ribbon */}
+      {weather && (
+        <div className="px-3 pt-2">
+          <div
+            onClick={() => setShowWeatherDetail((p) => !p)}
+            className="cursor-pointer transition-opacity hover:opacity-90"
+          >
+            <EnvironmentCard weather={weather} compact={!showWeatherDetail} onRefresh={loadWeather} />
+          </div>
+        </div>
+      )}
+
+      {/* Main Message Stream */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3.5 scrollbar-thin">
+        {messages.length === 0 && (
+          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">
+            <AssistantOrb state="idle" size={64} className="mb-4" />
+            <h3 className="font-bold text-base text-slate-200 mb-1">How can I assist you today?</h3>
+            <p className="text-xs text-slate-400 max-w-xs leading-relaxed">
+              Ask about local jobs, today&apos;s weather, wage standards, or speak naturally in Hindi, English, or Marathi.
+            </p>
+          </div>
+        )}
+
+        {messages.map((m) => {
+          const isUser = m.role === "user";
+          const isSys = m.role === "system";
+
+          if (isSys) {
+            return (
+              <div key={m.id} className="p-2 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px] text-center text-slate-400 italic">
+                {m.content}
+              </div>
+            );
+          }
+
+          return (
+            <div key={m.id} className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}>
+              <div
+                className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed shadow-md ${
+                  isUser
+                    ? "bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-br-none"
+                    : "bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-none shadow-[0_2px_10px_rgba(0,0,0,0.5)]"
+                }`}
+              >
+                <div>{m.content}</div>
+
+                {/* Speak replay button on assistant messages */}
+                {!isUser && (
+                  <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-800/80">
+                    <span>JARVIS</span>
+                    <button
+                      type="button"
+                      onClick={() => speakText(m.content)}
+                      className="hover:text-cyan-400 cursor-pointer flex items-center gap-1"
+                      title="Read aloud"
+                    >
+                      🔊 Speak
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Render Search Results Cards if present */}
+              {m.action?.type === "search_jobs" && m.action?.data?.jobs?.length > 0 && (
+                <div className="w-full mt-2 space-y-2">
+                  <div className="text-[11px] font-semibold text-cyan-300">Matching Opportunities:</div>
+                  <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                    {m.action.data.jobs.map((job: any) => (
+                      <div
+                        key={job.id}
+                        className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-cyan-500/50 transition-colors text-xs"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-bold text-slate-100">{job.title}</span>
+                          <span className="font-extrabold text-emerald-400">₹{job.dailyWage}/day</span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 flex items-center gap-2 mb-2">
+                          <span>📍 {job.location}</span>
+                          <span>•</span>
+                          <span>{job.remainingVacancies} open</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/jobs/${job.id}`}
+                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-medium"
+                          >
+                            View Job
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => sendMessage(`Apply for ${job.title} at ${job.location}`)}
+                            className="px-2 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white text-[10px] font-semibold"
+                          >
+                            Apply with JARVIS
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Inline Confirmation Card if waiting for user confirmation */}
+        {pendingConfirmation && (
+          <AssistantConfirmationModal
+            confirmation={pendingConfirmation}
+            onConfirm={confirmPendingAction}
+            onCancel={cancelPendingAction}
+            isExecuting={orbState === "action"}
+          />
+        )}
+
+        {/* Live Audio Speech Recognition Preview */}
+        {isListening && (
+          <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-xs flex items-center gap-2.5 animate-pulse">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+            <div className="flex-1">
+              <span className="font-semibold text-emerald-400">Listening: </span>
+              <span className="text-slate-200 italic">
+                {activeTranscript || "Speak now..."}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Suggested Quick Query Chips */}
+      <div className="px-3 py-1.5 border-t border-slate-800/80 bg-slate-950 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+        {[
+          "Show jobs near me",
+          "Today's weather",
+          "My applications",
+          "Daily briefing",
+          "Post a job",
+        ].map((chip) => (
+          <button
+            key={chip}
+            type="button"
+            onClick={() => handleChipClick(chip)}
+            className="px-2.5 py-1 rounded-full text-[10px] font-medium bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 border border-slate-800 whitespace-nowrap transition-colors cursor-pointer"
+          >
+            {chip}
+          </button>
+        ))}
+      </div>
+
+      {/* Bottom Controls & Input */}
+      <div className="p-3 bg-slate-900/90 border-t border-cyan-500/20 backdrop-blur-md">
+        <form onSubmit={handleSend} className="flex items-center gap-2">
+          {/* Big Voice Microphone Button */}
+          <button
+            type="button"
+            onClick={isListening ? stopListening : startListening}
+            title={isListening ? "Stop listening" : "Start voice listening"}
+            aria-label="Voice input"
+            className={`p-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
+              isListening
+                ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.7)] animate-bounce"
+                : "bg-cyan-600 hover:bg-cyan-500 text-white shadow-[0_0_10px_rgba(0,240,255,0.3)]"
+            }`}
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+            </svg>
+          </button>
+
+          {/* Text Input */}
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Speak or type (English, हिंदी, मराठी)..."
+            className="flex-1 bg-slate-950 border border-slate-800 focus:border-cyan-500 text-slate-100 placeholder-slate-500 text-xs rounded-xl px-3.5 py-2.5 focus:outline-none transition-colors"
+          />
+
+          {/* Send Button */}
+          <button
+            type="submit"
+            disabled={!input.trim()}
+            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            aria-label="Send message"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+            </svg>
+          </button>
+        </form>
+      </div>
+    </div>
   );
 }
