@@ -1,5 +1,6 @@
 import { env } from "../config/env.js";
 import { HttpError } from "../utils/httpError.js";
+import { matchLocalNashikPlaces } from "../constants/nashikLocations.js";
 
 const TIMEOUT_MS = 8_000;
 const CACHE_TTL_MS = 10 * 60_000;
@@ -224,6 +225,9 @@ export async function searchPlaces(
   const cached = cacheGet(key);
   if (cached) return cached;
 
+  // 1. Check local Nashik places dictionary first (handles abbreviations like CCM, ABB Circle, Untwadi Rd, etc.)
+  const localNashikMatches = fetchImpl === fetch ? matchLocalNashikPlaces(query) : [];
+
   // Photon is built for type-ahead and handles half-typed words; bias it toward where the employer is looking.
   const biasParams = bias
     ? `&lat=${bias.lat.toFixed(5)}&lon=${bias.lng.toFixed(5)}&location_bias_scale=0.4`
@@ -276,13 +280,42 @@ export async function searchPlaces(
   const osmLate = b === TIMED_OUT || g === TIMED_OUT;
   // Geoapify first so it wins ties; Photon and Nominatim fill in what it misses.
   const lists = [g, a, b].filter(Array.isArray);
-  if (!lists.length)
-    throw a instanceof HttpError
-      ? a
-      : new HttpError(503, "Address search is not available right now.", {
-          code: "PROVIDER_UNAVAILABLE",
-        });
-  const results = dedupe(rank(lists.flat(), query, bias), SEARCH_LIMIT);
+
+  // Compound address fallback: e.g. "Murli Apartment, Sambhaji Chowk, Untwadi Rd, Nashik"
+  // If external search returned nothing and the query has comma parts, search for the area/street
+  let fallbackMatches = [];
+  if (lists.flat().length === 0 && query.includes(",")) {
+    const parts = query.split(",").map((s) => s.trim()).filter(Boolean);
+    if (parts.length > 1) {
+      const subQuery = parts.slice(1).join(", ");
+      try {
+        const subData = await getJson(
+          `${env.maps.photonUrl}/api/?q=${encodeURIComponent(subQuery)}&limit=3&lang=en&bbox=68.1,8.0,97.4,37.6${biasParams}`,
+          { fetchImpl, label: "Address search fallback" },
+        );
+        const normalized = normalizePhoton(subData);
+        fallbackMatches = normalized.map((item) => ({
+          ...item,
+          label: `${parts[0]}, ${item.label}`,
+        }));
+      } catch {}
+    }
+  }
+
+  const allFound = [...localNashikMatches, ...lists.flat(), ...fallbackMatches];
+
+  if (!allFound.length) {
+    if (lists.length === 0 && localNashikMatches.length === 0) {
+      throw a instanceof HttpError
+        ? a
+        : new HttpError(503, "Address search is not available right now.", {
+            code: "PROVIDER_UNAVAILABLE",
+          });
+    }
+    return [];
+  }
+
+  const results = dedupe(rank(allFound, query, bias), SEARCH_LIMIT);
   if (!osmLate) cacheSet(key, results);
   return results;
 }
