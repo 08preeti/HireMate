@@ -9,6 +9,7 @@ import { env } from "../config/env.js";
 import { executeTool } from "./toolRegistry.js";
 import { ASSISTANT_TOOLS } from "../constants/assistantTools.js";
 import { ROLES } from "../constants/roles.js";
+import { handleIndicConversationalQuery, INDIC_SYSTEM_PROMPT } from "./indicConversationalEngine.js";
 
 // Common category/trade keywords across English, Hindi, and Marathi
 const TRADE_PATTERNS = [
@@ -26,12 +27,12 @@ const TRADE_PATTERNS = [
  * Detect language of query (en, hi, mr)
  */
 function detectLanguage(text) {
-  // Marathi distinctive words or Devanagari with Marathi markers
-  if (/आहे|नाही|कसे|दाखवा|करा|काम|सकाळ|दुपार|माझे|हवे|पाहिजे|गवंडी|सुतार/i.test(text)) {
+  // Marathi distinctive words (Devanagari and Romanized colloquial markers from IndicVoices)
+  if (/आहे|नाही|कसे|दाखवा|करा|काम|सकाळ|दुपार|माझे|हवे|पाहिजे|गवंडी|सुतार|\b(ahe|aahe|kasa|kase|bhetel|milel|dada|bhau|kahi|kuthe|rojandari|chalel|nakki|majha|majhi)\b/i.test(text)) {
     return "mr";
   }
-  // Hindi distinctive words
-  if (/है|नहीं|कैसे|दिखाओ|करो|मुझे|चाहिए|मौसम|नमस्ते|काम/i.test(text)) {
+  // Hindi distinctive words (Devanagari and Romanized colloquial markers from IndicVoices)
+  if (/है|नहीं|कैसे|दिखाओ|करो|मुझे|चाहिए|मौसम|नमस्ते|काम|\b(hai|nahi|kaise|dikhao|karo|chahiye|majoori|dihadi|thekedaar|bhaiya|kushal|shukriya)\b/i.test(text)) {
     return "hi";
   }
   return "en";
@@ -42,24 +43,49 @@ function detectLanguage(text) {
  */
 export async function processWithIntelligentAgent({ message, context = {}, auth, userDoc }) {
   const role = auth?.role || "worker";
-  const text = message.trim();
-  const lower = text.toLowerCase();
+  const rawText = message.trim();
+  // Strip trailing and surrounding punctuation (. ? ! , ' " etc.) that Web Speech API or typing adds
+  const cleanText = rawText.replace(/^[.,!?;:'"“”\s]+|[.,!?;:'"“”\s]+$/g, "").trim();
+  const lower = cleanText.toLowerCase();
+  const text = cleanText || rawText;
   const lang = detectLanguage(text);
 
   let toolName = null;
   let toolParams = {};
+  let isConfirmedExecution = false;
 
   // 0. Conversational Multi-Turn Context Resolution
   const pendingContext = context.pendingContext || {};
 
+  // Check if message is a cancellation or an explicit different intent that should escape awaitingField
+  const isEscapeIntent =
+    /^(cancel|stop|rehne do|chhod do|nahi|no|exit|back|रद्द|थांब|नाही)$/i.test(lower) ||
+    /(my applications|applied jobs|application status|आवेदन|माझे अर्ज|accept hui kya)/i.test(lower) ||
+    /^(find|search|show|get|look for).*(job|kaam|kam|work|naukri)/i.test(lower) ||
+    /^(weather|forecast|rain|air quality|aqi|temperature|मौसम|हवामान)/i.test(lower) ||
+    /^(briefing|summary|overview|updates|morning update|ब्रीफिंग)/i.test(lower);
+
   // 0A. User is answering a pending profile update question (e.g. asked to change skill, now answering "Electrician")
-  if (role === ROLES.WORKER && pendingContext.awaitingField) {
+  if (role === ROLES.WORKER && pendingContext.awaitingField && !isEscapeIntent) {
     const field = pendingContext.awaitingField;
-    let newValue = text;
+    let newValue = null;
 
     if (field === "experienceYears") {
-      const numMatch = lower.match(/\d+/);
-      newValue = numMatch ? Number(numMatch[0]) : 3;
+      const numMatch = lower.match(/\d+/) || lower.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten|ek|do|teen|char|paanch)\b/i);
+      const wordMap = { one: 1, ek: 1, two: 2, do: 2, three: 3, teen: 3, four: 4, char: 4, five: 5, paanch: 5 };
+      if (numMatch) {
+        newValue = Number(numMatch[0]) || wordMap[numMatch[0].toLowerCase()] || 2;
+        toolName = "update_profile";
+        toolParams = { field, newValue };
+      } else {
+        return {
+          reply: lang === "hi"
+            ? "कृपया बताएं कि आपके पास कितने साल का अनुभव है? (जैसे: 2 साल या 3 साल)।"
+            : "Please tell me the number of years of experience you have, for example: '2 years' or '3 years'.",
+          nextPendingContext: { awaitingField: "experienceYears", awaitingAction: "update_profile" },
+          suggestedQueries: ["1 year", "2 years", "3 years", "5 years"],
+        };
+      }
     } else if (field === "skills") {
       for (const t of TRADE_PATTERNS) {
         if (t.match.test(lower)) {
@@ -67,12 +93,82 @@ export async function processWithIntelligentAgent({ message, context = {}, auth,
           break;
         }
       }
+      // If no standard trade pattern matched, check if it's a valid 1-3 word skill
+      if (!newValue && text.length >= 3 && text.length <= 30 && !/(application|status|weather|briefing|job)/i.test(lower)) {
+        newValue = text.replace(/[.,!?;:]/g, "").trim();
+      }
+
+      if (newValue) {
+        toolName = "update_profile";
+        toolParams = { field, newValue };
+      } else {
+        return {
+          reply: lang === "hi"
+            ? "कृपया बताएं कि आप कौन सा हुनर जोड़ना चाहते हैं? (जैसे: इलेक्ट्रीशियन, पेंटर, प्लंबर, कारपेंटर, या राजमिस्त्री)।"
+            : "Please tell me which skill or trade you would like to set (e.g. Electrician, Painter, Plumber, Mason, Carpenter).",
+          nextPendingContext: { awaitingField: "skills", awaitingAction: "update_profile" },
+          suggestedQueries: ["Electrician", "Painter", "Plumber", "Mason", "Carpenter"],
+        };
+      }
+    } else if (field === "name") {
+      const cleanedName = text.replace(/^(my name is|make it|set to|mera naam|naam)?\s*/i, "").replace(/[.,!?;:]/g, "").trim();
+      if (cleanedName.length >= 2) {
+        toolName = "update_profile";
+        toolParams = { field, newValue: cleanedName };
+      } else {
+        return {
+          reply: lang === "hi"
+            ? "कृपया अपना पूरा नाम बताएं जो आप प्रोफ़ाइल में रखना चाहते हैं।"
+            : "Please tell me the full name you would like to set in your profile.",
+          nextPendingContext: { awaitingField: "name", awaitingAction: "update_profile" },
+        };
+      }
+    } else if (field === "location") {
+      const cleanedLoc = text.replace(/^(location|city|in|to|set to|mera shahar)?\s*/i, "").replace(/[.,!?;:]/g, "").trim();
+      if (cleanedLoc.length >= 3) {
+        toolName = "update_profile";
+        toolParams = { field, newValue: cleanedLoc };
+      } else {
+        return {
+          reply: "Which city or location would you like to set in your profile? (e.g. Nashik, Pune, Mumbai).",
+          nextPendingContext: { awaitingField: "location", awaitingAction: "update_profile" },
+          suggestedQueries: ["Nashik", "Pune", "Mumbai"],
+        };
+      }
     }
-    toolName = "update_profile";
-    toolParams = { field, newValue };
   }
 
-  // 0B. User is answering a sequential job application ("apply for the second one", "apply for the first one", "sabse paas wali")
+  // 0B. Conversational Affirmation & Confirmation ("yes", "haan", "sure", "confirm", "proceed", "check karo")
+  else if (/^(yes|yeah|yep|haan|ha|sure|ok|okay|kar do|dikhao|dekho|check karo|bilkul|yes please|ha dikhao|haan dikhao|confirm|proceed)$/i.test(lower)) {
+    if (pendingContext.awaitingConfirmation) {
+      const pending = pendingContext.awaitingConfirmation;
+      toolName = pending.action;
+      toolParams = pending.details?.payload || pending.details || {};
+      isConfirmedExecution = true;
+    } else {
+      // Affirmative greeting or prompt follow-up
+      const recent = context.recentHistory || [];
+      const lastAssistant = [...recent].reverse().find((m) => m.role === "assistant");
+      const lastContent = (lastAssistant?.content || "").toLowerCase();
+
+      if (role === ROLES.WORKER) {
+        if (lastContent.includes("application") || lastContent.includes("status")) {
+          toolName = "get_my_applications";
+        } else {
+          // Default affirmative follow-up ("Would you like me to check today's job opportunities? -> yes")
+          toolName = "search_jobs";
+        }
+      } else if (role === ROLES.EMPLOYER) {
+        if (lastContent.includes("application") || lastContent.includes("candidate")) {
+          toolName = "get_job_applicants";
+        } else {
+          toolName = "get_my_jobs";
+        }
+      }
+    }
+  }
+
+  // 0C. User is answering a sequential job application ("apply for the second one", "apply for the first one", "sabse paas wali")
   else if (role === ROLES.WORKER && pendingContext.lastJobs?.length && /(apply|आवेदन|पहला|दूसरा|first|second|third|1st|2nd|paas|closest)/i.test(lower)) {
     const jobs = pendingContext.lastJobs;
     let chosenJob = jobs[0];
@@ -102,6 +198,54 @@ export async function processWithIntelligentAgent({ message, context = {}, auth,
       latitude: context.latitude,
       longitude: context.longitude,
     };
+  }
+
+  // 2B. Direct Autonomous Navigation across HireMate Pages
+  else if (/(take me to|navigate to|open|go to|chalo|kholo|dikhao|show)\s+(my\s+)?(application|applications|jobs?|dashboard|profile|post\s*job|offers?|notifications?|history)/i.test(lower) ||
+           /(applications|dashboard|profile|post\s*job|job\s*offers|work\s*history)\s+(kholo|dikhao|page|chalo)/i.test(lower)) {
+    if (/(application|applications|अर्ज|आवेदन)/i.test(lower)) {
+      if (role === ROLES.WORKER) {
+        toolName = "get_my_applications";
+      } else {
+        toolName = "get_job_applicants";
+      }
+    } else if (/(post\s*job|job\s*post|नया काम|नवीन काम)/i.test(lower) && role === ROLES.EMPLOYER) {
+      return {
+        reply: lang === "hi"
+          ? "बिल्कुल! मैं आपके लिए नया जॉब पोस्ट पेज खोल रहा हूँ।"
+          : lang === "mr"
+          ? "नक्कीच! मी आपल्यासाठी नवीन नोकरी पोस्ट करण्याचे पान उघडत आहे."
+          : "Opening the job post page for you now. Tell me the role, vacancies, wage, and location, or fill the form directly.",
+        action: { type: "navigate", route: "/post-job" },
+      };
+    } else if (/(job|jobs|kaam|काम|नोकऱ्या)/i.test(lower) && !/(post|my\s*jobs)/i.test(lower)) {
+      toolName = "search_jobs";
+    } else if (/(profile|प्रोफाइल)/i.test(lower)) {
+      toolName = "get_my_profile";
+    } else if (/(offer|offers|ऑफर)/i.test(lower) && role === ROLES.WORKER) {
+      return {
+        reply: "Opening your received job offers.",
+        action: { type: "navigate", route: "/job-offers" },
+      };
+    } else if (/(notification|notifications|सूचना)/i.test(lower)) {
+      const targetRoute = role === ROLES.WORKER ? "/worker-notifications" : "/employer-notifications";
+      return {
+        reply: "Opening your notifications page.",
+        action: { type: "navigate", route: targetRoute },
+      };
+    } else if (/(history|completed|इतिहास)/i.test(lower)) {
+      const targetRoute = role === ROLES.WORKER ? "/work-history" : "/employer-completed-work";
+      return {
+        reply: "Opening your work history.",
+        action: { type: "navigate", route: targetRoute },
+      };
+    } else if (/(dashboard|डैशबोर्ड)/i.test(lower)) {
+      const targetRoute = role === ROLES.WORKER ? "/worker-dashboard" : "/employer-dashboard";
+      return {
+        reply: "Taking you back to your main dashboard.",
+        action: { type: "navigate", route: targetRoute },
+      };
+    }
   }
 
   // 3. Navigation / Route to Job Site
@@ -143,9 +287,12 @@ export async function processWithIntelligentAgent({ message, context = {}, auth,
   // 6. Worker: Update Profile Intent
   else if (
     role === ROLES.WORKER &&
-    (/(update|change|edit|modify|badlo|badalna|set).*(profile|skill|skills|trade|experience|location|city|name|naam)/i.test(lower) ||
-      /(profile|skill|skills|trade|experience|location|city|name|naam).*(update|change|edit|modify|badlo|badal do|kar do)/i.test(lower) ||
-      /(want to change|meri profile|profile me)/i.test(lower))
+    (/(update|change|edit|modify|badlo|badalna|set|make|kardo|kar do|rakho|rakh do|put).*(profile|skill|skills|trade|experience|location|city|name|naam)/i.test(lower) ||
+      /(profile|skill|skills|trade|experience|location|city|name|naam).*(update|change|edit|modify|badlo|badal do|kar do|set|make|kardo)/i.test(lower) ||
+      /(experience|तजुर्बा|अनुभव).*\b(\d+)\b/i.test(lower) ||
+      /\b(\d+)\b.*(saal|year|years|साल).*(experience|तजुर्बा|अनुभव)/i.test(lower) ||
+      /(want to change|meri profile|profile me|mera experience|my experience)/i.test(lower) ||
+      /^(experience|skills?|trade|location|naam|name)$/i.test(lower))
   ) {
     // Check for specific trade/skill mentioned directly
     let tradeMatch = null;
@@ -156,22 +303,59 @@ export async function processWithIntelligentAgent({ message, context = {}, auth,
       }
     }
 
-    const expMatch = lower.match(/(?:experience|तजुर्बा|अनुभव).*?(\d+)\s*(?:saal|year|years|साल)/i) || lower.match(/(\d+)\s*(?:saal|year|years|साल).*?(?:experience|तजुर्बा|अनुभव)/i);
+    const expNumMatch = lower.match(/(?:experience|तजुर्बा|अनुभव).*?(\d+)/i) || 
+                        lower.match(/(\d+)\s*(?:saal|year|years|साल).*?(?:experience|तजुर्बा|अनुभव)/i) ||
+                        lower.match(/(?:make|set|update|change|put)?\s*(?:my\s*)?(?:experience|तजुर्बा|अनुभव)\s*(?:is|to|as)?\s*(\d+)/i) ||
+                        lower.match(/\b(\d+)\s*(?:saal|year|years|साल)/i);
+
     const locMatch = lower.match(/(?:location|city|जगह|शहर).*?(?:to|in|में|येथे)?\s*([a-zA-Z\s]{3,20})(?:\s*kar do|\s*kardo|$)/i);
-    const nameMatch = lower.match(/(?:name|naam|नाम).*?(?:to|is|में|येथे)?\s*([a-zA-Z\s]{3,25})(?:\s*kar do|\s*kardo|$)/i);
+    
+    // Direct name extraction: "change name Rudra", "update name to Rahul Sharma", "mera naam Rudra kar do"
+    const nameDirectMatch =
+      lower.match(/(?:change|update|make|set|badlo|badal do|rakho|rakh do)?\s*(?:my\s*)?(?:name|naam|नाम)\s*(?:to|is|as|=|में|येथे)?\s+([a-zA-Z\s]{2,25})(?:\s*kar do|\s*kardo|$)/i) ||
+      lower.match(/(?:make|set|change|update)\s+(?:my\s+)?(?:name|naam|नाम)\s+(?:to\s+|as\s+)?([a-zA-Z\s]{2,25})/i);
+    const hasSpecificName =
+      nameDirectMatch &&
+      !/^(the|my|mera|meri|to|is|as|update|change|profile|experience|skill|skills|job|location)$/i.test(nameDirectMatch[1].trim()) &&
+      !/(experience|skill|skills|rupaye|job|profile|kardo|kar do|change|update)/i.test(nameDirectMatch[1].trim());
+
+    // Title case helper for proper display of names
+    const toTitleCase = (str) => str.replace(/\b\w/g, (char) => char.toUpperCase());
+    const directNameValue = hasSpecificName ? toTitleCase(nameDirectMatch[1].trim()) : null;
 
     if (tradeMatch && /(skill|skills|trade|kaam|काम|हुनर)/i.test(lower)) {
       toolName = "update_profile";
       toolParams = { field: "skills", newValue: tradeMatch };
-    } else if (expMatch) {
+    } else if (expNumMatch) {
       toolName = "update_profile";
-      toolParams = { field: "experienceYears", newValue: Number(expMatch[1]) };
-    } else if (locMatch) {
+      toolParams = { field: "experienceYears", newValue: Number(expNumMatch[1]) };
+    } else if (hasSpecificName) {
+      toolName = "update_profile";
+      toolParams = { field: "name", newValue: directNameValue };
+    } else if (locMatch && !/(rupaye|rs|chahiye|experience|skill|name)/i.test(locMatch[1])) {
       toolName = "update_profile";
       toolParams = { field: "location", newValue: locMatch[1].trim() };
-    } else if (nameMatch) {
-      toolName = "update_profile";
-      toolParams = { field: "name", newValue: nameMatch[1].trim() };
+    } else if (/(name|naam|नाम)/i.test(lower)) {
+      // Specifically asked: "change the name", "update name", "change my name", "naam badlo"
+      return {
+        reply: lang === "hi"
+          ? "ज़रूर! आप अपनी प्रोफ़ाइल में क्या पूरा नाम रखना चाहते हैं?"
+          : lang === "mr"
+          ? "नक्कीच! आपण आपल्या प्रोफाइलमध्ये कोणते पूर्ण नाव ठेवू इच्छिता?"
+          : "Sure! What full name would you like to set in your profile?",
+        nextPendingContext: { awaitingField: "name", awaitingAction: "update_profile" },
+      };
+    } else if (/(experience|अनुभव|तजुर्बा)/i.test(lower)) {
+      // Specifically asked: "change experience", "update experience", or "experience"
+      return {
+        reply: lang === "hi"
+          ? "ज़रूर! आपके पास कितने साल का अनुभव है? (जैसे: 2 साल, 3 साल, या 5 साल)।"
+          : lang === "mr"
+          ? "नक्कीच! आपल्याकडे किती वर्षांचा अनुभव आहे? (उदा: २ वर्षे, ३ वर्षे, ५ वर्षे)."
+          : "Sure! How many years of experience do you have? (e.g. 2 years, 3 years, or 5 years).",
+        nextPendingContext: { awaitingField: "experienceYears", awaitingAction: "update_profile" },
+        suggestedQueries: ["1 year", "2 years", "3 years", "5 years"],
+      };
     } else if (/(skill|skills|trade|हुनर)/i.test(lower)) {
       // Specifically asked: "i want to change the skill in profile"
       return {
@@ -182,6 +366,14 @@ export async function processWithIntelligentAgent({ message, context = {}, auth,
           : "Sure! What trade or skill would you like to set in your profile? (e.g. Electrician, Painter, Plumber, Mason, Carpenter).",
         nextPendingContext: { awaitingField: "skills", awaitingAction: "update_profile" },
         suggestedQueries: ["Electrician", "Painter", "Plumber", "Mason", "Carpenter"],
+      };
+    } else if (/(location|city|शहर|जगह)/i.test(lower)) {
+      return {
+        reply: lang === "hi"
+          ? "ज़रूर! आप अपनी प्रोफ़ाइल में कौन सा शहर या इलाका सेट करना चाहते हैं? (जैसे: नासिक, पुणे, या मुंबई)।"
+          : "Sure! Which city or preferred location would you like to set in your profile? (e.g. Nashik, Pune, Mumbai).",
+        nextPendingContext: { awaitingField: "location", awaitingAction: "update_profile" },
+        suggestedQueries: ["Nashik", "Pune", "Mumbai"],
       };
     } else {
       // General question: "Jarvis, mujhe meri profile update karni hai"
@@ -248,13 +440,36 @@ export async function processWithIntelligentAgent({ message, context = {}, auth,
   // 12. Employer: Post / Create a Job
   else if (
     role === ROLES.EMPLOYER &&
-    (/(post|create|hire|need|require|need workers|worker chahiye|कामगार हवेत).*(job|worker|painter|mason|carpenter|plumber|electrician)/i.test(lower) ||
-      /(painter|mason|carpenter|plumber|electrician|cleaner|worker|मजूर|कामगार).*(chahiye|need|require|हवेत|ki jarurat|post|hire)/i.test(lower))
+    (/(post|create|hire|need|require|need workers|worker chahiye|कामगार हवेत).*(job|worker|painter|mason|carpenter|plumber|electrician|helper)/i.test(lower) ||
+      /(painter|mason|carpenter|plumber|electrician|cleaner|worker|मजूर|कामगार).*(chahiye|need|require|हवेत|ki jarurat|post|hire)/i.test(lower) ||
+      /(post\s*job|job\s*post|नया काम|नवीन काम)/i.test(lower))
   ) {
+    // If user just said "help me post a job" or "post a job" without mentioning a specific trade:
+    const isGenericPostJob =
+      /^(help\s*me\s*)?(post|create)\s*(a\s*)?job$/i.test(lower) ||
+      /^(post\s*job|job\s*post|नया काम|नवीन काम)$/i.test(lower) ||
+      lower === "help me post a job";
+
+    if (isGenericPostJob) {
+      return {
+        reply: lang === "hi"
+          ? "बिल्कुल! मैं नया जॉब पोस्ट करने में आपकी मदद करूँगा। आपको किस काम के लिए कारीगर चाहिए? (जैसे: पेंटर, राजमिस्त्री, कारपेंटर, इलेक्ट्रीशियन, या हेल्पर)।"
+          : lang === "mr"
+          ? "नक्कीच! नवीन नोकरी पोस्ट करण्यासाठी आपल्याला कोणत्या कामासाठी कामगार हवे आहेत? (उदा: गवंडी, सुतार, पेंटर, किंवा मदतनीस)."
+          : "I would be happy to help you post a job! What worker category do you need? (e.g. Painter, Mason, Carpenter, Electrician, Plumber, or Helper).",
+        action: { type: "navigate", route: "/post-job" },
+        suggestedQueries: ["Post painter job", "Need 2 masons in Nashik", "Electrician needed at 900"],
+      };
+    }
+
     toolName = "create_job_post";
     // Extract category
     let category = "General";
     for (const t of TRADE_PATTERNS) {
+      // Exclude "help" if it was just "help me"
+      if (t.category === "Helper" && /help\s+me/i.test(lower) && !/(helper|labor|मजदूर|मजूर|हमाल|हेल्पर)/i.test(lower)) {
+        continue;
+      }
       if (t.match.test(lower)) {
         category = t.category;
         break;
@@ -268,16 +483,18 @@ export async function processWithIntelligentAgent({ message, context = {}, auth,
     const wageMatch = lower.match(/(?:₹|rs\.?|inr|रुपये)\s*(\d{3,5})/i) || lower.match(/(\d{3,5})\s*(?:₹|rs\.?|रुपये|rupaye)/i);
     const dailyWage = wageMatch ? Number(wageMatch[1]) : 800;
 
-    // Extract location
-    let location = "Nashik";
+    // Extract location safely (never match "help me", "tell me" as location)
+    let location = userDoc?.location || "Nashik";
     const postPostpositionMatch = lower.match(/([a-zA-Z\s]{3,20})\s+(?:mein|me|में|येथे)/i);
     const prepositionMatch = lower.match(/(?:in|at|near|location)\s+([a-zA-Z\s]{3,20})/i);
-    if (postPostpositionMatch && !/(rupaye|rs|chahiye|daily|wage)/i.test(postPostpositionMatch[1])) {
+    if (
+      postPostpositionMatch &&
+      !/^(help|tell|show|give|for|call|ask|alert|remind|notify|guide)\b/i.test(postPostpositionMatch[1].trim()) &&
+      !/(rupaye|rs|chahiye|daily|wage)/i.test(postPostpositionMatch[1])
+    ) {
       location = postPostpositionMatch[1].trim();
     } else if (prepositionMatch && !/(rupaye|rs|chahiye|daily|wage)/i.test(prepositionMatch[1])) {
       location = prepositionMatch[1].trim();
-    } else if (context.location) {
-      location = context.location;
     }
 
     toolParams = {
@@ -299,13 +516,25 @@ export async function processWithIntelligentAgent({ message, context = {}, auth,
   // Execute recognized tool if any
   if (toolName) {
     try {
-      const toolResult = await executeTool(toolName, toolParams, auth, { isConfirmed: false });
+      const toolResult = await executeTool(toolName, toolParams, auth, { isConfirmed: isConfirmedExecution });
 
       // If tool requires confirmation, return prompt + confirmation card
       if (toolResult.requiresConfirmation) {
+        const actionData = { ...toolResult };
+        if (toolName === "create_job_post") {
+          actionData.route = "/post-job";
+          actionData.prefill = {
+            trade: toolParams.category,
+            category: toolParams.category,
+            vacancies: toolParams.vacancies,
+            dailyWage: toolParams.dailyWage,
+            location: toolParams.location,
+            title: toolParams.jobTitle,
+          };
+        }
         return {
           reply: `I have prepared this action for you: ${toolResult.summary}. Please confirm below to proceed.`,
-          action: toolResult,
+          action: actionData,
           executedTool: toolName,
         };
       }
@@ -350,12 +579,23 @@ export async function processWithIntelligentAgent({ message, context = {}, auth,
         reply = toolResult.guidance;
       }
 
+      const actionPayload = {
+        type: toolName,
+        data: toolResult,
+      };
+      if (toolName === "get_my_applications") {
+        actionPayload.route = "/my-applications";
+      } else if (toolName === "get_my_profile") {
+        actionPayload.route = role === ROLES.WORKER ? "/worker-profile" : "/employer-profile";
+      } else if (toolName === "get_my_jobs") {
+        actionPayload.route = "/employer-jobs";
+      } else if (toolName === "get_job_applicants") {
+        actionPayload.route = "/applications";
+      }
+
       return {
         reply,
-        action: {
-          type: toolName,
-          data: toolResult,
-        },
+        action: actionPayload,
         executedTool: toolName,
       };
     } catch (err) {
@@ -379,6 +619,32 @@ export async function processWithIntelligentAgent({ message, context = {}, auth,
     };
   }
 
+  if (/how are you|kaise ho|kasa ahes|कसा आहेस|कैसे हो/i.test(lower)) {
+    return {
+      reply: lang === "hi"
+        ? `मैं बहुत बढ़िया हूँ, ${userName}! HireMate के सभी सिस्टम सक्रिय हैं और मैं आपके काम में मदद के लिए तैयार हूँ।`
+        : lang === "mr"
+        ? `मी एकदम छान आहे, ${userName}! HireMate च्या सर्व सेवा सुरू आहेत आणि मी आपल्याला मदत करण्यास सज्ज आहे.`
+        : `I am doing fantastic, ${userName}! All HireMate systems are running smoothly and I am ready to assist you.`,
+    };
+  }
+
+  if (/joke|chutkula|haswa|हंसो|मजाक|विनोद/i.test(lower)) {
+    return {
+      reply: lang === "hi"
+        ? "एक बार एक इलेक्ट्रीशियन से पूछा: 'तुम्हारी शादी कैसी चल रही है?' उसने कहा: 'बढ़िया, बस कभी-कभी शॉर्ट सर्किट हो जाता है!'"
+        : "Why do electricians make great detectives? Because they're always finding loose connections and solving high-voltage cases!",
+    };
+  }
+
+  if (/what is hiremate|hiremate kya hai|hiremate kay ahe|hiremate बद्दल/i.test(lower)) {
+    return {
+      reply: lang === "hi"
+        ? "HireMate भारत का विशेष दैनिक-वेतन कामगार और ठेकेदार मंच है, जो कामगारों को पास का काम खोजने और नियोक्ताओं को तुरंत कुशल कारीगर नियुक्त करने में मदद करता है।"
+        : "HireMate is a platform designed for daily-wage workers and employers in India to easily connect, manage job requests, track work, and ensure fair, prompt daily settlements.",
+    };
+  }
+
   if (/who are you|what are you|what can you do|तुम कौन हो|तू कोण आहेस/i.test(lower)) {
     return {
       reply: lang === "hi"
@@ -395,6 +661,12 @@ export async function processWithIntelligentAgent({ message, context = {}, auth,
         ? "आपले स्वागत आहे! आणखी काही मदत हवी असल्यास नक्की सांगा."
         : "You are very welcome! Let me know whenever you need anything else.",
     };
+  }
+
+  // Indic Chat, OpenAssistant OASST1 & AI4Bharat IndicVoices Conversational Engine
+  const indicChatResponse = handleIndicConversationalQuery({ text, lower, lang, userName, role });
+  if (indicChatResponse) {
+    return indicChatResponse;
   }
 
   // Fallback helpful guidance
@@ -417,7 +689,7 @@ export async function generateAssistantResponse({ message, context, auth, userDo
   if (env.ai?.geminiApiKey) {
     try {
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.ai.geminiApiKey}`;
-      const systemInstruction = `You are HireMate JARVIS, a helpful, precise personal AI companion for daily-wage workers and contractors. You speak in natural, friendly language (English, Hindi, Marathi). Be concise and actionable.`;
+      const systemInstruction = INDIC_SYSTEM_PROMPT.trim();
 
       const res = await fetch(geminiUrl, {
         method: "POST",

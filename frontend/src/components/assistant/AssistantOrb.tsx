@@ -274,3 +274,5 @@ export function AssistantOrb({
     </div>
   );
 }
+
+export default AssistantOrb;

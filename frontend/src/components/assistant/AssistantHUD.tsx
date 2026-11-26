@@ -2,24 +2,29 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useAssistant } from "@/context/AssistantContext";
-import { useAuth } from "@/context/AuthContext";
+import { useAssistant } from "../../context/AssistantContext";
+import { useAuth } from "../../context/AuthContext";
 import { AssistantOrb } from "./AssistantOrb";
 
 export function AssistantHUD() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const {
     isOpen,
     orbState,
     messages,
     activeTranscript,
+    continuousVoice,
     isMuted,
     isListening,
     isSpeaking,
+    autoplayBlocked,
+    greeting,
     weather,
     pendingConfirmation,
     closeAssistant,
     toggleMute,
+    toggleContinuousVoice,
+    startVoiceGreeting,
     startListening,
     stopListening,
     sendMessage,
@@ -69,19 +74,22 @@ export function AssistantHUD() {
   const latestAssistantMsg = [...messages].reverse().find((m) => m.role === "assistant");
   const latestAction = latestAssistantMsg?.action;
 
-  // Suggested voice chips based on role
+  // Real location of the user (from profile, weather, or live context)
+  const userLocation = (user as any)?.location || weather?.city || "";
+
+  // Dynamic suggested voice chips based on role and actual context (no hardcoded locations)
   const quickSuggestions =
     role === "employer"
       ? [
-          "2 Painters chahiye Nashik mein",
-          "In dono workers me se kaun better hai?",
-          "Show my active jobs",
           "Review applicants",
+          "Show active jobs",
+          "Help me post a job",
+          "Compare candidate profiles",
         ]
       : [
-          "Wireman jobs near me",
+          "Show jobs near me",
+          "Check my applications",
           "Mera experience 3 saal kar do",
-          "Meri application accept hui kya?",
           "Today's weather",
         ];
 
@@ -89,7 +97,7 @@ export function AssistantHUD() {
     <div
       role="region"
       aria-label="HireMate JARVIS Voice Assistant"
-      className="fixed top-14 right-3 sm:right-6 z-[1000] w-[390px] max-w-[calc(100vw-24px)] flex flex-col rounded-3xl bg-slate-950/95 border border-cyan-500/35 shadow-[0_20px_60px_rgba(0,0,0,0.85),0_0_35px_rgba(0,240,255,0.2)] backdrop-blur-2xl text-slate-100 overflow-hidden font-sans transition-all duration-300 animate-fade-in"
+      className="fixed top-14 right-3 sm:right-6 z-[1000] w-[400px] max-w-[calc(100vw-24px)] flex flex-col rounded-3xl bg-slate-950/95 border border-cyan-500/35 shadow-[0_20px_60px_rgba(0,0,0,0.85),0_0_35px_rgba(0,240,255,0.2)] backdrop-blur-2xl text-slate-100 overflow-hidden font-sans transition-all duration-300 animate-fade-in"
     >
       {/* ── Top Futuristic HUD Bar ── */}
       <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 border-b border-cyan-500/20 select-none">
@@ -135,6 +143,20 @@ export function AssistantHUD() {
             </button>
           )}
 
+          {/* Continuous Voice Toggle Pill */}
+          <button
+            type="button"
+            onClick={toggleContinuousVoice}
+            title={continuousVoice ? "Disable Continuous Voice" : "Enable Hands-free Continuous Voice"}
+            className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-colors cursor-pointer border ${
+              continuousVoice
+                ? "bg-emerald-950/80 text-emerald-300 border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+                : "bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300"
+            }`}
+          >
+            {continuousVoice ? "🎙️ Auto" : "🎙️ Push"}
+          </button>
+
           {/* Toggle History Log Drawer */}
           {messages.length > 2 && (
             <button
@@ -179,7 +201,27 @@ export function AssistantHUD() {
         </div>
       </div>
 
-      {/* ── Collapsible History Drawer (if requested by user) ── */}
+      {/* ── Browser Autoplay Fallback Banner (Requirement 1) ── */}
+      {autoplayBlocked && !isMuted && (
+        <div className="mx-3.5 my-2 p-2.5 rounded-2xl bg-gradient-to-r from-cyan-950/90 via-slate-900 to-blue-950/90 border border-cyan-400/50 shadow-xl flex items-center justify-between animate-fade-in select-none">
+          <div className="flex items-center gap-2">
+            <span className="text-base animate-pulse">🔊</span>
+            <div>
+              <div className="text-[11px] font-bold text-cyan-200">JARVIS Voice Ready</div>
+              <div className="text-[9.5px] text-slate-400">Audio playback waiting for your tap</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={startVoiceGreeting}
+            className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-[11px] shadow-md transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5"
+          >
+            <span>▶ Start Voice</span>
+          </button>
+        </div>
+      )}
+
+      {/* ── Collapsible History Drawer ── */}
       {showHistory && (
         <div
           ref={historyRef}
@@ -209,7 +251,7 @@ export function AssistantHUD() {
       )}
 
       {/* ── Central Acoustic Waveform Stage (Siri / Gemini Core) ── */}
-      <div className="px-5 pt-4 pb-3 flex flex-col items-center justify-center relative overflow-hidden bg-gradient-to-b from-slate-900/40 to-transparent">
+      <div className="px-5 pt-3 pb-2 flex flex-col items-center justify-center relative overflow-hidden bg-gradient-to-b from-slate-900/40 to-transparent">
         {/* State-specific Waveform or Quantum Visualizer */}
         {isListening ? (
           <div className="flex flex-col items-center gap-2 py-1 w-full animate-fade-in">
@@ -268,7 +310,7 @@ export function AssistantHUD() {
             </div>
           </div>
         ) : (
-          <div className="h-1.5 w-16 rounded-full bg-cyan-500/20" />
+          <div className="h-1 w-12 rounded-full bg-cyan-500/20" />
         )}
       </div>
 
@@ -368,14 +410,23 @@ export function AssistantHUD() {
               <span className="text-[11px] font-bold text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
                 <span>⚖️ Candidate Analysis & Intelligence</span>
               </span>
-              <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-bold">
-                TOP: {latestAction.data.recommended}
-              </span>
+              {latestAction.data.recommended && (
+                <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-bold">
+                  TOP: {latestAction.data.recommended}
+                </span>
+              )}
             </div>
 
             <div className="space-y-2">
               {latestAction.data.candidates?.map((c: any, idx: number) => {
                 const isRec = c.name === latestAction?.data?.recommended;
+                const displaySkills = Array.isArray(c.skills)
+                  ? c.skills.join(", ")
+                  : typeof c.skills === "string"
+                  ? c.skills
+                  : c.skills?.en || "General Worker";
+                const displayLocation = typeof c.location === "string" ? c.location : c.location?.en || "Site";
+
                 return (
                   <div
                     key={c.id || idx}
@@ -395,7 +446,7 @@ export function AssistantHUD() {
                         )}
                       </div>
                       <div className="text-[10.5px] text-slate-400 mt-0.5">
-                        {c.skills?.join(", ")} • {c.location}
+                        {displaySkills} • {displayLocation}
                       </div>
                     </div>
                     <div className="text-right">
@@ -407,17 +458,21 @@ export function AssistantHUD() {
               })}
             </div>
 
-            <div className="p-2.5 rounded-xl bg-cyan-950/40 border border-cyan-800/40 text-[11px] text-cyan-200 leading-snug">
-              💡 <strong>JARVIS Opinion:</strong> {latestAction.data.reason}
-            </div>
+            {latestAction.data.reason && (
+              <div className="p-2.5 rounded-xl bg-cyan-950/40 border border-cyan-800/40 text-[11px] text-cyan-200 leading-snug">
+                💡 <strong>JARVIS Opinion:</strong> {latestAction.data.reason}
+              </div>
+            )}
 
-            <button
-              type="button"
-              onClick={() => sendMessage(`Accept ${latestAction.data.recommended}`)}
-              className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg transition-transform active:scale-95 cursor-pointer text-center"
-            >
-              Hire {latestAction.data.recommended} with JARVIS
-            </button>
+            {latestAction.data.recommended && (
+              <button
+                type="button"
+                onClick={() => sendMessage(`Accept ${latestAction.data.recommended}`)}
+                className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg transition-transform active:scale-95 cursor-pointer text-center"
+              >
+                Hire {latestAction.data.recommended} with JARVIS
+              </button>
+            )}
           </div>
         )}
 
@@ -425,7 +480,7 @@ export function AssistantHUD() {
         {latestAction?.type === "search_jobs" && latestAction.data?.jobs?.length > 0 && (
           <div className="space-y-2 animate-fade-in">
             <div className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider">
-              Matching Opportunities in Nashik
+              {userLocation ? `Matching Opportunities near ${userLocation}` : "Matching Opportunities"}
             </div>
             {latestAction.data.jobs.slice(0, 3).map((job: any) => (
               <div
@@ -493,7 +548,7 @@ export function AssistantHUD() {
         )}
       </div>
 
-      {/* ── Spoken Suggestion Chips (Zero ugly scrollbars) ── */}
+      {/* ── Dynamic Suggested Action Chips (Role & context based, no scrollbar) ── */}
       <div className="px-4 py-2 bg-slate-950/80 border-t border-slate-900 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
         {quickSuggestions.map((query) => (
           <button
@@ -570,16 +625,18 @@ export function AssistantHUD() {
             </button>
           </div>
 
-          {/* Today's Weather / Location Pill */}
+          {/* Weather / Location Pill */}
           {weather ? (
             <div className="text-[10px] text-right text-slate-400">
               <span className="font-extrabold text-cyan-300 text-[11px]">
                 {weather.temperature}°C
               </span>
-              <div>{weather.city || "Nashik"}</div>
+              <div>{weather.city || userLocation || "Live"}</div>
             </div>
           ) : (
-            <div className="text-[10px] text-right text-slate-500">Nashik</div>
+            <div className="text-[10px] text-right text-slate-500">
+              {userLocation || "Live"}
+            </div>
           )}
         </div>
 

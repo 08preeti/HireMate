@@ -1,8 +1,8 @@
 "use client";
 
 import React from "react";
-import { useAssistant } from "@/context/AssistantContext";
-import { useAuth } from "@/context/AuthContext";
+import { useAssistant } from "../../context/AssistantContext";
+import { useAuth } from "../../context/AuthContext";
 import { AssistantOrb } from "./AssistantOrb";
 import { AssistantHUD } from "./AssistantHUD";
 
@@ -33,3 +33,5 @@ export function HireMateAssistant() {
     </>
   );
 }
+
+export default HireMateAssistant;

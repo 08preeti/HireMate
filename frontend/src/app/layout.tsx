@@ -8,7 +8,7 @@ import "leaflet/dist/leaflet.css";
 import Providers from "./providers";
 import AppShell from "@/components/layout/AppShell";
 import InstallPrompt from "@/components/ui/InstallPrompt";
-import HireMateAssistant from "@/components/assistant/HireMateAssistant";
+import { HireMateAssistant } from "@/components/assistant/HireMateAssistant";
 
 export const metadata: Metadata = {
   title: "HireMate — Find Daily Work",

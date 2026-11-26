@@ -9,9 +9,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "./AuthContext";
 import { useLanguage } from "./LanguageContext";
+import { announceAssistantDataChanged } from "@/lib/assistantEvents";
 import {
   fetchGreeting,
   fetchDailyBriefing,
@@ -48,6 +49,75 @@ type SpeechWindow = Window & {
   webkitSpeechRecognition?: RecognitionCtor;
 };
 
+/**
+ * Select the highest quality modern, natural JARVIS AI voice from available browser synthesizers.
+ * Avoids legacy robotic Windows Desktop SAPI5 voices (David/Mark) and prefers natural, neural, Google UK/US,
+ * or Microsoft Natural online voices.
+ */
+function getBestJarvisVoice(lang: string): SpeechSynthesisVoice | null {
+  if (typeof window === "undefined" || !window.speechSynthesis) return null;
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices || voices.length === 0) return null;
+
+  const targetPrefix = lang === "hi" ? "hi" : lang === "mr" ? "mr" : "en";
+  const langVoices = voices.filter((v) => v.lang.toLowerCase().startsWith(targetPrefix));
+
+  if (targetPrefix === "en") {
+    // 1. Quintessential British/UK English male or Google UK (classic Iron Man JARVIS tone)
+    const jarvisUk = langVoices.find(
+      (v) =>
+        /Google UK English Male/i.test(v.name) ||
+        (/uk english/i.test(v.name) && /male/i.test(v.name)) ||
+        (/en-GB/i.test(v.lang) && /natural|neural|online/i.test(v.name) && !/female/i.test(v.name)),
+    );
+    if (jarvisUk) return jarvisUk;
+
+    // 2. Modern Microsoft Natural Online AI voices (Ryan, Christopher, Guy, Andrew, Brian)
+    const naturalMale = langVoices.find(
+      (v) =>
+        /natural|neural|online/i.test(v.name) &&
+        /(ryan|christopher|guy|andrew|brian|george|arthur|oliver)/i.test(v.name),
+    );
+    if (naturalMale) return naturalMale;
+
+    // 3. Modern Google English or any neural voice (not legacy desktop)
+    const modernEn = langVoices.find(
+      (v) =>
+        (/google/i.test(v.name) && !/desktop/i.test(v.name)) ||
+        /natural|neural/i.test(v.name),
+    );
+    if (modernEn) return modernEn;
+
+    // 4. Indian English natural voice
+    const inEn = langVoices.find((v) => /en-IN/i.test(v.lang) && !/desktop/i.test(v.name));
+    if (inEn) return inEn;
+  } else if (targetPrefix === "hi") {
+    // Modern natural Hindi voice
+    const modernHi = langVoices.find(
+      (v) =>
+        /madhur|swara|natural|neural/i.test(v.name) ||
+        /google/i.test(v.name),
+    );
+    if (modernHi) return modernHi;
+  } else if (targetPrefix === "mr") {
+    // Modern natural Marathi voice
+    const modernMr = langVoices.find(
+      (v) =>
+        /manohar|aarohi|natural|neural/i.test(v.name) ||
+        /google/i.test(v.name),
+    );
+    if (modernMr) return modernMr;
+  }
+
+  // Fallback to any non-legacy desktop voice in that language
+  return (
+    langVoices.find((v) => !/desktop/i.test(v.name)) ||
+    langVoices[0] ||
+    voices.find((v) => /natural|neural|google/i.test(v.name)) ||
+    null
+  );
+}
+
 interface AssistantContextValue {
   isOpen: boolean;
   isMinimized: boolean;
@@ -58,6 +128,7 @@ interface AssistantContextValue {
   isMuted: boolean;
   isListening: boolean;
   isSpeaking: boolean;
+  autoplayBlocked: boolean;
   greeting: AssistantGreeting | null;
   weather: WeatherData | null;
   briefing: DailyBriefing | null;
@@ -68,6 +139,7 @@ interface AssistantContextValue {
   toggleMinimize: () => void;
   toggleContinuousVoice: () => void;
   toggleMute: () => void;
+  startVoiceGreeting: () => void;
   startListening: () => void;
   stopListening: () => void;
   sendMessage: (text: string) => Promise<void>;
@@ -75,7 +147,7 @@ interface AssistantContextValue {
   cancelPendingAction: () => void;
   loadDailyBriefing: () => Promise<void>;
   loadWeather: () => Promise<void>;
-  speakText: (text: string) => void;
+  speakText: (text: string, options?: { isGreeting?: boolean }) => void;
   stopSpeaking: () => void;
 }
 
@@ -83,6 +155,7 @@ const AssistantContext = createContext<AssistantContextValue | undefined>(undefi
 
 export function AssistantProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { authenticated, role, user } = useAuth();
   const { language } = useLanguage();
 
@@ -95,6 +168,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [isMuted, setIsMuted] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
   const [greeting, setGreeting] = useState<AssistantGreeting | null>(null);
   const [weather, setWeather] = useState<WeatherData | null>(null);
@@ -104,9 +178,12 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const recogRef = useRef<RecognitionLike | null>(null);
   const coordsRef = useRef<{ latitude?: number; longitude?: number }>({});
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const lastSpokenTextRef = useRef<string>("");
+  const welcomedUserIdRef = useRef<string | null>(null);
+  const pendingTranscriptRef = useRef<string>("");
+  const transcriptDispatchedRef = useRef<boolean>(false);
+  const speakTextRef = useRef<(text: string, options?: { isGreeting?: boolean }) => void>(() => {});
 
-  // Read mute preference from localStorage on client
+  // Read preferences from localStorage on client
   useEffect(() => {
     try {
       const savedMute = localStorage.getItem("hm_jarvis_muted");
@@ -142,136 +219,6 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       setOrbState("idle");
     }
   }, [orbState]);
-
-  // Text-To-Speech function
-  const speakText = useCallback(
-    (text: string) => {
-      if (isMuted || typeof window === "undefined" || !window.speechSynthesis || !text) return;
-
-      window.speechSynthesis.cancel(); // Stop any previous speech
-      const utterance = new SpeechSynthesisUtterance(text);
-
-      // Map language tag
-      utterance.lang = language === "hi" ? "hi-IN" : language === "mr" ? "mr-IN" : "en-IN";
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-
-      utterance.onstart = () => {
-        setIsSpeaking(true);
-        setOrbState("speaking");
-      };
-
-      utterance.onend = () => {
-        setIsSpeaking(false);
-        setOrbState("idle");
-        // In continuous voice mode, resume listening after speech ends
-        if (continuousVoice && isOpen) {
-          setTimeout(() => {
-            startListeningInternal();
-          }, 400);
-        }
-      };
-
-      utterance.onerror = () => {
-        setIsSpeaking(false);
-        setOrbState("idle");
-      };
-
-      window.speechSynthesis.speak(utterance);
-    },
-    [isMuted, language, continuousVoice, isOpen],
-  );
-
-  // Stop listening helper
-  const stopListening = useCallback(() => {
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
-    try {
-      recogRef.current?.stop();
-    } catch {}
-    setIsListening(false);
-    setActiveTranscript("");
-    if (orbState === "listening") {
-      setOrbState("idle");
-    }
-  }, [orbState]);
-
-  // Internal start listening
-  const startListeningInternal = useCallback(() => {
-    const w = window as SpeechWindow;
-    const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (!Ctor) return;
-
-    // Barge-in: immediately stop assistant speech when listening starts
-    stopSpeaking();
-
-    try {
-      recogRef.current?.abort();
-    } catch {}
-
-    const recog = new Ctor();
-    recog.continuous = false;
-    recog.interimResults = true;
-    recog.maxAlternatives = 1;
-    recog.lang = language === "hi" ? "hi-IN" : language === "mr" ? "mr-IN" : "en-IN";
-
-    recog.onstart = () => {
-      setIsListening(true);
-      setOrbState("listening");
-      setActiveTranscript("");
-    };
-
-    recog.onresult = (e: any) => {
-      let interim = "";
-      let final = "";
-      for (let i = 0; i < e.results.length; ++i) {
-        if (e.results[i].isFinal) {
-          final += e.results[i][0].transcript;
-        } else {
-          interim += e.results[i][0].transcript;
-        }
-      }
-      setActiveTranscript(interim || final);
-
-      // Reset silence timer on voice activity
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      if (final.trim()) {
-        stopListening();
-        sendMessageInternal(final.trim());
-      } else if (interim.trim()) {
-        // Auto-finalize if user pauses speaking for 1.8 seconds
-        silenceTimerRef.current = setTimeout(() => {
-          stopListening();
-          sendMessageInternal(interim.trim());
-        }, 1800);
-      }
-    };
-
-    recog.onerror = () => {
-      setIsListening(false);
-      setOrbState("idle");
-    };
-
-    recog.onend = () => {
-      setIsListening(false);
-      if (orbState === "listening") {
-        setOrbState("idle");
-      }
-    };
-
-    recogRef.current = recog;
-    try {
-      recog.start();
-    } catch {
-      setIsListening(false);
-    }
-  }, [language, stopSpeaking, orbState]);
-
-  const startListening = useCallback(() => {
-    startListeningInternal();
-  }, [startListeningInternal]);
 
   // Send message internal
   const sendMessageInternal = useCallback(
@@ -310,6 +257,16 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
         setMessages((prev) => [...prev, assistantMsg]);
 
+        // Client-side Autonomous Navigation & Form Prefill
+        if (res.action?.route) {
+          router.push(res.action.route);
+        } else if (res.action?.clientAction?.route) {
+          router.push(res.action.clientAction.route);
+        }
+        if (res.action?.prefill && typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("hiremate:prefill-job", { detail: res.action.prefill }));
+        }
+
         // If action requires explicit confirmation
         if (res.action?.requiresConfirmation) {
           setPendingConfirmation(res.action as ConfirmationPayload);
@@ -323,7 +280,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         }
 
         // Speak assistant response
-        speakText(res.reply);
+        speakTextRef.current(res.reply);
       } catch (err: any) {
         const errorMsg: AssistantMessage = {
           id: `err-${Date.now()}`,
@@ -334,11 +291,11 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         };
         setMessages((prev) => [...prev, errorMsg]);
         setOrbState("error");
-        speakText("I encountered a connection error. Please try again.");
+        speakTextRef.current("I encountered a connection error. Please try again.");
         setTimeout(() => setOrbState("idle"), 3000);
       }
     },
-    [pathname, speakText],
+    [pathname, router],
   );
 
   const sendMessage = useCallback(
@@ -347,6 +304,216 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     },
     [sendMessageInternal],
   );
+
+  // Safely commit and dispatch voice transcript so spoken commands are never discarded
+  const commitTranscript = useCallback((textOverride?: string) => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    const rawToSend = (textOverride || pendingTranscriptRef.current).trim();
+    // Clean trailing dots / punctuation that Web Speech API auto-appends
+    const toSend = rawToSend.replace(/[.,!?;:]+$/g, "").trim() || rawToSend;
+    if (toSend && !transcriptDispatchedRef.current) {
+      transcriptDispatchedRef.current = true;
+      pendingTranscriptRef.current = "";
+      setActiveTranscript("");
+      try {
+        recogRef.current?.abort();
+      } catch {}
+      setIsListening(false);
+      setOrbState("thinking");
+      sendMessageInternal(toSend);
+    }
+  }, [sendMessageInternal]);
+
+  // Stop listening helper
+  const stopListening = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    const currentText = pendingTranscriptRef.current.trim();
+    if (currentText && !transcriptDispatchedRef.current) {
+      commitTranscript(currentText);
+      return;
+    }
+    try {
+      recogRef.current?.stop();
+    } catch {}
+    setIsListening(false);
+    setActiveTranscript("");
+    if (orbState === "listening") {
+      setOrbState("idle");
+    }
+  }, [orbState, commitTranscript]);
+
+  // Pre-load synthesis voices so natural neural voices are available on first speech turn
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    window.speechSynthesis.getVoices();
+    const handleVoicesChanged = () => {
+      window.speechSynthesis.getVoices();
+    };
+    window.speechSynthesis.onvoiceschanged = handleVoicesChanged;
+    return () => {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
+    };
+  }, []);
+
+  // Text-To-Speech function with modern natural neural voice selection
+  const speakText = useCallback(
+    (text: string, options?: { isGreeting?: boolean }) => {
+      if (isMuted || typeof window === "undefined" || !window.speechSynthesis || !text) return;
+
+      window.speechSynthesis.cancel(); // Stop any previous speech
+      const utterance = new SpeechSynthesisUtterance(text);
+
+      // Select highest quality modern natural voice matching language
+      const bestVoice = getBestJarvisVoice(language);
+      if (bestVoice) {
+        utterance.voice = bestVoice;
+        utterance.lang = bestVoice.lang;
+      } else {
+        utterance.lang = language === "hi" ? "hi-IN" : language === "mr" ? "mr-IN" : "en-IN";
+      }
+      utterance.rate = 1.05; // Modern, crisp, energetic assistant tempo
+      utterance.pitch = 1.0;
+
+      utterance.onstart = () => {
+        setIsSpeaking(true);
+        setOrbState("speaking");
+        setAutoplayBlocked(false);
+      };
+
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        setOrbState("idle");
+        // In continuous voice mode, resume listening after speech ends
+        if (continuousVoice && isOpen) {
+          setTimeout(() => {
+            startListeningInternal();
+          }, 400);
+        }
+      };
+
+      utterance.onerror = (e: any) => {
+        setIsSpeaking(false);
+        setOrbState("idle");
+        if (options?.isGreeting || e?.error === "not-allowed") {
+          setAutoplayBlocked(true);
+        }
+      };
+
+      try {
+        window.speechSynthesis.speak(utterance);
+        // Autoplay check for greetings: if browser blocks audio without gesture
+        if (options?.isGreeting) {
+          setTimeout(() => {
+            if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+              setAutoplayBlocked(true);
+            }
+          }, 350);
+        }
+      } catch {
+        if (options?.isGreeting) setAutoplayBlocked(true);
+      }
+    },
+    [isMuted, language, continuousVoice, isOpen],
+  );
+
+  speakTextRef.current = speakText;
+
+  // Internal start listening (voice-first, explicit user action)
+  const startListeningInternal = useCallback(() => {
+    const w = window as SpeechWindow;
+    const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!Ctor) return;
+
+    // Barge-in: immediately stop assistant speech when listening starts
+    stopSpeaking();
+
+    try {
+      recogRef.current?.abort();
+    } catch {}
+
+    pendingTranscriptRef.current = "";
+    transcriptDispatchedRef.current = false;
+
+    const recog = new Ctor();
+    recog.continuous = false;
+    recog.interimResults = true;
+    recog.maxAlternatives = 1;
+    recog.lang = language === "hi" ? "hi-IN" : language === "mr" ? "mr-IN" : "en-IN";
+
+    recog.onstart = () => {
+      setIsListening(true);
+      setOrbState("listening");
+      setActiveTranscript("");
+      transcriptDispatchedRef.current = false;
+    };
+
+    recog.onresult = (e: any) => {
+      let interim = "";
+      let final = "";
+      for (let i = 0; i < e.results.length; ++i) {
+        if (e.results[i].isFinal) {
+          final += e.results[i][0].transcript;
+        } else {
+          interim += e.results[i][0].transcript;
+        }
+      }
+      const heard = (final || interim).trim();
+      if (heard) {
+        pendingTranscriptRef.current = heard;
+        setActiveTranscript(heard);
+      }
+
+      // Reset silence timer on voice activity
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (final.trim()) {
+        commitTranscript(final.trim());
+      } else if (interim.trim()) {
+        // Auto-finalize if user pauses speaking for 800ms
+        silenceTimerRef.current = setTimeout(() => {
+          commitTranscript(interim.trim());
+        }, 800);
+      }
+    };
+
+    recog.onerror = () => {
+      if (pendingTranscriptRef.current.trim() && !transcriptDispatchedRef.current) {
+        commitTranscript();
+      } else {
+        setIsListening(false);
+        setOrbState("idle");
+      }
+    };
+
+    recog.onend = () => {
+      if (pendingTranscriptRef.current.trim() && !transcriptDispatchedRef.current) {
+        commitTranscript();
+      } else {
+        setIsListening(false);
+        if (orbState === "listening") {
+          setOrbState("idle");
+        }
+      }
+    };
+
+    recogRef.current = recog;
+    try {
+      recog.start();
+    } catch {
+      setIsListening(false);
+    }
+  }, [language, stopSpeaking, orbState, commitTranscript]);
+
+  const startListening = useCallback(() => {
+    startListeningInternal();
+  }, [startListeningInternal]);
 
   // Execute confirmed pending action
   const confirmPendingAction = useCallback(async () => {
@@ -369,6 +536,14 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       setMessages((prev) => [...prev, confirmMsg]);
       setPendingConfirmation(null);
       setOrbState("success");
+
+      // Notify open pages and refresh models
+      if (pendingConfirmation.action === "update_profile") {
+        announceAssistantDataChanged({ area: "profile", worker: res.result?.profile });
+      } else if (pendingConfirmation.action === "create_job_post" || pendingConfirmation.action === "post_job") {
+        announceAssistantDataChanged({ area: "jobs" });
+      }
+
       speakText(res.result?.message || "Action confirmed and executed successfully.");
       setTimeout(() => setOrbState("idle"), 2000);
     } catch (err: any) {
@@ -423,14 +598,22 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     }
   }, [speakText]);
 
-  // Fetch initial greeting once user is authenticated
+  // 1. Automatically initiate the welcome experience on login or dashboard load
   useEffect(() => {
-    if (!authenticated) {
+    if (!authenticated || !user) {
       setGreeting(null);
       setBriefing(null);
       setMessages([]);
+      welcomedUserIdRef.current = null;
       return;
     }
+
+    const currentUserId = (user as any)._id || (user as any).id || role;
+    if (welcomedUserIdRef.current === currentUserId) {
+      // Welcome already initiated for this user session
+      return;
+    }
+    welcomedUserIdRef.current = currentUserId;
 
     let isSubscribed = true;
     fetchGreeting(coordsRef.current)
@@ -439,7 +622,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         setGreeting(g);
         if (g.weather) setWeather(g.weather);
 
-        // Add greeting message to chat if history is empty
+        // Add greeting message to dialog history
         setMessages((prev) => {
           if (prev.length === 0) {
             return [
@@ -454,13 +637,30 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           }
           return prev;
         });
+
+        // Automatically open the assistant welcome view
+        setIsOpen(true);
+        setOrbState("greeting");
+
+        // Attempt voice greeting
+        if (!isMuted) {
+          speakText(g.spokenGreeting, { isGreeting: true });
+        }
       })
       .catch(() => {});
 
     return () => {
       isSubscribed = false;
     };
-  }, [authenticated]);
+  }, [authenticated, user, role, isMuted, speakText]);
+
+  // Start voice greeting on explicit user unlock
+  const startVoiceGreeting = useCallback(() => {
+    setAutoplayBlocked(false);
+    if (greeting?.spokenGreeting) {
+      speakText(greeting.spokenGreeting);
+    }
+  }, [greeting, speakText]);
 
   const openAssistant = useCallback(() => {
     setIsOpen(true);
@@ -518,6 +718,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     isMuted,
     isListening,
     isSpeaking,
+    autoplayBlocked,
     greeting,
     weather,
     briefing,
@@ -528,6 +729,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     toggleMinimize,
     toggleContinuousVoice,
     toggleMute,
+    startVoiceGreeting,
     startListening,
     stopListening,
     sendMessage,

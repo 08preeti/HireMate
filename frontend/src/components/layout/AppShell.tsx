@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import Header from "@/components/layout/Header";
 import BottomNav from "@/components/layout/BottomNav";
 import WorkerShell from "@/components/layout/WorkerShell";
-import { HireMateAssistant } from "@/components/assistant/HireMateAssistant";
 import { useAuth } from "@/context/AuthContext";
 import { isStandalonePath } from "@/config/routes";
 
@@ -33,7 +32,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <BottomNav />
         </>
       )}
-      <HireMateAssistant />
     </>
   );
 }

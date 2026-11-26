@@ -52,14 +52,14 @@ export async function sendMessage(req, res, next) {
       timestamp: new Date(),
     });
 
-    // Manage pending conversational multi-turn state
+    // Manage pending conversational multi-turn state cleanly
     if (response.nextPendingContext !== undefined) {
       conv.pendingContext = response.nextPendingContext;
     } else if (response.action?.requiresConfirmation) {
       conv.pendingContext = { awaitingConfirmation: response.action };
     } else if (response.action?.type === "search_jobs" && response.action?.data?.jobs) {
       conv.pendingContext = { lastJobs: response.action.data.jobs };
-    } else if (response.action?.type === "update_profile") {
+    } else {
       conv.pendingContext = {};
     }
 
@@ -208,4 +208,90 @@ export async function clearHistory(req, res, next) {
   } catch (err) {
     return next(err);
   }
+}
+
+/**
+ * Backward compatibility factory for legacy tests & action token verification
+ */
+export function createAssistantHandlers({ getRegistry, getProvider, tokens, configured = () => true }) {
+  const assertOwner = (req, p) => {
+    if (p.sub !== req.auth.id || p.role !== req.auth.role) {
+      const err = new Error("This confirmation belongs to a different account");
+      err.status = 403;
+      throw err;
+    }
+  };
+
+  const readToken = (body) => {
+    const raw = body?.token;
+    if (typeof raw !== "string" || !raw || raw.length > 4000) {
+      const err = new Error("Invalid confirmation");
+      err.status = 400;
+      throw err;
+    }
+    try {
+      return tokens.verify(raw);
+    } catch (e) {
+      const err = new Error(e?.name === "TokenExpiredError" ? "This confirmation has expired. Please ask me again." : "Invalid confirmation");
+      err.status = 410;
+      throw err;
+    }
+  };
+
+  return {
+    status(req, res) {
+      res.json({ available: configured() });
+    },
+
+    async message(req, res) {
+      try {
+        const { validateAssistantMessage } = await import("../validators/assistantValidators.js");
+        const { runAgent } = await import("../services/assistant/agentOrchestrator.js");
+        if (!configured()) return res.status(503).json({ message: "The assistant is not available right now.", code: "AI_UNAVAILABLE" });
+        const input = validateAssistantMessage(req.body);
+        const out = await runAgent({
+          provider: await getProvider(),
+          registry: await getRegistry(),
+          ctx: { auth: req.auth, user: req.user, displayName: req.auth.role === "employer" ? req.user?.companyName : req.user?.name },
+          history: input.history,
+          message: input.message,
+          context: input.context,
+        });
+        const pending = out.pendingActions.map(({ tool, args, card }) => {
+          const { token, expiresAt } = tokens.sign({ sub: req.auth.id, role: req.auth.role, tool, args, card });
+          return { token, expiresAt, ...card };
+        });
+        res.json({ reply: out.reply, actions: out.clientActions, shown: out.shown, pending });
+      } catch (err) {
+        res.status(err.status || 500).json({ message: err.message });
+      }
+    },
+
+    async confirm(req, res) {
+      try {
+        const payload = readToken(req.body);
+        assertOwner(req, payload);
+        if (!tokens.consume(payload)) {
+          return res.status(409).json({ message: "This action was already handled" });
+        }
+        const reg = await getRegistry();
+        const result = await reg.commit({ auth: req.auth, user: req.user }, payload.tool, payload.args);
+        if (!result.ok) return res.status(409).json({ ok: false, message: result.error });
+        res.json({ ok: true, message: result.message, ...(result.affects && { affects: result.affects }) });
+      } catch (err) {
+        res.status(err.status || 500).json({ message: err.message });
+      }
+    },
+
+    async cancel(req, res) {
+      try {
+        const payload = readToken(req.body);
+        assertOwner(req, payload);
+        tokens.consume(payload);
+        res.json({ ok: true });
+      } catch (err) {
+        res.status(err.status || 500).json({ message: err.message });
+      }
+    },
+  };
 }

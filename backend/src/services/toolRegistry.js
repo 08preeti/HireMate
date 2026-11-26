@@ -14,6 +14,7 @@ import { getProfile, updateProfile, listMyApplications } from "./workerService.j
 import { listEmployerJobs } from "./employerJobService.js";
 import { applyToJob, listEmployerApplications, decideApplication, respondToOffer } from "./applicationService.js";
 import { getWeatherAndAirQuality } from "./weatherService.js";
+import { generateDailyBriefing } from "./briefingService.js";
 import { analyzeJobSafety } from "./safetyService.js";
 import { withVacancyCountsFor } from "./vacancyService.js";
 import { HttpError } from "../utils/httpError.js";
@@ -342,7 +343,8 @@ export async function executeTool(toolName, params = {}, auth = {}, { isConfirme
       if (role !== ROLES.EMPLOYER) {
         throw new HttpError(403, "Only employers can manage job posts");
       }
-      const jobs = await listEmployerJobs(userId);
+      const res = await listEmployerJobs(userId);
+      const jobs = Array.isArray(res) ? res : (res?.jobs || []);
       let filtered = jobs;
       if (params.status && params.status !== "all") {
         filtered = jobs.filter((j) => j.status === params.status);
@@ -350,13 +352,13 @@ export async function executeTool(toolName, params = {}, auth = {}, { isConfirme
       return {
         count: filtered.length,
         jobs: filtered.map((j) => ({
-          id: j._id.toString(),
+          id: j.id || j._id?.toString(),
           title: j.jobTitle?.en || j.jobTitle,
           location: j.location?.en || j.location,
-          dailyWage: j.dailyWage,
+          dailyWage: j.dailyWage || j.salary,
           vacancies: j.vacancies,
           status: j.status,
-          applicantsCount: j.applicantCount || 0,
+          applicantsCount: j.applicantCount || j.applicantsCount || 0,
           hiredCount: j.confirmedWorkers || 0,
           createdAt: j.createdAt,
         })),
@@ -367,13 +369,14 @@ export async function executeTool(toolName, params = {}, auth = {}, { isConfirme
       if (role !== ROLES.EMPLOYER) {
         throw new HttpError(403, "Only employers can post jobs");
       }
-      const { jobTitle, category, dailyWage, vacancies = 1, location, shift, workDate, description, gateInstructions } = params;
+      const { jobTitle, category, dailyWage, wage, salary, vacancies = 1, location, shift, workDate, description, gateInstructions } = params;
 
-      if (!jobTitle || !dailyWage || !location) {
-        throw new HttpError(400, "Job title, daily wage, and site location are required to post a job.");
-      }
+      const title = jobTitle || (category ? `${category} required` : "Worker required");
+      const loc = location || "Nashik";
+      const wageNum = Number(dailyWage || wage || salary || 800);
+      const vacNum = Math.max(1, Number(vacancies) || 1);
 
-      const safety = analyzeJobSafety({ jobTitle, description, dailyWage, skills: category });
+      const safety = analyzeJobSafety({ jobTitle: title, description, dailyWage: wageNum, skills: category });
 
       // Confirmation barrier
       if (!isConfirmed) {
@@ -381,38 +384,53 @@ export async function executeTool(toolName, params = {}, auth = {}, { isConfirme
           requiresConfirmation: true,
           action: "create_job_post",
           title: "Confirm Job Post Creation",
-          summary: `Publish job '${jobTitle}' looking for ${vacancies} worker(s) at ₹${dailyWage}/day in ${location}?`,
+          summary: `Publish job '${title}' looking for ${vacNum} worker(s) at ₹${wageNum}/day in ${loc}?`,
           details: {
-            jobTitle,
+            jobTitle: title,
             category: category || "General",
-            dailyWage: Number(dailyWage),
-            vacancies: Number(vacancies),
-            location,
+            dailyWage: wageNum,
+            vacancies: vacNum,
+            location: loc,
             shift: shift || "Standard Day Shift (9 AM - 6 PM)",
             workDate: workDate || "Immediate",
-            description: description || `Looking for ${vacancies} worker(s) for ${jobTitle} at ${location}.`,
+            description: description || `Looking for ${vacNum} worker(s) for ${title} at ${loc}.`,
             gateInstructions: gateInstructions || "",
           },
           safetyWarning: safety.issues.length > 0 ? safety.advice : null,
         };
       }
 
+      // Map shift to allowed Mongoose schema enum ("day" | "night" | "half")
+      let validShift = "day";
+      if (typeof shift === "string") {
+        const s = shift.toLowerCase();
+        if (s.includes("night") || s.includes("raat")) validShift = "night";
+        else if (s.includes("half") || s.includes("aadha")) validShift = "half";
+      }
+
+      const employer = await Employer.findById(userId).select("phone companyName").lean();
+
       // Confirmed execution
       const created = await createJob(userId, {
-        jobTitle,
+        jobTitle: title,
         skills: category || "General",
-        location,
-        dailyWage: Number(dailyWage),
-        vacancies: Number(vacancies),
-        shift: shift || "Standard Day Shift (9 AM - 6 PM)",
-        workDate: workDate || undefined,
-        description: description || `Looking for ${vacancies} worker(s) for ${jobTitle} at ${location}.`,
+        category: category || "General",
+        location: loc,
+        salary: wageNum,
+        dailyWage: wageNum,
+        salaryUnit: "day",
+        jobType: "one_day",
+        vacancies: vacNum,
+        shift: validShift,
+        contactInfo: employer?.phone || "",
+        companyName: employer?.companyName || "",
+        description: description || `Looking for ${vacNum} worker(s) for ${title} at ${loc}.`,
         gateInstructions: gateInstructions || undefined,
       });
 
       return {
         success: true,
-        message: `Job '${jobTitle}' posted successfully! Workers matching your criteria will be notified.`,
+        message: `Job '${title}' posted successfully! Workers matching your criteria will be notified.`,
         job: created,
       };
     }
@@ -562,19 +580,19 @@ export async function executeTool(toolName, params = {}, auth = {}, { isConfirme
           {
             id: candA._id.toString(),
             name: nameA,
-            skills: workerA.skills || ["General"],
+            skills: Array.isArray(workerA.skills) ? workerA.skills : workerA.skills ? [String(workerA.skills)] : ["General"],
             experience: `${expA} years`,
             rating: ratingA,
-            location: workerA.location || "Nashik",
+            location: typeof workerA.location === "string" ? workerA.location : workerA.location?.en || "Nashik",
             status: candA.status,
           },
           {
             id: candB._id.toString(),
             name: nameB,
-            skills: workerB.skills || ["General"],
+            skills: Array.isArray(workerB.skills) ? workerB.skills : workerB.skills ? [String(workerB.skills)] : ["General"],
             experience: `${expB} years`,
             rating: ratingB,
-            location: workerB.location || "Nashik",
+            location: typeof workerB.location === "string" ? workerB.location : workerB.location?.en || "Nashik",
             status: candB.status,
           },
         ],
@@ -583,6 +601,10 @@ export async function executeTool(toolName, params = {}, auth = {}, { isConfirme
 
     case "get_weather_and_air_quality": {
       return await getWeatherAndAirQuality(params);
+    }
+
+    case "get_daily_briefing": {
+      return await generateDailyBriefing(auth, params);
     }
 
     case "get_platform_help": {

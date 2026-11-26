@@ -650,6 +650,25 @@ export default function PostJobs({ jobId }: { jobId?: string } = {}) {
       setCompany((c) => c || employer.companyName || "");
   }, [employer?.companyName]);
 
+  // Listen for JARVIS AI voice prefill commands
+  useEffect(() => {
+    const handlePrefill = (e: Event) => {
+      const detail = (e as CustomEvent<any>).detail;
+      if (!detail) return;
+      if (detail.category || detail.trade) {
+        const val = detail.category || detail.trade;
+        setTrade(val);
+        setJobTitle((t) => t || `${val} required`);
+      }
+      if (detail.vacancies) setWorkers(Number(detail.vacancies));
+      if (detail.dailyWage || detail.wage) setWage(String(detail.dailyWage || detail.wage));
+      if (detail.location) setLocation(detail.location);
+      if (detail.jobTitle) setJobTitle(detail.jobTitle);
+    };
+    window.addEventListener("hiremate:prefill-job", handlePrefill);
+    return () => window.removeEventListener("hiremate:prefill-job", handlePrefill);
+  }, []);
+
   // "Quick worker request" links from the employer dashboard arrive as /post-job?skill=Driver.
   useEffect(() => {
     const skill = new URLSearchParams(window.location.search).get("skill");
