@@ -16,9 +16,8 @@ module.exports = {
         },
       },
       fontFamily: {
-        // body font stack from the old index.css
-        app: ["Inter", "sans-serif"],
-        // pages that explicitly set `font-family: sans-serif`
+        app: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "sans-serif"],
+        poppins: ["Poppins", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "sans-serif"],
         plain: ["sans-serif"],
       },
       keyframes: {

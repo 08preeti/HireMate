@@ -1,20 +1,35 @@
 import { Router } from "express";
-import { message, status, confirm, cancel } from "../controllers/assistantController.js";
 import { authenticate } from "../middleware/authenticate.js";
-import { requireRole } from "../middleware/requireRole.js";
-import { perUserLimiter } from "../middleware/rateLimiter.js";
-import { ROLES } from "../constants/roles.js";
+import {
+  sendMessage,
+  getGreeting,
+  getBriefing,
+  getWeather,
+  executeAction,
+  getPreferences,
+  updatePreferences,
+  clearHistory,
+  textToSpeech,
+  streamAudio,
+} from "../controllers/assistantController.js";
 
 const router = Router();
-router.use(authenticate, requireRole(ROLES.WORKER, ROLES.EMPLOYER));
 
-router.get("/status", status);
-// Each message can trigger several paid model calls, so it gets its own per-user ceiling.
-router.post("/message", perUserLimiter({ max: 20, message: "You're sending messages too quickly. Please wait a moment." }), message);
+// Streaming proxy for media.easy-peasy.ai (validates host domain)
+router.get("/tts/stream", streamAudio);
 
-// Confirm / cancel are deterministic (no model call) but they change data, so they are limited too.
-const actionLimit = perUserLimiter({ max: 30, message: "Too many requests. Please wait a moment." });
-router.post("/confirm", actionLimit, confirm);
-router.post("/cancel", actionLimit, cancel);
+// All other assistant routes require authenticated session
+router.use(authenticate);
+
+router.post("/message", sendMessage);
+router.get("/greeting", getGreeting);
+router.get("/briefing", getBriefing);
+router.get("/weather", getWeather);
+router.post("/execute-action", executeAction);
+router.post("/action", executeAction);
+router.get("/preferences", getPreferences);
+router.patch("/preferences", updatePreferences);
+router.post("/clear-history", clearHistory);
+router.post("/tts", textToSpeech);
 
 export default router;

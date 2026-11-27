@@ -1,43 +1,116 @@
 import api from "./api";
+import type {
+  AssistantGreeting,
+  AssistantVoiceSettings,
+  DailyBriefing,
+  WeatherData,
+} from "@/types/assistant";
 
-export type AssistantItemKind = "job" | "application";
-export interface AssistantShownItem { kind: AssistantItemKind; id: string; title: string }
-export interface AssistantAction { type: "navigate"; path: string }
-/** A prepared action awaiting the user's button press. `token` is opaque and signed by the server. */
-export interface AssistantPendingAction {
-  token: string;
-  expiresAt: number;
-  title: string;
-  summary: string;
-  details: { label: string; value: string }[];
-  confirmLabel: string;
-  danger?: boolean;
-}
-export interface AssistantReply { reply: string; actions: AssistantAction[]; shown: AssistantShownItem[] | null; pending: AssistantPendingAction[] }
-export interface AssistantTurn { role: "user" | "assistant"; text: string }
-export interface AssistantRequestContext {
-  language: string;
-  route: string;
-  timeZone: string;
-  shown: AssistantShownItem[];
+export interface SendMessagePayload {
+  message: string;
+  context?: {
+    currentRoute?: string;
+    latitude?: number;
+    longitude?: number;
+    activeApplicationId?: string;
+    city?: string;
+    [key: string]: any;
+  };
 }
 
-// Auth token is attached by the shared API client; the server derives identity and role from it, never from this payload.
-export const getAssistantStatus = (): Promise<{ available: boolean }> =>
-  api.get<{ available: boolean }>("/api/assistant/status", true);
+export interface AssistantResponse {
+  reply: string;
+  action?: any;
+  executedTool?: string;
+  suggestedQueries?: string[];
+  error?: string;
+}
 
-export const sendAssistantMessage = (
-  message: string,
-  history: AssistantTurn[],
-  context: AssistantRequestContext,
-): Promise<AssistantReply> =>
-  api.post<AssistantReply>("/api/assistant/message", { message, history, context }, true);
+export async function sendMessageToAssistant(payload: SendMessagePayload): Promise<AssistantResponse> {
+  return await api.post<AssistantResponse>("/api/assistant/message", payload, true);
+}
 
-/** Executes a prepared action. Only called when the user presses Confirm. Resolves with the server's real result text. */
-/** `affects` is set when the action changed data an open page may be showing (profile, jobs). */
-export interface AssistantConfirmResult { ok: true; message: string; affects?: "profile" | "jobs" }
-export const confirmAssistantAction = (token: string): Promise<AssistantConfirmResult> =>
-  api.post<AssistantConfirmResult>("/api/assistant/confirm", { token }, true);
+export async function fetchGreeting(coords?: { latitude?: number; longitude?: number }): Promise<AssistantGreeting> {
+  const params = new URLSearchParams();
+  if (coords?.latitude) params.set("latitude", String(coords.latitude));
+  if (coords?.longitude) params.set("longitude", String(coords.longitude));
+  params.set("timezoneOffset", String(new Date().getTimezoneOffset()));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return await api.get<AssistantGreeting>(`/api/assistant/greeting${qs}`, true);
+}
 
-export const cancelAssistantAction = (token: string): Promise<{ ok: true }> =>
-  api.post<{ ok: true }>("/api/assistant/cancel", { token }, true);
+export async function fetchDailyBriefing(coords?: { latitude?: number; longitude?: number }): Promise<DailyBriefing> {
+  const params = new URLSearchParams();
+  if (coords?.latitude) params.set("latitude", String(coords.latitude));
+  if (coords?.longitude) params.set("longitude", String(coords.longitude));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return await api.get<DailyBriefing>(`/api/assistant/briefing${qs}`, true);
+}
+
+export async function fetchWeather(coords?: { latitude?: number; longitude?: number; cityName?: string }): Promise<WeatherData> {
+  const params = new URLSearchParams();
+  if (coords?.latitude) params.set("latitude", String(coords.latitude));
+  if (coords?.longitude) params.set("longitude", String(coords.longitude));
+  if (coords?.cityName) params.set("cityName", coords.cityName);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return await api.get<WeatherData>(`/api/assistant/weather${qs}`, true);
+}
+
+export async function executeAssistantAction(action: string, payload: any): Promise<{ success: boolean; result: any }> {
+  return await api.post<{ success: boolean; result: any }>(
+    "/api/assistant/execute-action",
+    { action, payload },
+    true,
+  );
+}
+
+export async function fetchPreferences(): Promise<{
+  voiceSettings: AssistantVoiceSettings;
+  preferredLanguage: string;
+  preferredName: string;
+}> {
+  return await api.get("/api/assistant/preferences", true);
+}
+
+export async function savePreferences(body: {
+  voiceSettings?: Partial<AssistantVoiceSettings>;
+  preferredLanguage?: string;
+  preferredName?: string;
+}) {
+  return await api.patch("/api/assistant/preferences", body, true);
+}
+
+export async function clearAssistantHistory() {
+  return await api.post("/api/assistant/clear-history", {}, true);
+}
+
+export interface GenerateTtsPayload {
+  text: string;
+  language?: string;
+  voiceId?: string;
+}
+
+export interface GenerateTtsResponse {
+  success: boolean;
+  audioUrl?: string;
+  error?: string;
+  code?: string;
+  quotaExceeded?: boolean;
+  cached?: boolean;
+  voiceId?: string;
+  voiceName?: string;
+  language?: string;
+}
+
+export async function generateTtsAudio(payload: GenerateTtsPayload): Promise<GenerateTtsResponse> {
+  try {
+    return await api.post<GenerateTtsResponse>("/api/assistant/tts", payload, true);
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "Failed to generate TTS audio",
+      code: "API_ERROR",
+    };
+  }
+}
+

@@ -3,14 +3,11 @@
 import { useEffect } from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Poppins } from "next/font/google";
 import { useLanguage } from "@/context/LanguageContext";
 import { useAuth } from "@/context/AuthContext";
 import { ROLE_HOME } from "@/config/routes";
 import Loader from "@/components/ui/Loader";
 import { HERO_PEOPLE, ICON_WORKER, ICON_EMPLOYER } from "./homeAssets";
-
-const poppins = Poppins({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"] });
 
 type Lang = "en" | "hi" | "mr";
 
@@ -79,7 +76,7 @@ export default function Home() {
 
   return (
     <div
-      className={`${poppins.className} relative min-h-screen overflow-hidden flex flex-col bg-[linear-gradient(180deg,#f3f8ff_0%,#ffffff_55%,#f6f9ff_100%)]`}
+      className="font-poppins relative min-h-screen overflow-hidden flex flex-col bg-[linear-gradient(180deg,#f3f8ff_0%,#ffffff_55%,#f6f9ff_100%)]"
     >
       {/* Soft blurred "city" backdrop on the right */}
       <div className="pointer-events-none absolute right-0 top-0 h-[300px] w-[60%] bg-[radial-gradient(ellipse_at_70%_30%,rgba(190,215,245,0.45),transparent_70%)]" />

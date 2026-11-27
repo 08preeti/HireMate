@@ -3,7 +3,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Inter } from "next/font/google";
 import {
   FiBell, FiBriefcase, FiCheckCircle, FiChevronDown, FiClock, FiFileText, FiGift, FiGlobe, FiHelpCircle, FiHome, FiLogOut, FiMenu, FiPlayCircle, FiSearch, FiSettings, FiShield, FiUser, FiX,
 } from "react-icons/fi";
@@ -19,8 +18,6 @@ import { profileCompletion } from "@/lib/profileCompletion";
 import { localizedSkillText } from "@/i18n/jobLabels";
 import { getMyJobs } from "@/services/workers";
 import type { Language } from "@/types";
-
-const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"] });
 
 type BadgeKey = "applications" | "offers" | "active" | "notifications";
 
@@ -171,7 +168,7 @@ export default function WorkerShell({ children }: { children: ReactNode }) {
   const tabs = TAB_PATHS.map((p) => NAV_ITEMS.find((i) => i.path === p)!);
 
   return (
-    <div className={`${inter.className} min-h-screen bg-[#f6f8fc] text-[#0b1b3d]`}>
+    <div className="font-app min-h-screen bg-[#f6f8fc] text-[#0b1b3d]">
       <header className="sticky top-0 z-[900] flex h-[68px] items-center justify-between border-b border-white/10 bg-[#0b1f47] px-4 text-white sm:px-6">
         <div className="flex items-center gap-3">
           <button type="button" onClick={() => setDrawerOpen(true)} aria-label={L("Open menu", "मेनू खोलें", "मेनू उघडा")} aria-expanded={drawerOpen} className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg text-white hover:bg-white/10 lg:hidden">
@@ -268,17 +265,6 @@ export default function WorkerShell({ children }: { children: ReactNode }) {
 
         <main className="min-w-0 flex-1 pb-28 lg:pb-12">{children}</main>
       </div>
-
-      <Link
-        href="/ai-suggestions"
-        className="fixed bottom-20 right-4 z-[880] flex items-center gap-3 rounded-full bg-[#1f6bff] py-2.5 pl-3 pr-4 text-white no-underline shadow-[0_10px_28px_rgba(31,107,255,0.45)] transition hover:bg-[#1859d6] sm:right-6 lg:bottom-6"
-      >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-[16px] font-extrabold text-[#1f6bff]">?</span>
-        <span className="hidden leading-tight sm:block">
-          <span className="block text-[14px] font-bold">{L("Need Help?", "मदद चाहिए?", "मदत हवी?")}</span>
-          <span className="block text-[12px] text-[#dbe7ff]">{L("Ask HireMate Assistant", "हायरमेट असिस्टेंट से पूछें", "हायरमेट असिस्टंटला विचारा")}</span>
-        </span>
-      </Link>
 
       {drawerOpen && (
         <div className="fixed inset-0 z-[1100] lg:hidden" role="dialog" aria-modal="true" aria-label={L("Menu", "मेनू", "मेनू")}>

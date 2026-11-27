@@ -1,26 +1,31 @@
-/** Speak text aloud (no-op where speech synthesis is unavailable). `lang` is a BCP-47 tag, default en-IN. */
+/**
+ * Unified speech utility powered by JARVIS Aisha voice (Easy-Peasy.AI).
+ * Consistent across Worker and Employer dashboards, job descriptions, and navigation.
+ */
+import { jarvisVoiceService } from "@/services/jarvisVoiceService";
+
+/** Speak text aloud using Aisha voice. */
 export function speak(text: string, lang = "en-IN"): void {
-  if (typeof window === "undefined" || !window.speechSynthesis || !text) return;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = lang;
-  u.rate = 0.95;
-  window.speechSynthesis.speak(u);
+  if (!text) return;
+  jarvisVoiceService.speak(text, {
+    language: lang.startsWith("hi") ? "hi" : lang.startsWith("mr") ? "mr" : "en",
+  });
 }
 
-/** Speak and report when speech ends (or fails), so a button can flip back from "Stop". */
+/** Speak and report when speech ends (or fails), so UI buttons can reflect playback state. */
 export function speakWithEnd(text: string, lang: string, onEnd: () => void): boolean {
-  if (typeof window === "undefined" || !window.speechSynthesis || !text) return false;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = lang;
-  u.rate = 0.95;
-  u.onend = onEnd;
-  u.onerror = onEnd;
-  window.speechSynthesis.speak(u);
+  if (!text) return false;
+  jarvisVoiceService.speak(text, {
+    language: lang.startsWith("hi") ? "hi" : lang.startsWith("mr") ? "mr" : "en",
+    onEnd,
+    onError: () => onEnd(),
+  });
   return true;
 }
 
 export function stopSpeaking(): void {
-  if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+  jarvisVoiceService.stop();
+  if (typeof window !== "undefined" && window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
 }

@@ -1,6 +1,10 @@
 import dotenv from "dotenv";
+import { fileURLToPath } from "url";
+import path from "path";
 
-dotenv.config();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+dotenv.config(); // fallback to cwd
 
 const required = ["MONGODB_URI", "JWT_SECRET"];
 const missing = required.filter((key) => !process.env[key]);
@@ -74,10 +78,21 @@ export const env = {
     baseUrl: (process.env.AI_BASE_URL || "https://api.anthropic.com").replace(/\/$/, ""),
     timeoutMs: Number(process.env.AI_TIMEOUT_MS) || 30000,
     maxOutputTokens: Number(process.env.AI_MAX_OUTPUT_TOKENS) || 700,
+    geminiApiKey: process.env.GEMINI_API_KEY || "",
+    openaiApiKey: process.env.OPENAI_API_KEY || "",
   },
   twilio: {
     accountSid: process.env.TWILIO_ACCOUNT_SID,
     authToken: process.env.TWILIO_AUTH_TOKEN,
     phoneNumber: process.env.TWILIO_PHONE_NUMBER,
+  },
+  elevenLabs: {
+    apiKey: process.env.ELEVENLABS_API_KEY || "",
+    voiceId: process.env.ELEVENLABS_VOICE_ID || "ftDdhfYtmfGP0tFlBYA1",
+    modelId: process.env.ELEVENLABS_MODEL_ID || "eleven_multilingual_v2",
+  },
+  easyPeasy: {
+    apiKey: process.env.EASY_PEASY_API_KEY || "",
+    apiUrl: (process.env.EASY_PEASY_API_URL || "https://easy-peasy.ai/api").replace(/\/$/, ""),
   },
 };

@@ -8,7 +8,7 @@ import "leaflet/dist/leaflet.css";
 import Providers from "./providers";
 import AppShell from "@/components/layout/AppShell";
 import InstallPrompt from "@/components/ui/InstallPrompt";
-import HireMateAssistant from "@/components/assistant/HireMateAssistant";
+import { HireMateAssistant } from "@/components/assistant/HireMateAssistant";
 
 export const metadata: Metadata = {
   title: "HireMate — Find Daily Work",
@@ -28,7 +28,15 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="font-app" suppressHydrationWarning>
         <Providers>
           <AppShell>{children}</AppShell>
           <InstallPrompt />

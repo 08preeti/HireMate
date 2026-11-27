@@ -16,20 +16,22 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { role } = useAuth();
 
-  if (BARE_PATHS.some((p) => pathname.startsWith(p))) {
-    return <>{children}</>;
-  }
-
-  const useWorkerShell =
-    role === "worker" && !isStandalonePath(pathname);
-
-  if (useWorkerShell) return <WorkerShell>{children}</WorkerShell>;
+  const isBare = BARE_PATHS.some((p) => pathname.startsWith(p));
+  const useWorkerShell = role === "worker" && !isStandalonePath(pathname);
 
   return (
     <>
-      <Header />
-      {children}
-      <BottomNav />
+      {isBare ? (
+        <>{children}</>
+      ) : useWorkerShell ? (
+        <WorkerShell>{children}</WorkerShell>
+      ) : (
+        <>
+          <Header />
+          {children}
+          <BottomNav />
+        </>
+      )}
     </>
   );
 }
