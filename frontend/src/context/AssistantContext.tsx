@@ -20,6 +20,12 @@ import {
   sendMessageToAssistant,
   executeAssistantAction,
 } from "@/services/assistantApi";
+import { jarvisVoiceService, type JarvisVoiceState } from "@/services/jarvisVoiceService";
+import {
+  JARVIS_VOICE_CONFIG,
+  AISHA_LANGUAGE_CAPABILITIES,
+  type JarvisVoiceIdentity,
+} from "@/services/jarvisVoiceConfig";
 import type {
   AssistantGreeting,
   AssistantMessage,
@@ -50,73 +56,10 @@ type SpeechWindow = Window & {
 };
 
 /**
- * Select the highest quality modern, natural JARVIS AI voice from available browser synthesizers.
- * Avoids legacy robotic Windows Desktop SAPI5 voices (David/Mark) and prefers natural, neural, Google UK/US,
- * or Microsoft Natural online voices.
+ * Unified Aisha voice identity from Easy-Peasy.AI (ID: m7GHBtY0UEqljrKQw2JH).
+ * Shared across both Worker and Employer dashboards.
  */
-function getBestJarvisVoice(lang: string): SpeechSynthesisVoice | null {
-  if (typeof window === "undefined" || !window.speechSynthesis) return null;
-  const voices = window.speechSynthesis.getVoices();
-  if (!voices || voices.length === 0) return null;
-
-  const targetPrefix = lang === "hi" ? "hi" : lang === "mr" ? "mr" : "en";
-  const langVoices = voices.filter((v) => v.lang.toLowerCase().startsWith(targetPrefix));
-
-  if (targetPrefix === "en") {
-    // 1. Quintessential British/UK English male or Google UK (classic Iron Man JARVIS tone)
-    const jarvisUk = langVoices.find(
-      (v) =>
-        /Google UK English Male/i.test(v.name) ||
-        (/uk english/i.test(v.name) && /male/i.test(v.name)) ||
-        (/en-GB/i.test(v.lang) && /natural|neural|online/i.test(v.name) && !/female/i.test(v.name)),
-    );
-    if (jarvisUk) return jarvisUk;
-
-    // 2. Modern Microsoft Natural Online AI voices (Ryan, Christopher, Guy, Andrew, Brian)
-    const naturalMale = langVoices.find(
-      (v) =>
-        /natural|neural|online/i.test(v.name) &&
-        /(ryan|christopher|guy|andrew|brian|george|arthur|oliver)/i.test(v.name),
-    );
-    if (naturalMale) return naturalMale;
-
-    // 3. Modern Google English or any neural voice (not legacy desktop)
-    const modernEn = langVoices.find(
-      (v) =>
-        (/google/i.test(v.name) && !/desktop/i.test(v.name)) ||
-        /natural|neural/i.test(v.name),
-    );
-    if (modernEn) return modernEn;
-
-    // 4. Indian English natural voice
-    const inEn = langVoices.find((v) => /en-IN/i.test(v.lang) && !/desktop/i.test(v.name));
-    if (inEn) return inEn;
-  } else if (targetPrefix === "hi") {
-    // Modern natural Hindi voice
-    const modernHi = langVoices.find(
-      (v) =>
-        /madhur|swara|natural|neural/i.test(v.name) ||
-        /google/i.test(v.name),
-    );
-    if (modernHi) return modernHi;
-  } else if (targetPrefix === "mr") {
-    // Modern natural Marathi voice
-    const modernMr = langVoices.find(
-      (v) =>
-        /manohar|aarohi|natural|neural/i.test(v.name) ||
-        /google/i.test(v.name),
-    );
-    if (modernMr) return modernMr;
-  }
-
-  // Fallback to any non-legacy desktop voice in that language
-  return (
-    langVoices.find((v) => !/desktop/i.test(v.name)) ||
-    langVoices[0] ||
-    voices.find((v) => /natural|neural|google/i.test(v.name)) ||
-    null
-  );
-}
+export { JARVIS_VOICE_CONFIG };
 
 interface AssistantContextValue {
   isOpen: boolean;
@@ -129,6 +72,8 @@ interface AssistantContextValue {
   isListening: boolean;
   isSpeaking: boolean;
   autoplayBlocked: boolean;
+  jarvisVoice: JarvisVoiceIdentity;
+  voiceState: JarvisVoiceState;
   greeting: AssistantGreeting | null;
   weather: WeatherData | null;
   briefing: DailyBriefing | null;
@@ -182,6 +127,26 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const pendingTranscriptRef = useRef<string>("");
   const transcriptDispatchedRef = useRef<boolean>(false);
   const speakTextRef = useRef<(text: string, options?: { isGreeting?: boolean }) => void>(() => {});
+  const startListeningRef = useRef<() => void>(() => {});
+  const isOpenRef = useRef(isOpen);
+  isOpenRef.current = isOpen;
+
+  const [voiceState, setVoiceState] = useState<JarvisVoiceState>(() => jarvisVoiceService.getState());
+
+  // Subscribe to centralized Aisha voice service state
+  useEffect(() => {
+    const unsubscribe = jarvisVoiceService.subscribe((vState) => {
+      setVoiceState(vState);
+      setIsSpeaking(vState.isSpeaking);
+      if (vState.isSpeaking) {
+        setOrbState("speaking");
+      }
+    });
+    return () => {
+      unsubscribe();
+      jarvisVoiceService.stop();
+    };
+  }, []);
 
   // Read preferences from localStorage on client
   useEffect(() => {
@@ -211,6 +176,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   // Stop speaking helper with barge-in support
   const stopSpeaking = useCallback(() => {
+    jarvisVoiceService.stop();
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
@@ -348,80 +314,39 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     }
   }, [orbState, commitTranscript]);
 
-  // Pre-load synthesis voices so natural neural voices are available on first speech turn
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    window.speechSynthesis.getVoices();
-    const handleVoicesChanged = () => {
-      window.speechSynthesis.getVoices();
-    };
-    window.speechSynthesis.onvoiceschanged = handleVoicesChanged;
-    return () => {
-      if (window.speechSynthesis) {
-        window.speechSynthesis.onvoiceschanged = null;
-      }
-    };
-  }, []);
-
-  // Text-To-Speech function with modern natural neural voice selection
+  // Centralized Text-To-Speech function with Alisha voice
   const speakText = useCallback(
     (text: string, options?: { isGreeting?: boolean }) => {
-      if (isMuted || typeof window === "undefined" || !window.speechSynthesis || !text) return;
+      if (isMuted || !text) return;
 
-      window.speechSynthesis.cancel(); // Stop any previous speech
-      const utterance = new SpeechSynthesisUtterance(text);
-
-      // Select highest quality modern natural voice matching language
-      const bestVoice = getBestJarvisVoice(language);
-      if (bestVoice) {
-        utterance.voice = bestVoice;
-        utterance.lang = bestVoice.lang;
-      } else {
-        utterance.lang = language === "hi" ? "hi-IN" : language === "mr" ? "mr-IN" : "en-IN";
-      }
-      utterance.rate = 1.05; // Modern, crisp, energetic assistant tempo
-      utterance.pitch = 1.0;
-
-      utterance.onstart = () => {
-        setIsSpeaking(true);
-        setOrbState("speaking");
-        setAutoplayBlocked(false);
-      };
-
-      utterance.onend = () => {
-        setIsSpeaking(false);
-        setOrbState("idle");
-        // In continuous voice mode, resume listening after speech ends
-        if (continuousVoice && isOpen) {
-          setTimeout(() => {
-            startListeningInternal();
-          }, 400);
-        }
-      };
-
-      utterance.onerror = (e: any) => {
-        setIsSpeaking(false);
-        setOrbState("idle");
-        if (options?.isGreeting || e?.error === "not-allowed") {
-          setAutoplayBlocked(true);
-        }
-      };
-
-      try {
-        window.speechSynthesis.speak(utterance);
-        // Autoplay check for greetings: if browser blocks audio without gesture
-        if (options?.isGreeting) {
-          setTimeout(() => {
-            if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
-              setAutoplayBlocked(true);
-            }
-          }, 350);
-        }
-      } catch {
-        if (options?.isGreeting) setAutoplayBlocked(true);
-      }
+      jarvisVoiceService.speak(text, {
+        language,
+        onStart: () => {
+          setIsSpeaking(true);
+          setOrbState("speaking");
+          setAutoplayBlocked(false);
+        },
+        onEnd: () => {
+          setIsSpeaking(false);
+          setOrbState("idle");
+          // In continuous voice mode, resume listening after speech ends
+          if (continuousVoice && isOpenRef.current) {
+            setTimeout(() => {
+              startListeningRef.current?.();
+            }, 400);
+          }
+        },
+        onError: (err) => {
+          setIsSpeaking(false);
+          setOrbState("idle");
+          if (options?.isGreeting) {
+            setAutoplayBlocked(true);
+          }
+          console.warn("[JARVIS Alisha Voice]", err.message);
+        },
+      });
     },
-    [isMuted, language, continuousVoice, isOpen],
+    [isMuted, language, continuousVoice],
   );
 
   speakTextRef.current = speakText;
@@ -504,6 +429,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     };
 
     recogRef.current = recog;
+    startListeningRef.current = startListeningInternal;
     try {
       recog.start();
     } catch {
@@ -644,7 +570,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
         // Attempt voice greeting
         if (!isMuted) {
-          speakText(g.spokenGreeting, { isGreeting: true });
+          speakTextRef.current(g.spokenGreeting, { isGreeting: true });
         }
       })
       .catch(() => {});
@@ -652,7 +578,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     return () => {
       isSubscribed = false;
     };
-  }, [authenticated, user, role, isMuted, speakText]);
+  }, [authenticated, user, role, isMuted]);
 
   // Start voice greeting on explicit user unlock
   const startVoiceGreeting = useCallback(() => {
@@ -719,6 +645,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     isListening,
     isSpeaking,
     autoplayBlocked,
+    jarvisVoice: JARVIS_VOICE_CONFIG,
+    voiceState,
     greeting,
     weather,
     briefing,

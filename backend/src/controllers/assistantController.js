@@ -9,6 +9,7 @@ import { generatePersonalizedGreeting } from "../services/greetingService.js";
 import { generateDailyBriefing } from "../services/briefingService.js";
 import { getWeatherAndAirQuality } from "../services/weatherService.js";
 import { executeTool } from "../services/toolRegistry.js";
+import { generateSpeech, getAudioBuffer, fetchAudioStream } from "../services/ttsService.js";
 
 /**
  * Handle incoming user chat/voice message
@@ -205,6 +206,66 @@ export async function clearHistory(req, res, next) {
       { $set: { history: [] } },
     );
     return res.json({ success: true, message: "Conversation history cleared." });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/**
+ * Generate TTS speech audio for HireMate JARVIS (Microsoft Edge Neural TTS: Aisha/Neerja/Swara/Aarohi).
+ */
+export async function textToSpeech(req, res, next) {
+  try {
+    const { text, language = "en", voiceId } = req.body;
+    if (!text || typeof text !== "string" || !text.trim()) {
+      return res.status(400).json({ message: "Text is required to generate speech." });
+    }
+
+    const result = await generateSpeech({
+      text,
+      language,
+      voiceId,
+    });
+
+    return res.json(result);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/**
+ * Stream neural TTS audio buffer or proxy remote audio stream.
+ */
+export async function streamAudio(req, res, next) {
+  try {
+    const { id, url } = req.query;
+
+    if (id) {
+      const buffer = getAudioBuffer(id);
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      if (buffer) {
+        res.setHeader("Content-Type", "audio/mpeg");
+        res.setHeader("Content-Length", buffer.length);
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        return res.send(buffer);
+      }
+      return res.status(404).json({ message: "Audio clip not found or expired." });
+    }
+
+    if (url) {
+      const remoteRes = await fetchAudioStream(url);
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      if (!remoteRes.ok) {
+        return res.status(remoteRes.status).send("Failed to stream audio");
+      }
+
+      res.setHeader("Content-Type", remoteRes.headers.get("content-type") || "audio/mpeg");
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      const arrayBuffer = await remoteRes.arrayBuffer();
+      return res.send(Buffer.from(arrayBuffer));
+    }
+
+    return res.status(400).json({ message: "Audio id or url is required." });
   } catch (err) {
     return next(err);
   }

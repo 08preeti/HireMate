@@ -83,3 +83,34 @@ export async function savePreferences(body: {
 export async function clearAssistantHistory() {
   return await api.post("/api/assistant/clear-history", {}, true);
 }
+
+export interface GenerateTtsPayload {
+  text: string;
+  language?: string;
+  voiceId?: string;
+}
+
+export interface GenerateTtsResponse {
+  success: boolean;
+  audioUrl?: string;
+  error?: string;
+  code?: string;
+  quotaExceeded?: boolean;
+  cached?: boolean;
+  voiceId?: string;
+  voiceName?: string;
+  language?: string;
+}
+
+export async function generateTtsAudio(payload: GenerateTtsPayload): Promise<GenerateTtsResponse> {
+  try {
+    return await api.post<GenerateTtsResponse>("/api/assistant/tts", payload, true);
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "Failed to generate TTS audio",
+      code: "API_ERROR",
+    };
+  }
+}
+

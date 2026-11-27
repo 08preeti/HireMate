@@ -9,11 +9,16 @@ import {
   getPreferences,
   updatePreferences,
   clearHistory,
+  textToSpeech,
+  streamAudio,
 } from "../controllers/assistantController.js";
 
 const router = Router();
 
-// All assistant routes require authenticated session
+// Streaming proxy for media.easy-peasy.ai (validates host domain)
+router.get("/tts/stream", streamAudio);
+
+// All other assistant routes require authenticated session
 router.use(authenticate);
 
 router.post("/message", sendMessage);
@@ -25,5 +30,6 @@ router.post("/action", executeAction);
 router.get("/preferences", getPreferences);
 router.patch("/preferences", updatePreferences);
 router.post("/clear-history", clearHistory);
+router.post("/tts", textToSpeech);
 
 export default router;

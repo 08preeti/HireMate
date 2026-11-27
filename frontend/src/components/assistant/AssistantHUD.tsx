@@ -18,6 +18,8 @@ export function AssistantHUD() {
     isListening,
     isSpeaking,
     autoplayBlocked,
+    jarvisVoice,
+    voiceState,
     greeting,
     weather,
     pendingConfirmation,
@@ -123,6 +125,13 @@ export function AssistantHUD() {
                 }`}
               />
               <span className="capitalize text-slate-300">{orbState}</span>
+              <span className="text-slate-600">•</span>
+              <span
+                className="font-semibold text-sky-300"
+                title="Alisha Voice (Neural AI Voice • Free & Unlimited)"
+              >
+                {jarvisVoice?.name || "Alisha"}
+              </span>
               <span className="text-slate-600">•</span>
               <span className="text-cyan-400/80">Hi · Mr · En</span>
             </div>
@@ -618,7 +627,7 @@ export function AssistantHUD() {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth="2"
-                    d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 02-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                    d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
                   />
                 </svg>
               )}
